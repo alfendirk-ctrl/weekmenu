@@ -1,0 +1,1543 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Weekmenu Planner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@10..48,400..700&family=Hanken+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+:root{
+  --bg:#211E19; --paper:#F3EAD8; --card:#FBF6EC; --cardline:#E6D9C2;
+  --ink:#29241D; --ink2:#6f6757; --ink3:#9a8e78; --gold:#A98A5E;
+  --terra:#C2724E; --terra2:#E0916B; --olive:#8C9E6E; --olive2:#9DAA78;
+  --honey:#E8C06A; --amber:#D9A441; --rust:#CD6A45;
+  --shelley:#E0916B; --dirk:#8C9E6E; --maeve:#D9A441;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{background:var(--bg);font-family:'Hanken Grotesk',sans-serif;color:var(--ink);-webkit-font-smoothing:antialiased}
+body{max-width:560px;margin:0 auto;min-height:100vh;background:var(--paper)}
+.mono{font-family:'Space Mono',monospace}
+.bric{font-family:'Bricolage Grotesque',sans-serif}
+.serif{font-family:'Instrument Serif',serif}
+button{font-family:inherit;cursor:pointer;border:none;background:none}
+input,textarea,select{font-family:inherit}
+
+/* APP SHELL */
+.app{background:var(--paper);min-height:100vh;position:relative;padding-bottom:90px}
+
+/* STATUS / HEADER */
+.topbar{padding:16px 22px 0}
+.kicker{font-family:'Space Mono',monospace;font-size:11px;letter-spacing:2px;color:var(--gold);text-transform:uppercase}
+.h-title{font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:34px;letter-spacing:-1.2px;color:var(--ink);line-height:0.96;margin-top:3px}
+.avatars{display:flex}
+.avatar{width:34px;height:34px;border-radius:50%;border:2px solid var(--paper);display:flex;align-items:center;justify-content:center;font-family:'Space Mono',monospace;font-size:13px;font-weight:700;color:#fff}
+.avatar+.avatar{margin-left:-11px}
+
+/* PROGRESS NOTE */
+.prog-note{font-family:'Instrument Serif',serif;font-style:italic;font-size:18px;color:var(--ink2);margin:14px 22px 0;line-height:1.3}
+
+/* WEEK STRIP */
+.weekstrip{display:flex;gap:6px;padding:16px 22px 4px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.weekstrip::-webkit-scrollbar{display:none}
+.day-pill{flex:0 0 auto;min-width:54px;padding:10px 6px;border-radius:16px;text-align:center;background:var(--card);border:1px solid var(--cardline)}
+.day-pill.active{background:var(--ink);border-color:var(--ink)}
+.day-pill.active .dp-day,.day-pill.active .dp-num,.day-pill.active .dp-dot{color:var(--paper)}
+.dp-day{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--ink3)}
+.dp-num{font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:19px;color:var(--ink);line-height:1.1;margin-top:2px}
+.dp-fill{display:flex;gap:2px;justify-content:center;margin-top:4px}
+.dp-d{width:5px;height:5px;border-radius:50%;background:var(--cardline)}
+.dp-d.on{background:var(--olive)}
+.day-pill.active .dp-d{background:rgba(255,255,255,.3)}
+.day-pill.active .dp-d.on{background:var(--honey)}
+
+/* SECTION */
+.scroll{padding:8px 22px 0}
+.day-head{display:flex;align-items:baseline;justify-content:space-between;margin:18px 0 12px}
+.day-head h2{font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:25px;letter-spacing:-1px;color:var(--ink)}
+.cook-tag{font-family:'Space Mono',monospace;font-size:11px;color:var(--ink3)}
+
+/* MEAL CARD */
+.meal-card{background:var(--card);border:1px solid var(--cardline);border-radius:18px;padding:13px 14px;display:flex;gap:12px;align-items:center;margin-bottom:10px;cursor:pointer;transition:transform .12s,box-shadow .12s}
+.meal-card:active{transform:scale(0.985)}
+.meal-thumb{width:46px;height:46px;border-radius:13px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:22px}
+.meal-info{flex:1;min-width:0}
+.meal-label{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:1px;color:var(--gold);text-transform:uppercase}
+.meal-name{font-family:'Bricolage Grotesque',sans-serif;font-weight:600;font-size:15px;color:var(--ink);line-height:1.15;margin-top:2px}
+.meal-name.empty{color:var(--ink3);font-weight:400;font-style:italic;font-family:'Instrument Serif',serif;font-size:17px}
+.meal-meta{font-family:'Space Mono',monospace;font-size:10px;color:var(--ink3);margin-top:3px}
+.meal-right{display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex:0 0 auto}
+.mini-av{display:flex}
+.mini-avatar{width:22px;height:22px;border-radius:50%;border:1.5px solid var(--card);font-family:'Space Mono',monospace;font-size:9px;font-weight:700;color:#fff;display:flex;align-items:center;justify-content:center}
+.mini-avatar+.mini-avatar{margin-left:-7px}
+.meal-add{width:30px;height:30px;border-radius:50%;background:var(--ink);color:var(--paper);font-size:18px;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+
+/* PERSON SUB-CARD (for split meals) */
+.split-row{display:flex;gap:8px;align-items:center;padding:8px 10px;border-radius:12px;margin-top:6px;background:rgba(0,0,0,0.025)}
+.split-badge{width:20px;height:20px;border-radius:50%;font-family:'Space Mono',monospace;font-size:9px;font-weight:700;color:#fff;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.split-name{font-size:12px;color:var(--ink);flex:1}
+.split-name.empty{color:var(--ink3);font-style:italic}
+
+/* PLAN BUTTON */
+.plan-cta{width:100%;background:var(--ink);color:var(--paper);border-radius:18px;padding:16px;display:flex;align-items:center;justify-content:center;gap:10px;font-family:'Bricolage Grotesque',sans-serif;font-weight:600;font-size:16px;margin:8px 0 4px}
+.plan-cta .badge{background:var(--terra);color:#fff;font-family:'Space Mono',monospace;font-size:11px;padding:2px 8px;border-radius:10px;font-weight:700}
+
+/* BOTTOM NAV */
+.bottomnav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:560px;background:var(--card);border-top:1px solid var(--cardline);display:flex;justify-content:space-around;padding:10px 0 calc(10px + env(safe-area-inset-bottom));z-index:50}
+.nav-item{display:flex;flex-direction:column;align-items:center;gap:4px;opacity:0.42;background:none;padding:4px 18px}
+.nav-item.active{opacity:1}
+.nav-item .label{font-family:'Space Mono',monospace;font-size:9px;font-weight:700;letter-spacing:0.5px;color:var(--ink)}
+.nav-item.active .label{color:var(--terra)}
+
+/* RECEPTEN */
+.search-box{width:100%;background:var(--card);border:1px solid var(--cardline);border-radius:16px;padding:13px 16px;font-size:14px;color:var(--ink);outline:none;margin-bottom:12px}
+.search-box::placeholder{color:var(--ink3)}
+.chips{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;margin-bottom:14px;-webkit-overflow-scrolling:touch}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:0 0 auto;padding:8px 15px;border-radius:20px;background:var(--card);border:1px solid var(--cardline);font-family:'Space Mono',monospace;font-size:11px;color:var(--ink2);white-space:nowrap}
+.chip.active{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.chip.dirk.active{background:var(--dirk);border-color:var(--dirk)}
+.chip.shelley.active{background:var(--shelley);border-color:var(--shelley)}
+
+.rec-card{background:var(--card);border:1px solid var(--cardline);border-radius:20px;padding:15px;margin-bottom:11px;cursor:pointer}
+.rec-card.feature{background:linear-gradient(135deg,#E8C06A22,#CD6A4522);border:1px solid #E0916B55}
+.rec-tag{display:inline-block;font-family:'Space Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--terra);margin-bottom:5px}
+.rec-name{font-family:'Bricolage Grotesque',sans-serif;font-weight:600;font-size:18px;color:var(--ink);letter-spacing:-0.5px;line-height:1.1}
+.rec-desc{font-size:13px;color:var(--ink2);line-height:1.45;margin-top:5px}
+.rec-meta{font-family:'Space Mono',monospace;font-size:11px;color:var(--ink3);margin-top:8px}
+.rec-actions{display:flex;gap:6px;margin-top:10px}
+.rec-mini-btn{font-family:'Space Mono',monospace;font-size:10px;padding:5px 10px;border-radius:10px;background:rgba(0,0,0,0.04);color:var(--ink2)}
+
+/* BOODSCHAPPEN */
+.bood-progress{background:var(--card);border:1px solid var(--cardline);border-radius:20px;padding:18px;margin-bottom:18px}
+.bood-bar{height:8px;border-radius:4px;background:var(--cardline);overflow:hidden;margin-top:10px}
+.bood-bar-fill{height:100%;background:var(--olive);border-radius:4px;transition:width .3s}
+.bood-group{margin-bottom:20px}
+.bood-group-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.bood-group-title{font-family:'Bricolage Grotesque',sans-serif;font-weight:600;font-size:16px;color:var(--ink)}
+.bood-group-count{font-family:'Space Mono',monospace;font-size:11px;color:var(--ink3)}
+.bood-item{display:flex;align-items:center;gap:13px;padding:13px 15px;background:var(--card);border:1px solid var(--cardline);border-radius:14px;margin-bottom:7px;cursor:pointer}
+.bood-item.checked{opacity:0.5}
+.bood-item.checked .bi-name{text-decoration:line-through}
+.bi-check{width:22px;height:22px;border-radius:7px;border:2px solid var(--cardline);flex:0 0 auto;display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:700;transition:all .15s}
+.bi-check.on{background:var(--olive);border-color:var(--olive)}
+.bi-name{flex:1;font-size:14px;color:var(--ink)}
+.bi-amt{font-family:'Space Mono',monospace;font-size:11px;color:var(--ink3)}
+
+/* MODAL */
+.overlay{position:fixed;inset:0;background:rgba(33,30,25,0.6);backdrop-filter:blur(3px);display:flex;align-items:flex-end;justify-content:center;z-index:100}
+@media(min-width:560px){.overlay{align-items:center}}
+.sheet{background:var(--paper);width:100%;max-width:560px;max-height:90vh;overflow-y:auto;border-radius:28px 28px 0 0;padding:8px 20px 30px}
+@media(min-width:560px){.sheet{border-radius:28px}}
+.sheet-handle{width:40px;height:4px;border-radius:2px;background:var(--cardline);margin:8px auto 16px}
+.sheet-title{font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:24px;letter-spacing:-0.5px;color:var(--ink);margin-bottom:4px}
+.sheet-sub{font-size:13px;color:var(--ink2);margin-bottom:16px}
+
+/* MODAL TABS / PICKER */
+.modal-meta{font-family:'Space Mono',monospace;font-size:11px;color:var(--ink3);margin-bottom:14px}
+.tab-row{display:flex;gap:8px;margin-bottom:16px}
+.tab-btn{flex:1;padding:10px;border-radius:14px;background:var(--card);border:1px solid var(--cardline);font-family:'Space Mono',monospace;font-size:12px;font-weight:700;color:var(--ink2)}
+.tab-btn.active{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.detail-tabs{display:flex;border-bottom:1px solid var(--cardline);margin-bottom:14px}
+.detail-tab{flex:1;padding:10px;font-family:'Space Mono',monospace;font-size:12px;font-weight:700;color:var(--ink3);border-bottom:2px solid transparent}
+.detail-tab.active{color:var(--terra);border-bottom-color:var(--terra)}
+.ing-line{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--cardline);font-size:14px}
+.ing-line:last-child{border-bottom:none}
+.step-line{display:flex;gap:12px;margin-bottom:13px}
+.step-dot{flex:0 0 auto;width:24px;height:24px;border-radius:50%;background:var(--terra);color:#fff;font-family:'Space Mono',monospace;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.step-txt{font-size:14px;line-height:1.5;color:var(--ink);flex:1;padding-top:1px}
+
+/* FORM */
+.field{margin-bottom:14px}
+.field label{display:block;font-family:'Space Mono',monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink3);margin-bottom:6px}
+.field input,.field select,.field textarea{width:100%;background:var(--card);border:1px solid var(--cardline);border-radius:13px;padding:12px 14px;font-size:14px;color:var(--ink);outline:none}
+.field textarea{resize:vertical;line-height:1.5}
+.row-fields{display:flex;gap:10px}
+.tag-pick{display:flex;gap:8px}
+.tag-opt{flex:1;padding:11px;border-radius:13px;background:var(--card);border:2px solid var(--cardline);font-family:'Space Mono',monospace;font-size:11px;font-weight:700;color:var(--ink2);text-align:center}
+.tag-opt.dirk.on{border-color:var(--dirk);background:#8C9E6E22;color:var(--dirk)}
+.tag-opt.shelley.on{border-color:var(--shelley);background:#E0916B22;color:var(--shelley)}
+.tag-opt.beiden.on{border-color:var(--amber);background:#D9A44122;color:var(--amber)}
+
+/* PICKER GRID */
+.picker-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;max-height:50vh;overflow-y:auto}
+.picker-card{background:var(--card);border:1px solid var(--cardline);border-radius:15px;padding:12px;cursor:pointer}
+.picker-card:active{transform:scale(0.97)}
+.pc-name{font-family:'Bricolage Grotesque',sans-serif;font-weight:600;font-size:14px;color:var(--ink);line-height:1.15}
+.pc-meta{font-family:'Space Mono',monospace;font-size:10px;color:var(--ink3);margin-top:5px}
+
+/* BTN */
+.btn{border-radius:15px;padding:14px;font-family:'Bricolage Grotesque',sans-serif;font-weight:600;font-size:15px;text-align:center;width:100%}
+.btn-ink{background:var(--ink);color:var(--paper)}
+.btn-line{background:var(--card);border:1px solid var(--cardline);color:var(--ink2)}
+.btn-terra{background:var(--terra);color:#fff}
+.btn-row{display:flex;gap:10px;margin-top:8px}
+
+/* WIZARD */
+.wiz-step{margin-bottom:18px}
+.wiz-q{font-family:'Bricolage Grotesque',sans-serif;font-weight:600;font-size:17px;color:var(--ink);margin-bottom:10px}
+.wiz-days{display:flex;flex-wrap:wrap;gap:7px}
+.wiz-day{padding:9px 13px;border-radius:13px;background:var(--card);border:1.5px solid var(--cardline);font-family:'Space Mono',monospace;font-size:12px;font-weight:700;color:var(--ink2)}
+.wiz-day.cook{background:var(--olive);border-color:var(--olive);color:#fff}
+.wiz-day.rest{background:var(--honey);border-color:var(--honey);color:var(--ink)}
+.wiz-hint{font-size:12px;color:var(--ink3);margin-top:8px;line-height:1.4}
+
+/* EMPTY */
+.empty-state{text-align:center;padding:50px 30px;color:var(--ink2)}
+.empty-emoji{font-size:44px;margin-bottom:12px}
+.empty-title{font-family:'Bricolage Grotesque',sans-serif;font-weight:600;font-size:19px;color:var(--ink);margin-bottom:6px}
+
+.spin{animation:spin 0.8s linear infinite;display:inline-block}
+@keyframes spin{to{transform:rotate(360deg)}}
+.toast{position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:12px 22px;border-radius:14px;font-size:13px;font-weight:600;z-index:200;animation:toastIn .3s}
+@keyframes toastIn{from{opacity:0;transform:transl(-50%,10px)}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="toast-host"></div>
+<script>
+// ===================== CONFIG =====================
+const DAYS = ["ma","di","wo","do","vr","za","zo"];
+const DAY_FULL = {ma:"maandag",di:"dinsdag",wo:"woensdag",do:"donderdag",vr:"vrijdag",za:"zaterdag",zo:"zondag"};
+const DAY_NUM = {ma:9,di:10,wo:11,do:12,vr:13,za:14,zo:15}; // wordt dynamisch berekend
+const CATS = ["ontbijt","lunch","diner","tussendoortje"];
+const CL = {ontbijt:"Ontbijt",lunch:"Lunch",diner:"Diner",tussendoortje:"Snack"};
+const HH = 3;
+
+// People
+const PEOPLE = {
+  shelley: {label:"Shelley", sub:"zwanger", color:"var(--shelley)", initial:"S"},
+  dirk: {label:"Dirk", sub:"afvallen", color:"var(--dirk)", initial:"D"},
+  maeve: {label:"Maeve", sub:"2 jr", color:"var(--maeve)", initial:"M"},
+};
+
+// Meal thumbnail colors by category
+const THUMB = {ontbijt:"#E8C06A", lunch:"#9DAA78", diner:"#CD6A45", tussendoortje:"#E0916B"};
+const THUMB_EMOJI = {ontbijt:"🥣", lunch:"🥗", diner:"🍽️", tussendoortje:"🍎"};
+
+// Ebook colors (kept for recipe source)
+const EC={1:"#E0916B",2:"#8C9E6E",3:"#9DAA78",4:"#C2724E",5:"#E8C06A",6:"#70a0a0",7:"#CD6A45",0:"#D9A441"};
+const EL={1:"Broodje Dunner 1",2:"Broodje Dunner 2",3:"Broodje Dunner 3",4:"Broodje Dunner 4",5:"Broodje Dunner 5",6:"Broodje Dunner 6",7:"Broodje Dunner 7",0:"Eigen recept"};
+
+// Planner rows
+const ROWS = [
+  {id:"ontbijt_dirk", label:"Ontbijt", who:"dirk", cat:"ontbijt", split:true},
+  {id:"ontbijt_shelley", label:"Ontbijt", who:"shelley", cat:"ontbijt", split:true},
+  {id:"tussen_ochtend", label:"Tussendoor", who:"samen", cat:"tussendoortje", split:false, sub:"ochtend"},
+  {id:"lunch_dirk", label:"Lunch", who:"dirk", cat:"lunch", split:true},
+  {id:"lunch_shelley", label:"Lunch", who:"shelley", cat:"lunch", split:true},
+  {id:"tussen_middag", label:"Tussendoor", who:"samen", cat:"tussendoortje", split:false, sub:"middag"},
+  {id:"diner", label:"Diner", who:"samen", cat:"diner", split:false},
+];
+
+// Boodschappen categories
+const BOOD_CATS = {
+  "groente_fruit":{label:"🥦 Groente & Fruit", words:["groente","sla","spinazie","paprika","tomaat","courgette","ui","knoflook","wortel","broccoli","champignon","avocado","komkommer","prei","bloemkool","pastinaak","biet","asperge","bosui","sjalot","radijs","gember","andijvie","appel","banaan","aardbei","bes","framboos","kiwi","meloen","druif","citroen","limoen","mango","granaatappel","pruim","peer","zoete aardappel","krieltjes","aardappel","peterselie","basilicum","koriander","bieslook","peer","rucola"]},
+  "vlees_vis":{label:"🥩 Vlees & Vis", words:["kip","gehakt","zalm","tonijn","kabeljauw","garnaal","rivierkreeft","varken","rund","ossenhaas","tartaar","ham","spek","worst","filet"]},
+  "zuivel":{label:"🥛 Zuivel & Eieren", words:["yoghurt","kwark","kaas","ei","melk","room","boter","feta","mozzarella","parmezaan","huttenkase","hüttenkäse","creme","crème","zuivelspread","optimel","skyr"]},
+  "brood_granen":{label:"🌾 Brood & Granen", words:["rijst","pasta","orzo","havermout","tortilla","brood","boterham","wrap","speltmeel","cornflakes","nori","rijstwafel","noodles","couscous","quinoa","bulgur","meel","granola"]},
+  "blik_pot":{label:"🥫 Blik & Pot", words:["tomatenblokjes","tomatenpuree","tomatenpulp","bonen","mais","linzen","kokosmelk","sojasaus","ketjap","pindakaas","olijven","kikkererwten","passata"]},
+  "kruiden":{label:"🫙 Kruiden & Olie", words:["olie","azijn","honing","mosterd","saus","kruiden","kaneel","kurkuma","kerrie","komijn","paprikapoeder","oregano","cajun","stevia","zoetstof","vanille","cacao","bouillon","chili","gember","nootmuskaat","garam"]},
+  "overig":{label:"📦 Overig", words:[]},
+};
+function getBoodCat(name){
+  const n=name.toLowerCase();
+  for(const [cat,obj] of Object.entries(BOOD_CATS)){
+    if(cat==="overig")continue;
+    if(obj.words.some(w=>n.includes(w)))return cat;
+  }
+  return "overig";
+}
+
+// Recipe factory
+const r=(id,eb,name,cat,time,ing,steps,srv,voor)=>({id,ebook:eb,name,category:cat,time,ingredients:ing,steps,servings:srv||2,voor:voor||"beiden"});
+const i=(n,a)=>({n,a});
+
+
+// ===================== RECIPES =====================
+const RECIPES=[
+r(1,1,"Fruity Bowl","ontbijt","5 min",[i("Franse kwark","200g"),i("Kiwi","1"),i("Blauwe bessen","20g"),i("Kaneel","snufje"),i("Moerbeibessen","10g"),i("Bio cornflakes","5g"),i("Lijnzaad","2g")],["Meng kwark met stevia en kaneel.","Leg kiwi en blauwe bessen op de kwark.","Strooi cornflakes, moerbeibessen en lijnzaad erover."],1),
+r(2,1,"Fluffy Bowl","ontbijt","5 min",[i("Franse kwark","200g"),i("Bevroren aardbeien","60g"),i("Banaan","1"),i("Avocado","½"),i("Stevia","2 druppels"),i("Rozijnen","10g"),i("Pecannoten","10g"),i("Bio cornflakes","10g")],["Blend kwark, aardbeien, banaan, avocado en stevia.","Afmaken: cornflakes, rozijnen en pecannoten."],1),
+r(3,1,"Choco Bowl","ontbijt","5 min",[i("Optimel bosvruchten yoghurt","200ml"),i("Bio cornflakes","10g"),i("Pecannoten","10g"),i("Lindt 90% cacao","10g"),i("Granaatappelpitjes","5g")],["Verwarm chocolade au-bain-marie.","Doe yoghurt, cornflakes en pecannoten in een schaaltje.","Strooi chocolade erover. Afmaken: granaatappelpitjes."],1),
+r(4,1,"Summer Bowl","ontbijt","10 min",[i("Franse kwark","200g"),i("Bevroren aardbeien","80g"),i("Blauwe bessen","30g"),i("Kaneel","snufje"),i("Bio cornflakes","10g"),i("Rozijnen","10g")],["Blend kwark, aardbeien, blauwe bessen, kaneel en stevia.","Schenk in kommetje met cornflakes en rozijnen."],1),
+r(5,1,"Bananen pannenkoekjes","ontbijt","20 min",[i("Banaan","1"),i("Ei","2"),i("Blauwe bessen","handje"),i("Honing","10g"),i("Havermout","2el"),i("Kaneel","snufje")],["Kook blauwe bessen met water en helft van de honing.","Prak banaan, voeg eieren en havermout toe, mix tot beslag.","Bak pannenkoekjes. Serveer met bessen, rest van honing en kaneel."],1),
+r(6,2,"Chocoatmeal","ontbijt","15 min",[i("Havervlokken","40g"),i("Amandelmelk","250ml"),i("Bevroren aardbeien","40g"),i("Nocilla hazelnootpasta","20g"),i("Zout","snufje")],["Doe amandelmelk, havervlokken, hazelnootpasta en zout in pannetje.","Breng aan de kook en roer tot stevig papje.","Doe in bakje met bevroren aardbeien."],1),
+r(7,2,"Green Fluff","ontbijt","10 min",[i("Franse kwark","200g"),i("Spinazie","handje"),i("Bevroren mango","70g"),i("Ananas","60g"),i("Avocado","45g"),i("Rozijnen","10g"),i("Bio cornflakes","10g")],["Blend kwark, spinazie, mango, ananas, avocado en stevia.","Afmaken: rozijnen en cornflakes."],1),
+r(8,2,"BreakFAST","ontbijt","5 min",[i("Banaan","½"),i("Bloedsinaasappel","1"),i("Optimel bosvruchten yoghurt","250ml"),i("Rozijnen","10g"),i("Havervlokken","2el")],["Snijd 2 stuks fruit.","Doe yoghurt in bakje met fruit, kaneel en havervlokken."],1),
+r(9,2,"Meloentje kampioentje","ontbijt","5 min",[i("Meloen","½"),i("Franse kwark","150g"),i("Blauwe bessen","15g"),i("Rozijnen","10g"),i("Honing","1tl")],["Snijd meloen doormidden en verwijder pitjes.","Doe kwark in de meloen. Afmaken: bessen, rozijnen en honing."],1),
+r(10,2,"Pannenkoek choco-aardbei","ontbijt","10 min",[i("Banaan","1"),i("Ei","2"),i("Bevroren aardbeien","5"),i("Honing","10g"),i("Havervlokken","2el"),i("Nocilla hazelnootpasta","1tl")],["Prak banaan, voeg eieren, honing en havervlokken toe, mix tot beslag.","Bak pannenkoek aan 2 kanten. Doe hazelnootpasta erop met aardbeien."],1),
+r(11,3,"Frozen yoghurt","ontbijt","10 min",[i("Banaan","1"),i("Griekse yoghurt","300g"),i("Bevroren frambozen","100g"),i("Blauwe bessen","40g"),i("Honing","1el"),i("Pompoenpitten","10g"),i("Pindakaas naturel","1tl")],["Pureer banaan, honing en 200g yoghurt apart van ⅓ frambozen met 100g yoghurt.","Laag banaan, laag framboos in bakje. Rest van frambozen en bessen erop. 3 uur vriezer."],1),
+r(12,3,"Kwarkbollen appel-kaneel","ontbijt","30 min",[i("Griekse yoghurt","200g"),i("Rozijnen","70g"),i("Appel","1"),i("Volkoren speltmeel","230g"),i("Ei","2"),i("Bakpoeder","2tl"),i("Kaneel","2tl")],["Oven 185°C. Week rozijnen 5 min. Snijd appel in blokjes.","Meng yoghurt, eieren, bakpoeder, kaneel. Voeg appel, rozijnen en speltmeel toe.","Vorm 10 bollen op bakplaat en bak 20 minuten."],1),
+r(13,3,"Bananensplit","ontbijt","5 min",[i("Banaan","1"),i("Griekse yoghurt vanille","100g"),i("Lindt 90% cacao","8g"),i("Blauwe bessen","40g"),i("Cornflakes","5g"),i("Lijnzaad","½ tl")],["Verwarm chocolade au-bain-marie. Snijd banaan doormidden.","Leg op bordje met yoghurt, cornflakes, lijnzaad, bessen en chocolade."],1),
+r(14,3,"Havermout strawcherry","ontbijt","5 min",[i("Havervlokken","2el"),i("Franse kwark","200g"),i("Aardbeien","100g"),i("Bevroren kersen","80g"),i("Rozijnen","10g"),i("Avocado","½")],["Blend alles behalve rozijnen, bewaar ⅓ aardbeien.","Schenk in kommetje. Afmaken: aardbeien en rozijnen."],1),
+r(15,3,"Blueberry poffertjes","ontbijt","15 min",[i("Banaan","1"),i("Blauwe bessen","70g"),i("Bevroren frambozen","30g"),i("Ei","1"),i("Honing","1el"),i("Melk","50ml"),i("Havervlokken","2el")],["Blend alles behalve frambozen tot beslag. Houdt wat bessen achter.","Bak kleine rondjes op middelhoog vuur. Flip als er bubbeltjes verschijnen.","Serveer met frambozen en blauwe bessen."],1),
+r(16,4,"Wentelteefjes","ontbijt","10 min",[i("Boterham","1"),i("Ei","1"),i("Melk","25ml"),i("Franse kwark","100g"),i("Kaneel","2tl"),i("Blauwe bessen","handje")],["Meng ei, melk en 1 tl kaneel. Snijd boterham in 6 stukken.","Dip in eimengsel en bak aan beide kanten bruin.","Meng kwark met 1 tl kaneel als dipsaus. Serveer met blauwe bessen."],1),
+r(17,4,"Appeltaartje","ontbijt","30 min",[i("Ei","1"),i("Havervlokken","35g"),i("Melk","50ml"),i("Appel","50g"),i("Honing","1el"),i("Bakpoeder","1tl"),i("Kaneel","1tl")],["Oven 170°C. Blend alles behalve appel tot beslag.","Snijd appel in blokjes, giet in ovenschaaltje en voeg appel toe.","Bak 25 minuten."],1),
+r(18,4,"Ontbijttaart","ontbijt","30 min",[i("Eiwit","1"),i("Havervlokken","60g"),i("Banaan","1"),i("Franse kwark","100g"),i("Blauwe bessen","hand"),i("Bakpoeder","1tl"),i("Speculaaskruiden","1tl")],["Oven 170°C. Mix banaan, havermout, kruiden, bakpoeder en eiwit.","Verdeel over bakpapier. Bak 25 min tot goudbruin.","Verdeel kwark over de bodem. Afmaken: fruit en honing."],1),
+r(19,4,"Fram-bo","ontbijt","5 min",[i("Frambozen","50g"),i("Franse kwark","200g"),i("Pecannoten","15g"),i("Lijnzaad","1tl")],["Verwarm ¾ van de frambozen en prak fijn tot jam.","Voeg lijnzaad en gebroken pecannoten toe aan de jam.","Wissel lagen kwark en jam af in een glas. Afmaken: rest van de frambozen."],1),
+r(20,4,"Groen goedje","ontbijt","5 min",[i("Franse kwark","200g"),i("Ananas","100g"),i("Bevroren mango","120g"),i("Havervlokken","30g"),i("Spinazie","hand"),i("Lijnzaad","1el")],["Mix alles in de blender. ENJOY!"],1),
+r(21,1,"Broodje Avo","lunch","5 min",[i("Boterham","1"),i("Ei","1"),i("Avocado","½"),i("Rucola","handje"),i("Cherry tomaten","2"),i("Peper & Zout","n.s.")],["Prak avocado en breng op smaak. Kook ei 6,5 min.","Toast brood, verdeel avocado, leg ei, rucola en tomaatjes erop."],1),
+r(22,1,"Broodje Gebakken Ei","lunch","10 min",[i("Boterham","1"),i("Ei","2"),i("Bosui","n.s."),i("30+ kaas","10g"),i("Tomaatjes","2"),i("Italiaanse kruiden","n.s.")],["Bak 2 eitjes met kaas erop (niet helemaal gaar = sappig).","Leg op boterham met kruiden, tomaatjes en bosui."],1),
+r(23,1,"Broodje Filet Americain","lunch","5 min",[i("Boterham","1"),i("Magere filet americain","40g"),i("Ijsbergsla","handje"),i("Komkommer","4 plakjes"),i("Bosui","n.s.")],["Rooster boterham. Doe filet americain erop.","Afmaken: ijsbergsla, komkommer en bosui."],1),
+r(24,1,"Broodje Caprese","lunch","5 min",[i("Boterham","1"),i("Mozzarella","50g"),i("Pesto","7g"),i("Basilicum","n.s."),i("Tomaat","1")],["Rooster boterham. Smeer pesto erover.","Snijd mozzarella en tomaat en beleg. Afmaken: basilicum."],1),
+r(25,1,"Pita Kip-Gyros","lunch","15 min",[i("Volkoren pita broodjes","4"),i("Kipfilet","350g"),i("Franse kwark","100g"),i("Knoflook","1"),i("Tomaat","2"),i("Komkommer","½"),i("Citroensap","½ citroen")],["Bak pitabroodjes in de oven. Snijd kip met gyros kruiden en bak aan.","Maak tzatziki van kwark, komkommer, knoflook en citroensap.","Vul pita met tzatziki en kip."],1),
+r(26,1,"Broodje Tonijnsalade","lunch","10 min",[i("Boterham","1"),i("Tonijn op waterbasis","1 blikje"),i("Franse kwark","100g"),i("Augurk","1"),i("Rode ui","¼"),i("Mosterd","1tl")],["Snij augurk en ui fijn. Meng met kwark, mosterd en tonijn.","Rooster boterham en besmeer met de tonijnsalade."],1),
+r(27,2,"Broodje Eiersalade","lunch","10 min",[i("Boterham","1"),i("Ei","1"),i("Zero mayonaise","20g"),i("Avocado","25g"),i("Citroensap","5 druppels"),i("Tuinkers","handje")],["Kook ei 7 min. Prak avocado en ei samen. Voeg mayo en citroensap toe.","Smeer op boterham met tuinkers."],1),
+r(28,2,"Broodje Zalm","lunch","5 min",[i("Boterham","1"),i("Gerookte zalm","40g"),i("Zuivelspread","15g"),i("Bieslook","2 sprieten"),i("Citroensap","paar druppels")],["Besmeer boterham met zuivelspread.","Leg zalm erop. Afmaken: bieslook en citroensap."],1),
+r(29,2,"Tosti Caprese","lunch","10 min",[i("Boterham","2"),i("Mozzarella","35g"),i("Pesto","8g"),i("Tomaat","1"),i("Rode ui","¼")],["Beleg 1 boterham met pesto, mozzarella, tomaat en rode ui.","Leg 2e boterham erop. Gril ±5 min."],1),
+r(30,2,"Broodje Knoflook Champignons","lunch","10 min",[i("Boterham","1"),i("Champignons","100g"),i("Spinazie","2 handjes"),i("Feta","15g"),i("Knoflook","1")],["Rooster boterham. Bak knoflook, champignons en spinazie.","Doe op broodje en sprenkel feta erover."],1),
+r(31,2,"Tortilla Kip-Kerriemayo","lunch","10 min",[i("Volkoren wrap","1"),i("Avocado","50g"),i("Gerookte kipfilet","50g"),i("Zero mayonaise","1el"),i("Kerriepoeder","2tl"),i("Tomaatjes","3")],["Beleg tortilla met kipfilet, avocado en tomaatjes.","Meng mayo met kruiden tot kerriemayo. Doe over tortilla en rol op."],1),
+r(32,2,"Broodje Gezond","lunch","10 min",[i("Boterham","1"),i("Ei","1"),i("Zuivelspread","15g"),i("Komkommer","4 plakjes"),i("Tomaatjes","3"),i("Gerookte kipfilet","3 plakken")],["Kook ei 7 min. Smeer zuivelspread op boterham.","Beleg met alle ingrediënten."],1),
+r(33,3,"Broodje bruschetta","lunch","10 min",[i("Boterham","1"),i("Tomaat","3"),i("Basilicum","3 blaadjes"),i("Olijfolie","1el"),i("Knoflook","1")],["Rooster de boterham krokant.","Meng tomatenblokjes, basilicum, knoflook, olijfolie en peper & zout.","Doe het mengsel op de boterham."],1),
+r(34,3,"Broodje pinda-banaan","lunch","5 min",[i("Boterham","1"),i("Pindakaas naturel","30g"),i("Banaan","½")],["Rooster de boterham. Smeer pindakaas erop en leg banaan in plakjes bovenop."],1),
+r(35,3,"Tortilla rosbief","lunch","5 min",[i("Tortilla","1"),i("Peperrosbief","100g"),i("Zuivelspread","30g"),i("Tomaatjes","2"),i("Parmezaan","10g"),i("Rucola","handje")],["Verdeel zuivelspread en parmezaan over de tortilla.","Leg rosbief, rucola en tomaatjes in het midden. Rol op en snijd."],1),
+r(36,3,"Broodje gerookte kipsalade","lunch","5 min",[i("Boterham","1"),i("Gerookte kipfilet","50g"),i("Zero fritessaus","1el"),i("Franse kwark","1el"),i("Bieslook","5 sprieten"),i("Parmezaan","10g")],["Meng fritessaus, kwark, bieslook, kipfilet en parmezaan.","Rooster boterham. Verdeel het mengsel erop."],1),
+r(37,3,"Scrambled eggs","lunch","10 min",[i("Boterham","1"),i("Ei","2"),i("Komijnekaas","½ plak"),i("Zero fritessaus","1tl"),i("Witte ui","¼"),i("Bosui","n.s.")],["Rooster boterham. Verhit olie in pan.","Doe eieren, kaas en ui in de pan. Roer door tot scrambled. Voeg fritessaus toe.","Doe op boterham met bosui en peper & zout."],1),
+r(38,4,"Clubsandwich","lunch","10 min",[i("Boterham","2"),i("Ei","1"),i("Gerookte kipfilet","3 plakken"),i("Veggie spread chili paprika","1tl"),i("Zero fritessaus","1tl"),i("Komkommer","4 plakken"),i("Tomaat","4 plakken")],["Kook ei 7 min. Rooster beide boterhammen.","Mix veggiespread met fritessaus en smeer op 1 boterham.","Beleg met alle ingrediënten. Leg 2e boterham erop en snijd doormidden."],1),
+r(39,4,"Soepie","lunch","25 min",[i("Rode paprika","2"),i("Tomaat","2"),i("Rode ui","1"),i("Knoflook","1"),i("Bouillon","1tl"),i("Zuivelspread","30g"),i("Pompoenpitten","15g")],["Oven 180°C. Paprika's 20 min in de oven. Fruit ui en knoflook.","Voeg water, bouillon en tomaten toe. Kook 10 min. Voeg geroosterde paprika toe.","Pureer alles. Afmaken: bieslook, zuivelspread en pompoenpitten."],1),
+r(40,4,"Broodje ham","lunch","5 min",[i("Boterham","1"),i("Gerookte slagersachterham","1 plak"),i("Komkommer","4 plakken"),i("Tomaat","4 plakken"),i("Rucola","handje"),i("Zuivelspread","10g")],["Besmeer de boterham met de zuivelspread.","Leg alfalfa, tomaat, komkommer, rucola en ham erop."],1),
+r(41,4,"Salade gerookte kip","lunch","5 min",[i("Kipfilet reepjes","150g"),i("Rucola slamelange","75g"),i("Honing mosterd dressing 0%","15ml"),i("Augurk","2"),i("Rode ui","½"),i("Appel","½")],["Snijd appel, rode ui en augurken in blokjes.","Doe alle ingrediënten in een schaal en breng op smaak."],1),
+r(42,4,"Hummus wrap","lunch","5 min",[i("Volkoren wrap groot","1"),i("Klassieke hummus","30g"),i("Kipfilet reepjes","75g"),i("Hüttenkäse","40g"),i("Tomaat","4 plakken"),i("Komkommer","4 plakken"),i("Rucola","handje")],["Mix hummus, hüttenkäse, citroensap en peper & zout.","Beleg tortilla, rol op."],1),
+r(43,4,"Broodje falafel","lunch","10 min",[i("Boterham","1"),i("Falafel naturel","70g"),i("Franse kwark","100g"),i("Komkommer","5 plakken"),i("Knoflook","1"),i("Blauwe bessen","handje")],["Wok falafel knapperiger. Meng kwark met geraspte komkommer, knoflook en parmezaan.","Rooster boterham, smeer kwarkmengsel erop, doe falafel erop. Afmaken: bessen."],1),
+r(44,1,"Spaghetti Carbonara","diner","15 min",[i("Spaghetti","120g"),i("Kookroom","125ml"),i("Melk","50ml"),i("Knoflook","1"),i("Spekblokjes","100g"),i("Ei","1"),i("Parmezaan","40g")],["Kook spaghetti. Bak spekjes.","Meng knoflook, melk, kookroom en ei. Voeg spaghetti bij spekjes, doe saus erbij.","Rasp parmezaan erboven en roer door tot dikker."],2),
+r(45,1,"Pasta Pesto","diner","20 min",[i("Spaghetti","150g"),i("Olijfolie","15ml"),i("Basilicum","30g"),i("Knoflook","2"),i("Kipfilet blokjes","300g"),i("Cashewnoten","70g"),i("Parmezaan","40g"),i("Rucola","handje")],["Blend basilicum, parmezaan, cashewnoten, knoflook en olijfolie tot pesto.","Kook spaghetti. Bak kip. Voeg spaghetti en pesto bij kip. Serveer met rucola."],2),
+r(46,1,"Noodles Ossenhaas","diner","15 min",[i("Noodles","100g"),i("Ketjap sesam saus","100ml"),i("Oosterse wokgroenten","200g"),i("Ossenhaas","300g"),i("Knoflook","2"),i("Soja saus","2el"),i("Cashewnoten","handje")],["Bereid noodles. Marineer ossenhaas in knoflook en soja saus. Schroei dicht.","Voeg groentes toe. Voeg noodles en ketjap saus toe. Garneer met cashewnoten."],2),
+r(47,1,"Loempia Feta","diner","20 min",[i("Filodeeg","8 bladeren"),i("Feta kaas","100g"),i("Spinazie","200g"),i("Knoflook","2"),i("Sweet chili saus","60g"),i("Rode ui","½")],["Ontdooi filodeeg. Bak spinazie met knoflook.","Vul 2 bladeren per loempia met spinazie, ui en feta. Vouw op.","10 min airfryer of 12-15 min oven 180°C."],2),
+r(48,1,"Groene Curry Risotto","diner","20 min",[i("Volkoren risotto rijst","125g"),i("Kipfilet blokjes","300g"),i("Bio bouillon","1tl"),i("Knoflook","1"),i("Oosterse wokgroenten","400g"),i("Groene curry pasta","25g"),i("Kokosmelk","200ml")],["Fruit knoflook, voeg risotto toe. Voeg bouillonwater beetje voor beetje toe.","Bak kip en groente. Meng kokosmelk met curry pasta.","Combineer alles en laat inkoken."],2),
+r(49,1,"Pizza filodeeg","diner","20 min",[i("Filodeeg","4 vellen"),i("Hüttenkäse","150g"),i("Gezeefde tomaten","100g"),i("Champignons","200g"),i("Rode ui","½"),i("Spinazie","150g"),i("Knoflook","1")],["Oven 180°C. Leg 2 filodeeg vellen op bakpapier met olie ertussen.","Smeer tomatensaus, verdeel Hüttenkäse. Bak groenten en verdeel op de bodem.","Bak 10 min."],2),
+r(50,1,"Noodles Kip-Pinda","diner","15 min",[i("Noodles","100g"),i("Pindakaas","35g"),i("Soja saus","15g"),i("Sesamolie","2el"),i("Oosterse wokgroente","400g"),i("Kipfilet","300g"),i("Limoen","½")],["Kook noodles. Maak pindasaus van pindakaas, limoen, rode peper, soja saus en sesamolie.","Bak kip met knoflook en groenten. Giet pindasaus erover."],2),
+r(51,1,"Burrito's","diner","20 min",[i("Volkoren wraps","4"),i("Mexicaanse roerbak groenten","250g"),i("Geraspte 20+ kaas","30g"),i("Rundergehakt","300g"),i("Creme fraiche light","1el"),i("Burrito kruiden","1 zk")],["Bak gehakt met knoflook. Voeg groenten en kruiden toe.","Vul wraps, rol op, strooi kaas erop. Bak ±5 min oven 180°C."],2),
+r(52,2,"Pizza Tonno","diner","20 min",[i("Filodeeg","4 vellen"),i("Hüttenkäse","100g"),i("Tonijn op waterbasis","1 blikje"),i("Rode ui","½"),i("Zwarte olijven","3"),i("Tomatenpuree","2tl")],["Oven 180°C. Filodeeg op bakpapier. Meng Hüttenkäse met tomatenpuree en verdeel. Bak 10-15 min.","Meng tonijn, rode ui en olijven. Doe op de pizza."],2),
+r(53,2,"Krokante Kipburger","diner","30 min",[i("Kipfilet","300g"),i("Amandelmeel","40g"),i("Zero fritessaus","2el"),i("Franse kwark","1el"),i("Cornflakes","40g"),i("Ei","1"),i("Volkoren bollen","2")],["Oven 200°C. Haal kip door amandelmeel → ei+paprikapoeder → cornflakes. Bak 20 min.","Maak uienmayo van fritessaus, kwark en ui. Doe burger op broodje."],2),
+r(54,2,"Risotto Geit","diner","20 min",[i("Half volkoren risotto","80g"),i("Zachte geitenkaas","100g"),i("Aardbeien","100g"),i("Courgette","100g"),i("Bio bouillon","1tl"),i("Granaatappelpitjes","30g")],["Bereid risotto met bouillon. Voeg courgette toe. Doe ⅓ geitenkaas erbij voor smeuïgheid.","Afmaken: granaatappelpitjes, pompoenpitjes, aardbeien en rest kaas."],2),
+r(55,2,"Spaghetti Gamba","diner","20 min",[i("Spaghetti","120g"),i("Wokgarnalen","300g"),i("Courgette","200g"),i("Knoflook","1"),i("Zuivelspread","60g"),i("Peterselie","2 sprieten")],["Kook spaghetti. Bak garnalen met knoflook en peterselie.","Voeg courgette en spaghetti toe. Doe zuivelspread erbij en roer door."],2),
+r(56,2,"Zoete Aardappeltaart","diner","35 min",[i("Zoete aardappels","3"),i("Hüttenkäse","200g"),i("Spinazie","200g"),i("Trostomaten","2"),i("Eieren","5"),i("Bieslook","10 sprieten")],["Oven 200°C. Zoete aardappelplakjes in ovenschaal. Bak 15 min.","Klop eieren met bieslook, Hüttenkäse en geslenkte spinazie. Giet over aardappels.","Tomaten bovenop. Bak 20-25 min."],2),
+r(57,2,"Spaghetti Feta Tomaat","diner","30 min",[i("Spaghetti","120g"),i("Tomaatjes","1"),i("Feta","100g"),i("Knoflook","1"),i("Basilicum","10 blaadjes"),i("Oregano","2tl")],["Oven 200°C. Tomaatjes met oregano en olijfolie in ovenschaal. Feta in het midden. Bak 25 min.","Kook spaghetti. Prak tomaatjes en feta. Meng met spaghetti, basilicum en knoflook."],2),
+r(58,2,"Fusilli Ossenhaas","diner","15 min",[i("Fusilli","120g"),i("Ossenhaas","300g"),i("Kookroom","125ml"),i("Tomatenpuree","2tl"),i("Witte ui","½"),i("Knoflook","1")],["Mix kookroom, tomatenpuree en ui tot saus. Kook fusilli.","Bak ossenhaas dicht. Voeg fusilli en saus toe. Laat indikken."],2),
+r(59,2,"Courgette-Prei Soep","diner","20 min",[i("Courgette","2"),i("Prei","1"),i("Witte ui","½"),i("Bio bouillon","1tl"),i("Feta kaas","20g"),i("Ontbijtspek","4 plakken")],["Fruit ui. Voeg courgette, prei en 750ml bouillon toe. Kook 10 min.","Bak spek krokant. Pureer de soep. Afmaken: spek en feta."],2),
+r(60,3,"Zoete aardappelstamppot","diner","30 min",[i("Zoete aardappel","600g"),i("Andijvie","250g"),i("Franse mosterd","2el"),i("Kookroom","2el"),i("Spekblokjes","125g"),i("Nootmuskaat","½ tl")],["Kook zoete aardappels 20 min. Bak spekjes droog aan.","Stamp aardappels. Voeg mosterd, kookroom, andijvie, nootmuskaat en spekjes toe."],2),
+r(61,3,"Ossenhaas champignonroomsaus","diner","20 min",[i("Rijst","100g"),i("Ossenhaas","300g"),i("Kookroom","100ml"),i("Knoflook","2"),i("Rode ui","1"),i("Champignons","400g"),i("Peterselie","1el")],["Kook rijst. Wok champignons met ui en knoflook 3 min.","Voeg kookroom en peterselie toe. Bak ossenhaas apart dicht.","Meng rijst door champignonsaus. Serveer met ossenhaas."],2),
+r(62,3,"Tortizza pulled chicken","diner","30 min",[i("Tortilla groot","2"),i("Gezeefde tomaten","150g"),i("Rode ui","½"),i("Paprika","½"),i("Kipfilet","300g"),i("Crispy chicken kruiden","½ zakje"),i("Geraspte kaas","50g")],["Oven 200°C. Kook kip 15-20 min. Snijd ui en paprika.","Beleg tortilla's met saus, kaas, ui en paprika.","Pluk kip uit elkaar, voeg kruiden toe. Verdeel over tortilla's. Bak 10 min."],2),
+r(63,3,"Truffelrisotto","diner","25 min",[i("Risotto met truffel","175g"),i("Paddenstoelenmix","280g"),i("Parmezaan","40g"),i("Knoflook","1"),i("Bouillon","1tl"),i("Rucola","handje")],["Kook risotto met bouillon. Roerbak paddenstoelen met knoflook in olie.","Voeg risotto bij paddenstoelen. Rasp parmezaan erdoor.","Verdeel op bordjes. Afmaken: rucola en parmezaan."],2),
+r(64,3,"Baked cheesy pasta","diner","25 min",[i("Kipfilet blokjes","300g"),i("Penne","150g"),i("Melk","200ml"),i("Geraspte kaas","50g"),i("Courgette","1"),i("Tomaatjes","1"),i("Parmezaan","15g")],["Bak kip met cajun kruiden en knoflook. Voeg courgette en tomaatjes toe.","Maak saus van melk, kaas, speltmeel en knoflook. Kook penne.","Doe alles in ovenschaal met saus. Bestrooi met parmezaan. Bak 10 min op 200°C."],2),
+r(65,3,"Zalm teriyaki","diner","20 min",[i("Noodles","100g"),i("Zalmfilet","300g"),i("Honing","2el"),i("Sojasaus","40ml"),i("Groene aspergetips","200g"),i("Gemberpoeder","¼ tl"),i("Sesamzaadjes","1tl")],["Oven 200°C. Meng sojasaus, honing, gemberpoeder, chilipoeder en knoflook.","Doe zalm en aspergetips in ovenschaal. Giet dressing erover. Bak 15 min.","Kook noodles. Serveer en giet rest van de dressing erover."],2),
+r(66,3,"Kipsalon","diner","25 min",[i("Zoete aardappelfriet (vers)","400g"),i("Franse kwark","200g"),i("Kipfilet blokjes","300g"),i("Geraspte kaas","30g"),i("Knoflook","1"),i("Shoarma kruiden","n.s."),i("Tomaatjes","10"),i("Komkommer & ijsbergsla","n.s.")],["Bak friet 10 min. Bak kip met shoarma kruiden.","Meng kwark met oregano en knoflook.","Friet, kip en kaas in ovenschotel. 5 min oven. Met groenten en saus."],2),
+r(67,3,"Pastasalade","diner","15 min",[i("Penne","150g"),i("Kipfilet reepjes","250g"),i("Hüttenkäse","100g"),i("Avocado","½"),i("Knoflook","1"),i("Rode ui","½"),i("Rucola","handje"),i("Pompoenpitten","20g")],["Kook penne. Pureer hüttenkäse, avocado, citroensap en knoflook tot saus.","Meng saus door pasta. Voeg tomaatjes, rode ui, rucola en kipfilet toe.","Afmaken: pompoenpitten."],2),
+r(68,4,"Tortillacake","diner","20 min",[i("Rundergehakt","300g"),i("Tortilla groot","2"),i("Mexicaanse groente","400g"),i("Knoflook","2"),i("Rode ui","1"),i("Geraspte kaas","30g"),i("Crème fraîche","80g"),i("Mexicaanse kruiden","3tl")],["Oven 200°C. Bak gehakt met knoflook en ui gaar.","Voeg groente en kruiden toe. Leg tortilla's in cakeblik met het gehaktmengsel.","Crème fraîche en kaas erop. Bak 10 min."],2),
+r(69,4,"Spaghetti bolognese","diner","10 min",[i("Rundergehakt","300g"),i("Spaghetti","120g"),i("Soepgroente","250g"),i("Tomatenblokjes","300g"),i("Knoflook","2"),i("Witte ui","1"),i("Geraspte kaas","30g")],["Kook spaghetti. Bak knoflook en ui. Voeg gehakt, soepgroente en tomaten toe.","Bak gaar. Doe spaghetti erbij. Verdeel over 2 borden met kaas."],2),
+r(70,4,"Pompoenlasagne","diner","35 min",[i("Lasagnebladen pompoen","250g"),i("Tomatenblokjes","400g"),i("Italiaanse roerbakgroente","300g"),i("Parmezaan","80g"),i("Knoflook","2"),i("Oregano & Italiaanse kruiden","n.s.")],["Oven 180°C. Wok groente met knoflook, tomaten en kruiden. Voeg ½ parmezaan toe.","Laagjes: pompoenbladen → groentemengsel → parmezaan. Herhaal. Bak 25 min."],2),
+r(71,4,"Oosterse pangasius met rijst","diner","15 min",[i("Rijst","100g"),i("Pangasiusfilet","300g"),i("Paksoi","300g"),i("Knoflook","1"),i("Cashewnoten","50g"),i("Bosui","3 stengels"),i("Ketjap manis","2el")],["Kook rijst. Marineer pangasius in knoflook, ketjap en peper & zout.","Wok pangasius 4 min. Voeg paksoi toe. Afmaken: bosui en cashewnoten."],2),
+r(72,4,"Gevuld kippetje","diner","35 min",[i("Kipfilet","300g (2 stuks)"),i("Zoete aardappel","200g"),i("Rode paprika","1"),i("Rode ui","½"),i("Knoflook","2"),i("Feta kaas","80g")],["Oven 185°C. Snijd kipfilets 6x in (niet helemaal door).","Vul met gesneden groenten. Brokkel feta erop. Bestrooi met Italiaanse kruiden. Bak 30 min."],2),
+r(73,4,"Fluffy rijstbowl","diner","30 min",[i("Rijst","100g"),i("Kipfilet","300g"),i("Tomaat","4"),i("Rode paprika","1"),i("Avocado","1"),i("Rode ui","½"),i("Feta kaas","60g"),i("Mexicaanse kruiden","2tl")],["Kook rijst. Kook kip 20 min en trek uit elkaar met 2 vorken.","Meng rijst, pulled chicken, paprika, tomaat, ui en feta.","Serveer. Afmaken: avocado en zonnebloempitten."],2),
+r(74,4,"Penne tuna","diner","15 min",[i("Penne","150g"),i("Tonijn op waterbasis","2 blikjes"),i("Italiaanse wokgroente","400g"),i("Tomaten pastasaus","200ml"),i("Zwarte olijven","15"),i("Knoflook","1"),i("Kappertjes","3tl"),i("Parmezaan","40g")],["Kook penne. Laat tonijn uitlekken. Bak knoflook, voeg groente en tomatenpuree toe.","Voeg saus en tonijn toe. Doe penne erbij.","Afmaken: kappertjes, olijven en parmezaan."],2),
+r(75,4,"Carpaccio pastasalade","diner","20 min",[i("Fusilli","150g"),i("Carpaccio","120g"),i("Pistachenoten","40g"),i("Parmezaan","40g"),i("Hüttenkäse","100g"),i("Mutti pesto","25g"),i("Rucola","40g")],["Kook fusilli. Meng hüttenkäse met pesto.","Meng pestomengsel met fusilli. Serveer.","Bouw op: carpaccio, rucola, parmezaan, pistachenoten."],2),
+r(86,5,"Meloen maantjes","ontbijt","5 min",[i("Galia meloen","1"),i("Blauwe bessen","handje"),i("Chiazaad","1tl"),i("Pecannoten","20g"),i("Franse kwark","n.s."),i("Kaneel","snufje")],["Snijd meloen in ronde plakken en dan doormidden. Verwijder zaadjes.","Meng kwark met stevia en kaneel.","Doe kwark op de meloenmaantjes met bessen en chiazaad."],1),
+r(87,5,"Appel-pinda plakjes","ontbijt","5 min",[i("Franse kwark","200g"),i("Appel","1"),i("Pindakaas","15g"),i("Amandelen","10g")],["Snijd appel in plakjes (ontpit met appelboor).","Verdeel pindakaas over de appelplakjes.","Snijd amandelen in stukjes en verdeel erop. Doe kwark erbij."],1),
+r(88,5,"Havermoutpap","ontbijt","10 min",[i("Havermout","50g"),i("Havermelk of magere melk","150ml"),i("Banaan","1"),i("Raw cacaopoeder","13g"),i("Blauwe bessen","40g")],["Breng melk aan de kook, voeg havermout en cacaopoeder toe. Roer tot dik.","Doe in kommetje en laat 5 min afkoelen.","Afmaken: banaan en blauwe bessen."],1),
+r(89,5,"Snelste ontbijt ever","ontbijt","1 min",[i("Breaker zonder suiker","1"),i("Appel of banaan","1")],["Is er uitleg nodig? 😄"],1),
+r(90,5,"Overnight pudding","ontbijt","240 min",[i("Havermelk","100ml"),i("Chiazaad","25g"),i("Aardbeien","hand"),i("Vanille aroma","1tl")],["Meng melk, chiazaad en vanille aroma. Roer 5 minuten door.","Zet minimaal 4 uur in de koelkast (of de hele nacht).","Snijd aardbeien in plakjes en leg op de pudding voor het serveren."],1),
+r(91,5,"Mozzarella salade","lunch","10 min",[i("Mozzarella","½ bol"),i("Tomaatjes","5"),i("Veldsla","40g"),i("Rode ui","¼"),i("Balsamico","2tl"),i("Pompoenpitten","10g")],["Doe veldsla en mozzarella op het bord.","Snijd tomaten en rode ui. Verdeel over het bord.","Afmaken: balsamico, pompoenpitten en peper & zout."],1),
+r(92,5,"Romige venkelsoep","lunch","25 min",[i("Venkel","1"),i("Zoete aardappel","1"),i("Witte ui","1"),i("Knoflook","2"),i("Bouillon","1tl"),i("Feta","50g"),i("Water","600ml"),i("Bosui","2 stengels"),i("Chilipoeder & kurkuma","n.s.")],["Fruit ui en knoflook in olijfolie aan.","Voeg zoete aardappel, venkel, bouillon, kruiden en water toe. Kook 15 min.","Blend tot romig. Afmaken: feta en bosui."],1),
+r(93,5,"Broodje beef","lunch","25 min",[i("Boterham","1"),i("Ossenhaas","100g"),i("Komkommer","4 plakken"),i("Witte ui","¼"),i("Roomboter","5g"),i("Rucola","handje"),i("Zuivelspread","10g")],["Bak uiringen 15 min op laag vuur in boter.","Smeer zuivelspread en komkommer op broodje.","Bak ossenhaas medium rare. Snijd in dunne plakken en beleg broodje.","Doe uiringen erop. Afmaken: peper, zout en rucola."],1),
+r(94,5,"Salade gerookte zalm","lunch","5 min",[i("Gerookte zalm","50g"),i("Rucola slamelange","75g"),i("Honing mosterd dressing 0%","15ml"),i("Augurk","2"),i("Komkommer","10 plakjes"),i("Rode ui","½"),i("Citroensap","6 druppels")],["Snijd rode ui, augurken en bieslook fijn.","Doe alle ingrediënten in een schaal.","Breng op smaak met peper, zout en citroensap."],1),
+r(95,5,"Wrap pesto-kip","lunch","5 min",[i("Tortilla groot","1"),i("Mutti pesto","30g"),i("Kipfilet reepjes","75g"),i("Tomaat","1"),i("Rucola","handje"),i("Parmezaan","10g")],["Verdeel pesto over het midden van de tortilla.","Verdeel tomaat, rucola en kipfilet over de pesto.","Rasp parmezaan erover. Afmaken: peper & zout."],1),
+r(96,5,"Broodje ossenworst speciaal","lunch","10 min",[i("Boterham","1"),i("Ossenworst","100g"),i("Augurk","1"),i("Rode ui","¼"),i("Truffelmayo","7g")],["Rooster de boterham en laat afkoelen.","Snijd augurk en ui klein. Snijd ossenworst in plakjes.","Smeer truffelmayo op boterham. Beleg met ossenworst, augurk en ui."],1),
+r(97,5,"AVG'tje","diner","45 min",[i("Rundertartaar","2"),i("Kruimige aardappels","500g"),i("Diepvries spinazie","600g"),i("Franse mosterd","2tl"),i("Nootmuskaat","1tl"),i("Roomboter","10g"),i("Italiaanse kruiden","2tl")],["Oven 220°C. Aardappels 6x insnijden, kruiden en olijfolie. 40 min.","Spinazie opwarmen met nootmuskaat en mosterd.","Rundertartaar in boter bakken."],2),
+r(98,5,"Butter chicken","diner","20 min",[i("Kipfiletblokjes","300g"),i("Rijst","150g"),i("Tomatenblokjes","100g"),i("Yoghurt","70ml"),i("Kookroom","100ml"),i("Rode ui","1"),i("Knoflook","2"),i("Garam masala","2tl"),i("Chilipoeder & paprikapoeder","n.s.")],["Meng kip met ui, knoflook, kruiden en yoghurt. 10 min laten staan.","Kook rijst. Bak kip gaar.","Tomatenblokjes en kookroom erbij. 5 min. Serveer met rijst."],2),
+r(99,5,"Varkenshaasspies","diner","35 min",[i("Varkenshaas","2"),i("Groene paprika","1"),i("Courgette","1"),i("Rode ui","1"),i("Tomaatjes","12"),i("Honing","25g"),i("Sojasaus","25ml"),i("Knoflook & kruiden","n.s.")],["Oven 220°C. Alles in grove stukken.","Saus van honing, sojasaus en kruiden.","Rijg aan spiezen, saus erover. 30 min oven, halverwege omdraaien."],2),
+r(100,5,"Salade beef","diner","20 min",[i("Ossenhaas","300g"),i("Knoflook","2"),i("Rucola slamelange","150g"),i("Champignons","200g"),i("Groene aspergetips","1 zk"),i("Tomaatjes","8"),i("Parmezaan","20g")],["Bak ossenhaas en champignons met knoflook.","Grill aspergetips 8-10 min.","Verdeel sla, groenten en vlees. Parmezaan erover."],2),
+r(101,5,"Gevulde paprika's","diner","25 min",[i("Rode paprika's","4"),i("Mager rundergehakt","300g"),i("Kidneybonen","150g"),i("Witte ui","1"),i("Mais","100g"),i("Tomaten","2"),i("Knoflook","1"),i("Feta kaas","50g"),i("Crème fraîche","50g")],["Oven 180°C. Paprika's ontdoen.","Bak gehakt, bonen, tomaten en mais. Crème fraîche erdoor.","Paprika's vullen, feta erop. 15 min oven."],2),
+r(102,5,"Pastinaak-puree met paddenstoelen","diner","30 min",[i("Kruimige aardappels","400g"),i("Pastinaak","1"),i("Champignons","250g"),i("Sjalotjes","4"),i("Knoflook","2"),i("Melk","100ml"),i("Bouillon","2tl"),i("Pompoenpitten","2tl"),i("Roomboter","10g")],["Kook aardappels, pastinaak en sjalotjes 20 min. Stamp met melk.","Bak champignons, rooster pompoenpitten.","Puree op bord met champignons."],2),
+r(103,5,"Lasagne met pulled chicken","diner","35 min",[i("Kipfilet","300g"),i("Tortilla","2"),i("Mexicaanse wokgroente","400g"),i("Tomatenblokjes","400g"),i("Knoflook","2"),i("Geraspte kaas","40g"),i("Mexicaanse kruiden","1tl")],["Oven 200°C. Kook kip 20 min, trek uit elkaar.","Wok groenten met knoflook, tomatenblokjes en kruiden. Voeg kip toe.","Tortilla in plakken snijden, laagjes bouwen, kaas erop. 15 min oven."],2),
+r(104,5,"Kabeljauw stoofpotje","diner","35 min",[i("Kabeljauw","300g"),i("Italiaanse roerbakgroente","400g"),i("Mozzarella","50g"),i("Tomatensaus naturel","500g"),i("Knoflook","2"),i("Sjalotjes","2"),i("Italiaanse kruiden","2tl"),i("Basilicum","5 blaadjes")],["Fruit knoflook en sjalotjes, wok groente 5 min.","Voeg basilicum en tomatensaus toe, kook op.","Voeg kabeljauw en kruiden toe, stoof 10 min. Voeg mozzarella toe."],2),
+r(105,6,"Cracker Hüttenkäse met aardbei","ontbijt","5 min",[i("Volkoren crackers (Wasa)","2"),i("Aardbeien","5"),i("Hüttenkäse","75g"),i("Peper & zout","n.s.")],["Beleg de crackers met alle ingrediënten."],1),
+r(106,6,"Baked chocolate-chip","ontbijt","25 min",[i("Banaan","½"),i("Volkoren speltmeel","40g"),i("Melk","75ml"),i("90% chocolade","15g"),i("Vanille aroma","1tl"),i("Bakpoeder","1tl")],["Oven 200°C. Prak banaan en meng met alle andere ingrediënten behalve chocolade.","Giet in klein ovenschaaltje. Breek chocolade in stukjes en leg bovenop.","20 min in de oven."],1),
+r(107,6,"Ei prutje","ontbijt","15 min",[i("Ei","1"),i("Eiwit","1"),i("Melk","150ml"),i("Havervlokken","30g"),i("Sjalotje","1"),i("Tomaatjes","2"),i("Zuivelspread","10g"),i("Italiaanse kruiden","1tl")],["Blend ei, eiwit, havermout, kruiden en melk.","Voeg fijngesneden sjalotje en tomaatjes toe.","Bak als pannenkoek in olie. Maak stuk met spatel. Voeg zuivelspread toe voor smeuïgheid."],1),
+r(108,6,"Milkshake","ontbijt","5 min",[i("Bevroren roodfruit mix","125g"),i("Havervlokken","25g"),i("Sojamelk","150ml"),i("Griekse yoghurt","150g")],["Doe alle ingrediënten in de blender."],1),
+r(109,6,"Choco shake","ontbijt","5 min",[i("Banaan","1"),i("Melk","100ml"),i("Griekse yoghurt","200g"),i("Bevroren pompoen","100g"),i("Bevroren spinazie","50g"),i("Raw cacao poeder","10g")],["Doe alle ingrediënten in de blender. Optioneel: 2 druppels stevia."],1),
+r(110,6,"Portobelloburger","lunch","10 min",[i("Portobello","2"),i("Hüttenkäse","100g"),i("Tomaatjes","5"),i("Pecannoten","20g"),i("Cajun kruiden","1tl")],["Grill portobello's 3 min. Laat uitlekken.","Meng hüttenkäse met kruiden. Halveer tomaatjes en breek pecannoten.","Vul portobello met hüttenkäse, pecannoten en tomaatjes. Leg andere portobello bovenop."],1),
+r(111,6,"Broodje knaks","lunch","5 min",[i("Boterham","2"),i("Magere knakworstjes (Unox)","4"),i("Zero fritessaus","20g")],["Opwarmen, opmaken, broodje erop en eten maar."],1),
+r(112,6,"Broodje guacamole","lunch","5 min",[i("Boterham","1"),i("Avocado","100g"),i("Rucola","handje"),i("Granaatappelpitjes","1tl"),i("Tomaatjes","3"),i("Cajun kruiden","1tl"),i("Knoflookpoeder","½ tl")],["Rooster boterham. Prak avocado met kruiden.","Snijd tomaatjes en roer door avocado.","Doe op boterham met granaatappelpitjes en rucola."],1),
+r(113,6,"Zoetig broodje","lunch","15 min",[i("Boterham","1"),i("Ei","1"),i("Griekse yoghurt","100g"),i("Granaatappelpitjes","1tl"),i("Honing","10g"),i("Banaan","100g")],["Oven 180°C. Meng ei, yoghurt en honing.","Druk broodje in midden plat, verdeel kwarkmengsel erop.","Snijd banaan in plakjes en leg bovenop. 12 min in de oven."],1),
+r(114,6,"Broodje dunner","lunch","15 min",[i("Volkoren pita broodje","1"),i("Kipfilet plakjes","150g"),i("IJsbergsla","handje"),i("Komkommer","4 plakjes"),i("Tomaat","4 plakjes"),i("Shoarmakruiden","15g"),i("Franse kwark","100g"),i("Knoflook","1")],["Bak pita af. Verwarm kip met shoarmakruiden.","Meng kwark met knoflook, peterselie, peper & zout. Zet in koelkast.","Vul pita met kip, tomaat, komkommer, sla en knoflooksaus."],1),
+r(115,6,"Caesar salade","lunch","10 min",[i("Slamelange","150g"),i("Kipfilet reepjes","150g"),i("Sjalotje","½"),i("Franse kwark","50g"),i("Parmezaan","15g"),i("Tomaatjes","5"),i("Komkommer","¼"),i("Volkoren soepstengel","1")],["Snijd tomaatjes, komkommer en sjalotje. Doe met sla en kip in schaal.","Rasp parmezaan en meng met kwark en stevia. Roer door salade.","Versnipper soepstengel erover. Afmaken: peper & zout."],1),
+r(116,6,"Chili con carne","diner","20 min",[i("Rundergehakt","300g"),i("Witte ui","1"),i("Knoflook","1"),i("Rode paprika","1"),i("Kidneybonen","200g"),i("Tomaten","300g"),i("Zuivelspread light naturel","50g"),i("Chili con carne kruiden","1el"),i("Limoensap","1el")],["Fruit knoflook en ui, voeg gehakt en kruiden toe.","Voeg bonen, tomaten en paprika toe. 5 min pruttelen.","Peterselie met zuivelspread erdoor. Afmaken: limoensap."],2),
+r(117,6,"Macaroni","diner","20 min",[i("Gele erwten macaroni","150g"),i("Rundergehakt","300g"),i("Knoflook","2"),i("Macaroni groenten","400g"),i("Tomatenpuree","60g"),i("Geraspte kaas","40g"),i("Macaroni & spaghetti kruiden","2el")],["Kook macaroni. Bak gehakt met knoflook gaar.","Voeg macaroni groenten toe en bak. Voeg macaroni, kruiden en tomatenpuree toe.","Afmaken: geraspte kaas."],2),
+r(118,6,"Zalm met groene curry-bloemkoolpuree","diner","25 min",[i("Zalmfilet","2"),i("Bloemkool","1"),i("Knoflook","2"),i("Groene curry pasta","2tl"),i("Kokosmelk","75ml"),i("Cajun kruiden","1tl"),i("Peterselie","1 takje")],["Oven 200°C. Kook bloemkool 12 min.","Zalm in ovenschotel met olijfolie, knoflook, cajun kruiden. 12 min oven.","Blend kokosmelk, curry pasta en bloemkool. Op bord met zalm."],2),
+r(119,6,"Bloemkoolrisotto met spinaziepesto","diner","15 min",[i("Bloemkoolrijst","300g"),i("Spinazie","100g"),i("Olijfolie","1el"),i("Basilicum","30g"),i("Knoflook","2"),i("Champignons","200g"),i("Cashewnoten","70g"),i("Parmezaan","40g")],["Blend spinazie, basilicum, knoflook, cashewnoten en parmezaan tot pesto.","Wok champignons 4 min, bloemkoolrijst 2 min erbij. Pesto erdoor."],2),
+r(120,6,"Kipkerrie met rijst","diner","20 min",[i("Rijst","150g"),i("Sperziebonen","250g"),i("Kipfiletblokjes","300g"),i("Rode ui","1"),i("Knoflook","1"),i("Crème fraîche","100g"),i("Kerriepoeder","1el"),i("Kurkuma","½ el"),i("Limoensap","1el"),i("Peterselie","1 takje")],["Kook sperziebonen en rijst. Fruit ui, knoflook, bak kip.","Bouillon, crème fraîche, kruiden en limoensap. Laat indikken.","Sperziebonen erbij. Op bord."],2),
+r(121,6,"Chicken pasta","diner","15 min",[i("Spaghetti","150g"),i("Kipfiletblokjes","300g"),i("Knoflook","2"),i("Champignons","200g"),i("Witte ui","1"),i("Courgette","½"),i("Tomaatjes","8"),i("Hüttenkäse","100g"),i("Parmezaan","50g")],["Kook spaghetti. Bak kip, knoflook, ui en groenten.","Voeg spaghetti, hüttenkäse en parmezaan toe.","Serveer."],2),
+r(122,6,"Pad thai","diner","20 min",[i("Noodles","150g"),i("Thaise wokgroenten","400g"),i("Knoflook","1"),i("Limoen","½ (sap)"),i("Pindakaas","5g"),i("Ketchup zonder suiker","50g"),i("Sojasaus","40ml"),i("Eieren","2"),i("Ongezouten pinda's","20g"),i("Bosui","1 streng")],["Kook noodles. Wok groenten. Kook eieren 7 min.","Meng sojasaus, pindakaas, ketchup en limoensap tot saus.","Noodles, groenten en saus mengen. Afmaken: bosui, ei, pinda's."],2),
+r(123,6,"Geitenkaas salade","diner","20 min",[i("Geitenkaas 40+ honing","80g"),i("Rucola slamelange","300g"),i("Groene aspergetips","100g"),i("Komkommer","½"),i("Tomaatjes","5"),i("Appel","½"),i("Blauwe bessen","hand")],["Grill aspergetips 10 min. Bak appel blokjes na 5 min mee.","Snijd tomaatjes en komkommer. Verdeel sla en groenten over 2 borden.","Leg aspergetips en appeltjes erop. Versnipper geitenkaas erover."],2),
+r(124,7,"Cheesecake","ontbijt","25 min",[i("Griekse yoghurt vanille (Optimel)","200g"),i("Eiwit","1"),i("Volkoren speltmeel","15g"),i("Frambozen","10"),i("Digestive suikervrij","1 koekje")],["Oven 180°C. Meng yoghurt, eiwit en meel.","Plet frambozen tot jam.","Verkruimel koekje in bakje, yoghurtmengsel erop, frambozen erop.","20 min in de oven."],1),
+r(125,7,"Overnight oats","ontbijt","8 uur",[i("Havermout","20g"),i("Amandelmelk","10ml"),i("Banaan","1"),i("Blauwe bessen","10"),i("Honing","½ tl"),i("Vanille aroma","1tl"),i("Chiazaad","1tl")],["Kook bessen kapot. Meng havermout, melk, chiazaad, vanille aroma en banaan.","Roer bessen erdoor. Honing erover. Minimaal 1 nacht in koelkast."],1),
+r(126,7,"Chocolade mousse","ontbijt","15 min",[i("Pompoenblokjes","400g"),i("Honing","5g"),i("Raw cacaopoeder","15g"),i("Vanille aroma","1tl"),i("Frambozen","5"),i("Kokosrasp","1el")],["Kook pompoenblokjes gaar. Spoel koud onder de kraan.","Blend alles behalve kokosrasp en frambozen.","Giet in bakje met kokosrasp en frambozen."],1),
+r(127,7,"Tiramisu","ontbijt","5 min",[i("Griekse yoghurt vanille (Optimel)","200g"),i("Espresso","1 kopje"),i("Rijstwafel","2"),i("Cacaopoeder","1tl")],["Schenk afgekoelde espresso in diep bord. Leg rijstwafels erin en draai om.","Wacht tot rijstwafels volgezogen zijn.","1 rijstwafel op bord, laagje yoghurt, rijstwafel, rest yoghurt. Strooi cacaopoeder erover."],1),
+r(128,7,"Shakshuka","ontbijt","15 min",[i("Eieren","2"),i("Tomatenblokjes","200g"),i("Tomatenpuree","1el"),i("Rode ui","½"),i("Knoflook","1"),i("Komijn & paprikapoeder","1 tl elk"),i("Peterselie","2 stengels")],["Fruit knoflook en ui in olijfolie.","Voeg tomatenblokjes, tomatenpuree en kruiden toe. Laat 5 min pruttelen.","Maak 2 kuiltjes en doe eitjes erin. Deksel op pan, 8 min op zacht vuur.","Afmaken: peterselie."],1),
+r(129,7,"Tortilla pulled chicken","lunch","15 min",[i("Tortilla groot","1"),i("Kipfilet","100g"),i("Tomaat","1"),i("Rode ui","½"),i("30+ kaas","20g"),i("Mexicaanse kruiden","1tl")],["Kook kip 12 min, trek uit elkaar met kruiden.","Snij tortilla naar midden, verdeel alles over 4 vlakken.","Vouwen en 5 min grillen."],1),
+r(130,7,"Spinazie wrap met zalm","lunch","15 min",[i("Spinazie","100g"),i("Ei","1"),i("Eiwit","1"),i("Gerookte zalm","50g"),i("Zuivelspread","20g"),i("Oregano & Italiaanse kruiden","1 tl elk")],["Spinazie slenken. Kluts ei met kruiden en eiwit, bak als wrap.","Zuivelspread in midden, zalm erop, oprollen."],1),
+r(131,7,"Tosti","lunch","5 min",[i("Boterham","2"),i("30+ kaas","1 plak"),i("Gerookte achterham","1 plak")],["Opmaken en opwarmen."],1),
+r(132,7,"Salade gegrilde groenten","lunch","20 min",[i("Pruim","1"),i("Knoflook","1"),i("Sla melange","75g"),i("Rode puntpaprika","2"),i("Courgette","1"),i("Feta","50g"),i("Rode ui","½"),i("Zwarte olijven","4"),i("Granaatappelpitjes","2tl")],["Snij paprika en courgette in reepjes, pruim in vieren.","Grill alles in grillpan met knoflook gaar.","Doe sla in bak, gegrilde groenten erop, ui, olijven, granaatappelpitjes en feta."],1),
+r(133,7,"Spicy tuna springroll","lunch","15 min",[i("Volkoren rijstvel","1"),i("Geraspte wortel","handje"),i("Komkommer","¼"),i("Tonijn op waterbasis","1 blikje"),i("Avocado","70g"),i("Franse kwark","1el"),i("Sweet chili saus","2el"),i("Sojasaus","2el"),i("Sesamzaadjes","1tl")],["Snij komkommer en avocado. Meng kwark, chili saus en tonijn.","Week rijstvel 20 sec, vul met alles, rol op.","Bestrooi met sesamzaad. Dip in sojasaus."],1),
+r(134,7,"Pulled chicken op blad","lunch","15 min",[i("Kipfilet","100g"),i("Krop sla","2 bladen"),i("Remia friteslijn","1el"),i("Smokey bbq saus zero","2el"),i("Tomaatjes","6"),i("Rode ui","½"),i("Cajun kruiden","1tl"),i("Feta","10g")],["Kook kip 10 min, trek uit elkaar.","Voeg mayo, bbq saus en cajun toe.","Op slablad met tomaatjes, ui en feta."],1),
+r(135,7,"Pokébowl krokante kip","diner","30 min",[i("Rijst","200g"),i("Kipfilet","250g"),i("Komkommer","12 plakjes"),i("Crispy mais","1 blikje"),i("Sojabonen","2el"),i("Bio cornflakes","40g"),i("Volkoren speltmeel","40g"),i("Ei","1"),i("Sojasaus","20ml"),i("Remia friteslijn","50g"),i("Paprikapoeder","2tl"),i("Bosui","2 sprieten")],["Oven 200°C. Kip door meel→ei→cornflakes, paprikapoeder. 20 min.","Kook rijst met sojasaus.","Afmaken: friteslijn en bosui."],2),
+r(136,7,"Orzo met kabeljauw en bieslooksaus","diner","25 min",[i("Orzo","200g"),i("Kabeljauwhaasjes","2"),i("Sjalotje","2"),i("Bieslook","15 sprieten"),i("Champignons","125g"),i("Kookroom","100ml"),i("Aspergetips","1 trosje"),i("Knoflook","1"),i("Parmezaan","30g"),i("Citroen","½")],["Kook orzo, kabeljauw, aspergetips en champignons.","Bieslooksaus van bouillon, kookroom en parmezaan.","Op bord."],2),
+r(137,7,"Turkse pizza met knoflooksaus","diner","15 min",[i("Tortilla groot","2"),i("Rundergehakt","300g"),i("Franse kwark","4el"),i("Tomaatjes","5"),i("Komkommer","10 plakjes"),i("Bieslook","10 sprieten"),i("Knoflook","1"),i("Oregano","2tl"),i("IJsbergsla","2 handjes")],["Gehakt rauw op tortilla. Bak naar beneden, omdraaien.","Kwark met bieslook en knoflook tot saus.","Beleg met sla, tomaatjes, komkommer en saus."],2),
+r(138,7,"Skinny sushi","diner","20 min",[i("Bloemkoolrijst","300g"),i("Hüttenkäse light","150g"),i("Nori vellen","4"),i("Radijs","3"),i("Zalmhaasje","150g"),i("Komkommer","4 lange plakken"),i("Sesamzaadjes","2tl"),i("Sojasaus","6 el")],["Meng bloemkoolrijst met hüttenkäse en sojasaus. Verdeel over nori.","Beleg met komkommer, radijs en zalm. Oprollen en snijden. Bestrooi met sesamzaadjes."],2),
+r(139,7,"Gevulde courgette met rivierkreeftjes","diner","20 min",[i("Courgette","2"),i("Gele paprika","1"),i("Rode ui","1"),i("Knoflook","1"),i("Tomatenblokjes","300g"),i("Feta","40g"),i("Rivierkreeftjes","100g"),i("Italiaanse kruiden","5tl")],["Oven 180°C. Snij courgettes doormidden, uitlepelen, olijfolie, 15 min.","Bak ui en paprika met tomaten, courgettevlees en rivierkreeftjes.","Vullen met mengsel, feta erop."],2),
+r(140,7,"Dahl","diner","25 min",[i("Rijst","200g"),i("Sjalot","3"),i("Knoflook","2"),i("Linzen 0% zout","200g"),i("Tomatenblokjes","400g"),i("Kerriepoeder","1tl"),i("Garam masala","3tl"),i("Komijnpoeder","2tl")],["Fruit sjalotjes, rode peper en knoflook in olijfolie.","Voeg linzen, kruiden, tomatenblokjes en 250ml water toe. Laat 20 min pruttelen.","Kook rijst. Verdeel dahl en rijst over 2 borden."],2),
+r(141,7,"Nasi","diner","15 min",[i("Rijst","200g"),i("Kipfiletblokjes","300g"),i("Nasi wokgroenten","450g"),i("Ketjap Manis","20ml"),i("Sojasaus","20ml"),i("Gember","1tl"),i("Koriander & komijn & kerrie & paprikapoeder","1 tl elk"),i("Sesamzaadjes","1tl")],["Kook rijst. Meng kruiden met ketjap en sojasaus.","Bak kruidenmengsel, voeg kip toe en bak.","Groenten erbij 10 min. Rijst toevoegen en mengen."],2),
+r(142,7,"Krokante aardappeltjes Mexicaans","diner","25 min",[i("Krieltjes met schil","300g"),i("Bonenmix","310g"),i("Tomatenpulp","400ml"),i("Parmezaan","30g"),i("Taco kruiden zero","1 zk")],["Oven 180°C. Krieltjes in dunne plakjes, taco kruiden en olijfolie. 20 min.","Tomatenpulp met taco kruiden en bonen.","Krieltjes op bord, bonenmengsel en parmezaan."],2),
+
+r(76,1,"Gerookte kip met augurk","tussendoortje","2 min",[i("Gerookte kipfilet","n.s."),i("Zoetzure augurk (Kesbeke)","1")],["Rol een zoetzure augurk in gerookte kipfilet. Maak er ±4."],1),
+r(77,1,"Nakd reep","tussendoortje","0 min",[i("Nakd reep","1")],["Pak de Nakd reep en geniet! Alle smaken zijn prima."],1),
+r(78,1,"Speltwafel met zuivelspread","tussendoortje","2 min",[i("Volkoren speltwafel","1"),i("Zuivelspread light","n.s.")],["Smeer zuivelspread op speltwafel. Voeg rauwkost toe naar keuze."],1),
+r(79,1,"Zero kruidkoek","tussendoortje","0 min",[i("Zero kruidkoek","1 plak")],["Snijd 1 plak af en geniet."],1),
+r(80,1,"Optimel yoghurt + cornflakes","tussendoortje","2 min",[i("Optimel yoghurt","150ml"),i("Bio cornflakes","handje")],["Doe yoghurt in bakje. Strooi cornflakes erover."],1),
+r(81,1,"Stuk fruit","tussendoortje","0 min",[i("Fruit naar keuze","1")],["Pak een stuk fruit naar keuze."],1),
+r(82,1,"Rauwkost","tussendoortje","2 min",[i("Komkommer / worteltjes / radijsjes","n.s.")],["Snijd favoriete rauwkost in stukjes."],1),
+r(83,2,"Breaker zonder suiker","tussendoortje","0 min",[i("Breaker reep (zilveren bovenkant)","1")],["Kies de Breaker met de zilveren bovenkant — zonder toegevoegde suikers."],1),
+r(84,2,"Mislukte bananencake","tussendoortje","30 min",[i("Banaan","2"),i("Eieren","2"),i("Amandelmelk","250ml"),i("Bakpoeder","2tl"),i("Kaneel","1tl"),i("Havervlokken","20g")],["Blend alles tot beslag. Giet in cakevorm. Bak 25 min op 220°C. Verdeel in 8 plakjes."],1),
+r(85,3,"Bananenbrood","tussendoortje","60 min",[i("Banaan","2"),i("Ei","2"),i("Bakpoeder","2tl"),i("Honing","2el"),i("Blauwe bessen","100g"),i("Volkoren speltmeel","150g")],["Oven 170°C. Blend alles behalve blauwe bessen.","Giet in cakevorm en roer bessen erdoor. Bak 55 min. Snijd in 8 stukken."],1),
+];
+
+// ===================== STATE & STORAGE =====================
+const SK="wm_week_v2", CK="wm_custom_v2", NK="wm_notes_v2", CHK="wm_check_v2", CFG="wm_cfg_v2";
+function lsGet(k,d){try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}}
+function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+
+function emptyWeek(){const w={};DAYS.forEach(d=>{w[d]={};ROWS.forEach(row=>{w[d][row.id]=null});});return w;}
+
+// Week dates: compute current week Mon-Sun
+function weekDates(){
+  const now=new Date();
+  const day=now.getDay(); // 0=sun
+  const mon=new Date(now); mon.setDate(now.getDate()-((day+6)%7));
+  const nums={}; const out=[];
+  DAYS.forEach((d,idx)=>{const dt=new Date(mon);dt.setDate(mon.getDate()+idx);nums[d]=dt.getDate();out.push(dt);});
+  // week number
+  const jan1=new Date(now.getFullYear(),0,1);
+  const wk=Math.ceil((((now-jan1)/86400000)+jan1.getDay()+1)/7);
+  const months=["jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"];
+  const range=`${out[0].getDate()}–${out[6].getDate()} ${months[out[6].getMonth()]}`;
+  return {nums, wk, range};
+}
+const WEEK=weekDates();
+
+let S={
+  view:"planner",
+  activeDay: DAYS[(new Date().getDay()+6)%7],
+  week: lsGet(SK,emptyWeek()),
+  custom: lsGet(CK,[]),
+  notes: lsGet(NK,{}),
+  checked: lsGet(CHK,{}),
+  cfg: lsGet(CFG,{cookDays:{},store:"Albert Heijn"}),
+  // modals
+  picker:null,     // {day,rowId}
+  detail:null,     // {rc,day,rowId}
+  detailTab:"ing",
+  addOpen:false, addTab:"manual", editRc:null,
+  igCap:"", igUrl:"", igSt:null, igErr:"", igPrev:null,
+  wizOpen:false, wizStep:1,
+  // wizard config
+  wiz:{
+    cookDays:{ma:"cook",di:"cook",wo:"rest",do:"rest",vr:"cook",za:"rest",zo:"cook"},
+    shelley:{vermijd:[],voorkeur:[]},
+    mealprep:{days:[],rowId:"lunch_dirk",rc:null},
+    baksel:"Nee", bakselNote:"",
+    wizMpPicker:false,
+    preview:{},      // day->rowId->rc
+    inHuis:{},       // ingredient key -> true
+  },
+  wizSlotPicker:null,  // {day,rowId} slot being swapped in preview
+  wizSlotIg:null,      // {day,rowId} slot doing IG import
+  wizIgCap:"", wizIgSt:null, wizIgErr:"", wizIgPrev:null,
+  recFilter:"all", recVoor:"all", search:"",
+  formVoor:"beiden",
+};
+
+function save(){lsSet(SK,S.week);lsSet(CK,S.custom);lsSet(NK,S.notes);lsSet(CHK,S.checked);lsSet(CFG,S.cfg);}
+function set(patch){Object.assign(S,patch);save();render();}
+function ALL(){return [...RECIPES,...S.custom];}
+
+// ===================== HELPERS =====================
+function shuf(a){const b=[...a];for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]];}return b;}
+function scaleAmt(amt,srv){if(!amt)return amt;const f=HH/(srv||2);if(Math.abs(f-1)<0.01)return amt;const n=parseFloat(amt);if(isNaN(n))return amt;return amt.replace(String(n),String(Math.round(n*f*10)/10));}
+function esc(s){return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
+function toast(msg){const h=document.getElementById("toast-host");const t=document.createElement("div");t.className="toast";t.textContent=msg;h.appendChild(t);setTimeout(()=>t.remove(),2000);}
+
+function avatarStack(whoList,size){
+  size=size||"mini";
+  return `<div class="${size==='mini'?'mini-av':'avatars'}">`+whoList.map(w=>{
+    const p=PEOPLE[w];if(!p)return"";
+    const cls=size==='mini'?'mini-avatar':'avatar';
+    return `<div class="${cls}" style="background:${p.color}">${p.initial}</div>`;
+  }).join("")+`</div>`;
+}
+
+// ===================== WEEK STATS =====================
+function weekStats(){
+  let filled=0, total=0;
+  DAYS.forEach(d=>{ROWS.forEach(row=>{total++;if(S.week[d]&&S.week[d][row.id])filled++;});});
+  return {filled,total,empty:total-filled};
+}
+function dayFillCount(day){
+  let n=0;ROWS.forEach(row=>{if(S.week[day]&&S.week[day][row.id])n++;});return n;
+}
+
+// ===================== FILTERED RECIPES =====================
+function recipesForRow(rowId){
+  const row=ROWS.find(r=>r.id===rowId);
+  return ALL().filter(rc=>{
+    if(row){
+      if(row.who==="dirk"&&rc.voor==="shelley")return false;
+      if(row.who==="shelley"&&rc.voor==="dirk")return false;
+      if(rc.category!==row.cat)return false;
+    }
+    if(S.search&&!rc.name.toLowerCase().includes(S.search.toLowerCase()))return false;
+    return true;
+  });
+}
+
+// ===================== ACTIONS =====================
+function pickSlot(day,rowId){
+  const rc=S.week[day]&&S.week[day][rowId];
+  if(rc){set({detail:{rc,day,rowId},detailTab:"ing"});}
+  else{set({picker:{day,rowId},search:""});}
+}
+function assignRecipe(rc){
+  if(!S.picker)return;
+  const {day,rowId}=S.picker;
+  S.week[day]={...S.week[day],[rowId]:rc};
+  set({picker:null});
+}
+function clearSlot(day,rowId){
+  S.week[day]={...S.week[day],[rowId]:null};
+  set({detail:null});
+}
+function saveCustomRecipe(rc){S.custom=[...S.custom,rc];set({addOpen:false});toast("Recept toegevoegd");}
+function updateCustomRecipe(rc){S.custom=S.custom.map(x=>x.id===rc.id?rc:x);set({editRc:null,addOpen:false});toast("Bijgewerkt");}
+function deleteCustomRecipe(id){if(!confirm("Recept verwijderen?"))return;S.custom=S.custom.filter(x=>x.id!==id);set({});toast("Verwijderd");}
+
+// ===================== BOODSCHAPPEN =====================
+function boodschappen(){
+  const m={};
+  DAYS.forEach(d=>ROWS.forEach(row=>{
+    const rc=S.week[d]&&S.week[d][row.id];if(!rc)return;
+    (rc.ingredients||[]).forEach(g=>{
+      const k=(g.n||"").toLowerCase();
+      if(!m[k])m[k]={name:g.n,amounts:[],cat:getBoodCat(g.n)};
+      const sc=scaleAmt(g.a,rc.servings);
+      if(sc&&!m[k].amounts.includes(sc))m[k].amounts.push(sc);
+    });
+  }));
+  const grouped={};Object.keys(BOOD_CATS).forEach(c=>grouped[c]=[]);
+  Object.values(m).forEach(it=>{(grouped[it.cat]=grouped[it.cat]||[]).push(it);});
+  return grouped;
+}
+function toggleCheck(k){S.checked={...S.checked,[k]:!S.checked[k]};set({});}
+
+// ===================== WIZARD =====================
+function toggleCookDay(day){
+  const cur=S.cfg.cookDays[day]||"none";
+  const next=cur==="none"?"cook":cur==="cook"?"rest":"none";
+  S.cfg.cookDays={...S.cfg.cookDays,[day]:next};
+  set({});
+}
+function runAutofill(){
+  // Fill empty slots intelligently
+  const by={};CATS.forEach(c=>{by[c]=shuf(ALL().filter(rc=>rc.category===c));});
+  const cnt={};CATS.forEach(c=>cnt[c]=0);
+  const pick=(cat,filterVoor)=>{
+    const pool=by[cat].filter(rc=>{
+      if(filterVoor==="dirk"&&rc.voor==="shelley")return false;
+      if(filterVoor==="shelley"&&rc.voor==="dirk")return false;
+      return true;
+    });
+    if(!pool.length)return null;
+    const rc=pool[cnt[cat]%pool.length];cnt[cat]++;return rc;
+  };
+  DAYS.forEach(day=>{
+    const mode=S.cfg.cookDays[day]||"cook";
+    if(mode==="none")return;
+    ROWS.forEach(row=>{
+      if(S.week[day][row.id])return; // keep existing
+      // on "rest" days, only fill simple/leftover - skip diner fancy
+      const rc=pick(row.cat,row.who);
+      if(rc)S.week[day][row.id]=rc;
+    });
+  });
+  set({wizOpen:false,wizStep:1});
+  toast("Week ingevuld! 🎉");
+}
+
+// ===================== EXPORT =====================
+async function exportImg(type){
+  const el=document.getElementById("export-target");
+  if(!el){toast("Ga naar de planner");return;}
+  toast("Bezig met exporteren...");
+  try{
+    const canvas=await html2canvas(el,{backgroundColor:"#F3EAD8",scale:2,useCORS:true});
+    if(type==="pdf"){
+      const {jsPDF}=window.jspdf;
+      const pdf=new jsPDF({orientation:"portrait",unit:"mm",format:"a4"});
+      const w=pdf.internal.pageSize.getWidth()-20;
+      const h=(canvas.height/canvas.width)*w;
+      pdf.addImage(canvas.toDataURL("image/png"),"PNG",10,10,w,h);
+      pdf.save("weekmenu.pdf");
+    }else{
+      const a=document.createElement("a");
+      a.href=canvas.toDataURL("image/jpeg",0.92);
+      a.download="weekmenu.jpg";a.click();
+    }
+  }catch(e){toast("Export mislukt");}
+}
+
+// ===================== IG IMPORT =====================
+async function doImport(){
+  const cap=document.getElementById("ig-cap").value.trim();
+  const url=document.getElementById("ig-url").value.trim();
+  if(cap.length<20){toast("Plak eerst een caption");return;}
+  set({igSt:"loading",igErr:"",igPrev:null,igCap:cap,igUrl:url});
+  try{
+    const msg="Extraheer het recept uit deze Instagram caption. Geef ALLEEN geldige JSON, geen markdown. "+
+      "Formaat: {name, category, time, servings, ingredients:[{n,a}], steps:[]}. "+
+      "category is: ontbijt, lunch, diner of tussendoortje. servings is een getal. "+
+      "Geen recept gevonden: {error:true}. Caption: "+cap;
+    const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1500,messages:[{role:"user",content:msg}]})});
+    if(!res.ok)throw new Error("API fout "+res.status);
+    const data=await res.json();
+    const block=(data.content||[]).find(b=>b.type==="text");
+    const txt=block?block.text:"";
+    const fi=txt.indexOf("{"),li=txt.lastIndexOf("}");
+    if(fi<0||li<=fi)throw new Error("Geen recept gevonden");
+    const p=JSON.parse(txt.slice(fi,li+1));
+    if(p.error)throw new Error("Geen recept in deze tekst gevonden");
+    set({igSt:"ok",igPrev:{id:Date.now(),ebook:0,custom:true,voor:"beiden",name:p.name||"",category:p.category||"ontbijt",time:p.time||"?",servings:p.servings||2,ingredients:p.ingredients||[],steps:p.steps||[],link:url||null}});
+  }catch(e){set({igSt:"err",igErr:e.message||"Mislukt"});}
+}
+function saveIgRecipe(){
+  const p=S.igPrev;if(!p)return;
+  const nl="\n";
+  const rc={...p,
+    name:document.getElementById("ig-name").value.trim()||p.name,
+    category:document.getElementById("ig-cat").value,
+    time:document.getElementById("ig-time").value||p.time,
+    servings:Number(document.getElementById("ig-srv").value)||p.servings,
+    voor:S.formVoor,
+    ingredients:document.getElementById("ig-ing").value.split(nl).filter(Boolean).map(l=>{const s=l.split(" - ");return{n:s[0].trim(),a:s.slice(1).join(" - ").trim()}}),
+    steps:document.getElementById("ig-steps").value.split(nl).filter(Boolean),
+  };
+  saveCustomRecipe(rc);
+  set({igSt:null,igPrev:null,igCap:"",igUrl:""});
+}
+
+// ===================== FORM =====================
+function saveForm(isEdit){
+  const name=document.getElementById("rc-name").value.trim();
+  if(!name){toast("Vul een naam in");return;}
+  const nl="\n";
+  const rc={
+    id:isEdit?S.editRc.id:Date.now(),ebook:0,custom:true,
+    name,category:document.getElementById("rc-cat").value,
+    time:document.getElementById("rc-time").value||"?",
+    servings:Number(document.getElementById("rc-srv").value)||2,
+    voor:S.formVoor,
+    ingredients:document.getElementById("rc-ing").value.split(nl).filter(Boolean).map(l=>{const s=l.split(" - ");return{n:s[0].trim(),a:s.slice(1).join(" - ").trim()}}),
+    steps:document.getElementById("rc-steps").value.split(nl).filter(Boolean),
+    link:document.getElementById("rc-link").value.trim()||null,
+  };
+  if(isEdit)updateCustomRecipe(rc);else saveCustomRecipe(rc);
+}
+function setFormVoor(v){S.formVoor=v;document.querySelectorAll(".tag-opt").forEach(b=>b.classList.remove("on"));const el=document.querySelector(".tag-opt."+v);if(el)el.classList.add("on");}
+
+
+// ===================== RENDER =====================
+function render(){
+  const app=document.getElementById("app");
+  app.innerHTML=`
+    <div class="app">
+      ${S.view==="planner"?renderPlanner():""}
+      ${S.view==="recepten"?renderRecepten():""}
+      ${S.view==="boodschappen"?renderBoodschappen():""}
+    </div>
+    ${renderBottomNav()}
+    ${S.picker?renderPicker():""}
+    ${S.detail?renderDetail():""}
+    ${S.addOpen?renderAddSheet():""}
+    ${S.wizOpen?renderWizard():""}
+  `;
+}
+
+// ---------- PLANNER ----------
+function renderPlanner(){
+  const st=weekStats();
+  const day=S.activeDay;
+  const cookMode=S.cfg.cookDays[day]||"cook";
+  const cookLabel=cookMode==="rest"?"restjes / makkelijk":cookMode==="none"?"vrij":"koken";
+  return `
+  <div id="export-target">
+  <div class="topbar">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+      <div>
+        <div class="kicker">Week ${WEEK.wk} · ${WEEK.range}</div>
+        <div class="h-title">Ons<br>weekmenu</div>
+      </div>
+      ${avatarStack(["shelley","dirk","maeve"],"big")}
+    </div>
+    <div class="prog-note">${st.empty===0?"Jullie week staat helemaal klaar. ✨":`Nog ${st.empty} ${st.empty===1?"maaltijd":"maaltijden"} te kiezen — dan staat jullie week klaar.`}</div>
+  </div>
+
+  <div class="weekstrip">
+    ${DAYS.map(d=>{
+      const n=dayFillCount(d);const mx=ROWS.length;
+      return `<button class="day-pill ${d===day?"active":""}" onclick="set({activeDay:'${d}'})">
+        <div class="dp-day">${d}</div>
+        <div class="dp-num">${WEEK.nums[d]}</div>
+        <div class="dp-fill">${Array.from({length:mx}).map((_,k)=>`<span class="dp-d ${k<n?"on":""}"></span>`).join("")}</div>
+      </button>`;
+    }).join("")}
+  </div>
+
+  <div class="scroll">
+    <div class="day-head">
+      <h2>${DAY_FULL[day].charAt(0).toUpperCase()+DAY_FULL[day].slice(1)}</h2>
+      <span class="cook-tag">${cookLabel}</span>
+    </div>
+    ${renderDaySlots(day)}
+    <button class="plan-cta" onclick="set({wizOpen:true,wizStep:1})">
+      🪄 Plan de hele week ${st.empty>0?`<span class="badge">${st.empty} leeg</span>`:""}
+    </button>
+  </div>
+  </div>`;
+}
+
+function renderDaySlots(day){
+  let html="";
+  html+=renderMealGroup(day,"Ontbijt","ontbijt",["ontbijt_dirk","ontbijt_shelley"]);
+  html+=renderSingleMeal(day,"tussen_ochtend");
+  html+=renderMealGroup(day,"Lunch","lunch",["lunch_dirk","lunch_shelley"]);
+  html+=renderSingleMeal(day,"tussen_middag");
+  html+=renderSingleMeal(day,"diner");
+  html+=renderNoteCard(day);
+  return html;
+}
+
+function renderMealGroup(day,label,cat,rowIds){
+  const dirkRc=S.week[day][rowIds[0]];
+  const shelleyRc=S.week[day][rowIds[1]];
+  // If both same -> show as samen
+  return `
+  <div class="meal-card" style="flex-direction:column;align-items:stretch;gap:0">
+    <div style="display:flex;gap:12px;align-items:center">
+      <div class="meal-thumb" style="background:${THUMB[cat]}">${THUMB_EMOJI[cat]}</div>
+      <div class="meal-info">
+        <div class="meal-label">${label} · apart</div>
+      </div>
+    </div>
+    <div class="split-row" onclick="pickSlot('${day}','${rowIds[0]}')" style="cursor:pointer">
+      <div class="split-badge" style="background:var(--dirk)">D</div>
+      <div class="split-name ${dirkRc?"":"empty"}">${dirkRc?esc(dirkRc.name):"+ kies voor Dirk"}</div>
+      ${dirkRc?`<span class="bi-amt">${dirkRc.time}</span>`:""}
+    </div>
+    <div class="split-row" onclick="pickSlot('${day}','${rowIds[1]}')" style="cursor:pointer">
+      <div class="split-badge" style="background:var(--shelley)">S</div>
+      <div class="split-name ${shelleyRc?"":"empty"}">${shelleyRc?esc(shelleyRc.name):"+ kies voor Shelley"}</div>
+      ${shelleyRc?`<span class="bi-amt">${shelleyRc.time}</span>`:""}
+    </div>
+  </div>`;
+}
+
+function renderSingleMeal(day,rowId){
+  const row=ROWS.find(r=>r.id===rowId);
+  const rc=S.week[day][rowId];
+  const isTussen=row.cat==="tussendoortje";
+  const subLabel=isTussen?(row.sub==="ochtend"?"ochtend · samen":"middag · samen"):"samen";
+  const whoList=rowId==="diner"?["shelley","dirk","maeve"]:["shelley","dirk"];
+  const emptyTxt=isTussen?"+ tussendoortje kiezen":"Nog niets gekozen";
+  return `
+  <div class="meal-card" onclick="pickSlot('${day}','${rowId}')" style="${isTussen?"padding:10px 14px;":""}">
+    <div class="meal-thumb" style="background:${THUMB[row.cat]};${isTussen?"width:38px;height:38px;font-size:18px;border-radius:10px":""}">${THUMB_EMOJI[row.cat]}</div>
+    <div class="meal-info">
+      <div class="meal-label">${row.label} · ${subLabel}</div>
+      <div class="meal-name ${rc?"":"empty"}" style="${isTussen&&!rc?"font-size:14px":""}">${rc?esc(rc.name):emptyTxt}</div>
+      ${rc?`<div class="meal-meta">${rc.time} · ${rc.servings||2}p</div>`:""}
+    </div>
+    <div class="meal-right">
+      ${rc?avatarStack(whoList,"mini"):`<div class="meal-add" style="${isTussen?"width:24px;height:24px;font-size:14px":""}">+</div>`}
+    </div>
+  </div>`;
+}
+
+function renderNoteCard(day){
+  const note=(S.notes[day]&&S.notes[day].algemeen)||"";
+  return `
+  <div class="meal-card" style="align-items:flex-start">
+    <div class="meal-thumb" style="background:#b0a898;font-size:20px">📝</div>
+    <div class="meal-info" style="width:100%">
+      <div class="meal-label">Opmerkingen · ${DAY_FULL[day]}</div>
+      <textarea placeholder="Bijv. Maeve eet apart, etentje buiten, late avond..."
+        style="width:100%;border:none;background:none;font-size:14px;color:var(--ink);resize:none;outline:none;margin-top:4px;font-family:inherit;line-height:1.4"
+        rows="2"
+        onchange="onDayNote('${day}',this.value)">${esc(note)}</textarea>
+    </div>
+  </div>`;
+}
+function onDayNote(day,val){S.notes[day]={...(S.notes[day]||{}),algemeen:val};lsSet(NK,S.notes);}
+
+// ---------- BOTTOM NAV ----------
+function renderBottomNav(){
+  const items=[
+    {id:"planner",label:"Planner",svg:`<path d="M3 9h18M3 9v10a1.5 1.5 0 0 0 1.5 1.5h15A1.5 1.5 0 0 0 21 19V9M3 9V6a1.5 1.5 0 0 1 1.5-1.5h15A1.5 1.5 0 0 1 21 6v3M8 3v4M16 3v4"/>`},
+    {id:"recepten",label:"Recepten",svg:`<path d="M3 4.5h6a3 3 0 0 1 3 3v12a2.5 2.5 0 0 0-2.5-2.5H3z"/><path d="M21 4.5h-6a3 3 0 0 0-3 3v12a2.5 2.5 0 0 1 2.5-2.5H21z"/>`},
+    {id:"boodschappen",label:"Boodschap",svg:`<path d="M5.5 8h13l-1 11.5a1.5 1.5 0 0 1-1.5 1.4H8a1.5 1.5 0 0 1-1.5-1.4z"/><path d="M8.5 8a3.5 3.5 0 0 1 7 0"/>`},
+  ];
+  return `<div class="bottomnav">
+    ${items.map(it=>`
+      <button class="nav-item ${S.view===it.id?"active":""}" onclick="set({view:'${it.id}'})">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${S.view===it.id?'var(--terra)':'var(--ink)'}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${it.svg}</svg>
+        <span class="label">${it.label}</span>
+      </button>`).join("")}
+  </div>`;
+}
+
+// ---------- RECEPTEN ----------
+function renderRecepten(){
+  const favCount=S.custom.length;
+  let list=ALL().filter(rc=>{
+    if(S.recFilter!=="all"&&S.recFilter!=="fav"&&rc.category!==S.recFilter)return false;
+    if(S.recFilter==="fav"&&rc.ebook!==0)return false;
+    if(S.recVoor!=="all"&&rc.voor!==S.recVoor&&rc.voor!=="beiden")return false;
+    if(S.search&&!rc.name.toLowerCase().includes(S.search.toLowerCase()))return false;
+    return true;
+  });
+  const feature=ALL().find(rc=>rc.category==="diner");
+  return `
+  <div class="topbar">
+    <div class="kicker">${ALL().length} recepten · ${favCount} eigen</div>
+    <div class="h-title">Recepten<br>kast</div>
+  </div>
+  <div class="scroll">
+    <input class="search-box" placeholder="Zoek op gerecht of ingrediënt…" value="${esc(S.search)}" oninput="S.search=this.value;clearTimeout(window._st);window._st=setTimeout(render,200)">
+    <div class="chips">
+      <button class="chip ${S.recFilter==="all"?"active":""}" onclick="set({recFilter:'all'})">Alle</button>
+      <button class="chip ${S.recFilter==="fav"?"active":""}" onclick="set({recFilter:'fav'})">♥ Eigen</button>
+      <button class="chip shelley ${S.recVoor==="shelley"?"active":""}" onclick="set({recVoor:S.recVoor==='shelley'?'all':'shelley'})">Shelley</button>
+      <button class="chip dirk ${S.recVoor==="dirk"?"active":""}" onclick="set({recVoor:S.recVoor==='dirk'?'all':'dirk'})">Dirk</button>
+      <button class="chip ${S.recFilter==="ontbijt"?"active":""}" onclick="set({recFilter:'ontbijt'})">Ontbijt</button>
+      <button class="chip ${S.recFilter==="lunch"?"active":""}" onclick="set({recFilter:'lunch'})">Lunch</button>
+      <button class="chip ${S.recFilter==="diner"?"active":""}" onclick="set({recFilter:'diner'})">Diner</button>
+      <button class="chip ${S.recFilter==="tussendoortje"?"active":""}" onclick="set({recFilter:'tussendoortje'})">Snack</button>
+    </div>
+    <button class="btn btn-ink" style="margin-bottom:16px" onclick="set({addOpen:true,editRc:null,addTab:'manual',formVoor:'beiden'})">+ Eigen recept of Instagram import</button>
+    <div style="font-family:'Space Mono',monospace;font-size:11px;color:var(--ink3);margin-bottom:10px">${list.length} recepten</div>
+    ${list.map(rc=>renderRecCard(rc)).join("")}
+  </div>`;
+}
+
+function renderRecCard(rc){
+  const voorBadge=rc.voor==="dirk"?`<span style="color:var(--dirk)">· voor Dirk</span>`:rc.voor==="shelley"?`<span style="color:var(--shelley)">· voor Shelley</span>`:"";
+  return `
+  <div class="rec-card" onclick="openDetail(${rc.id})">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+      <div style="flex:1">
+        <span class="rec-tag">${CL[rc.category]}</span>
+        <div class="rec-name">${esc(rc.name)}</div>
+        <div class="rec-meta">${rc.time} · ${rc.servings||2}p · ${EL[rc.ebook]} ${voorBadge}</div>
+      </div>
+      ${rc.ebook===0?`<div style="display:flex;gap:4px" onclick="event.stopPropagation()">
+        <button class="rec-mini-btn" onclick="openEdit(${rc.id})">✏️</button>
+        <button class="rec-mini-btn" style="color:var(--rust)" onclick="deleteCustomRecipe(${rc.id})">🗑</button>
+      </div>`:""}
+    </div>
+  </div>`;
+}
+function openEdit(id){const rc=S.custom.find(x=>x.id===id);if(rc)set({editRc:rc,addOpen:true,addTab:"manual",formVoor:rc.voor||"beiden"});}
+
+// ---------- BOODSCHAPPEN ----------
+function renderBoodschappen(){
+  const grouped=boodschappen();
+  const all=Object.values(grouped).flat();
+  const total=all.length;
+  const done=all.filter(it=>S.checked[it.name.toLowerCase()]).length;
+  const pct=total?Math.round(done/total*100):0;
+  return `
+  <div class="topbar">
+    <div class="kicker">Week ${WEEK.wk} · ${esc(S.cfg.store)}</div>
+    <div class="h-title">Boodschappen</div>
+  </div>
+  <div class="scroll">
+    ${total===0?`<div class="empty-state"><div class="empty-emoji">🛒</div><div class="empty-title">Nog leeg</div><div>Vul eerst je weekmenu in, dan verschijnt hier automatisch je boodschappenlijst.</div></div>`:`
+    <div class="bood-progress">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div style="font-family:'Bricolage Grotesque';font-weight:600;font-size:17px;color:var(--ink)">${done===total?"Klaar voor de week! 🎉":"Bijna klaar voor de week"}</div>
+        <div style="font-family:'Space Mono';font-size:13px;color:var(--ink3)">${done}/${total}</div>
+      </div>
+      <div class="bood-bar"><div class="bood-bar-fill" style="width:${pct}%"></div></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:18px">
+      <button class="btn btn-line" onclick="exportImg('pdf')">📄 PDF</button>
+      <button class="btn btn-line" onclick="exportImg('jpg')">🖼 JPG</button>
+      <button class="btn btn-line" onclick="set({checked:{}})">Reset</button>
+    </div>
+    ${Object.entries(BOOD_CATS).map(([cat,obj])=>{
+      const items=grouped[cat]||[];if(!items.length)return"";
+      const catDone=items.filter(it=>S.checked[it.name.toLowerCase()]).length;
+      return `<div class="bood-group">
+        <div class="bood-group-head">
+          <div class="bood-group-title">${obj.label}</div>
+          <div class="bood-group-count">${catDone}/${items.length}</div>
+        </div>
+        ${items.map(it=>{
+          const k=it.name.toLowerCase();const chk=!!S.checked[k];
+          return `<div class="bood-item ${chk?"checked":""}" onclick="toggleCheck('${esc(k).replace(/'/g,"")}')">
+            <div class="bi-check ${chk?"on":""}">${chk?"✓":""}</div>
+            <span class="bi-name">${esc(it.name)}</span>
+            ${it.amounts.length?`<span class="bi-amt">${esc(it.amounts.join(", "))}</span>`:""}
+          </div>`;
+        }).join("")}
+      </div>`;
+    }).join("")}
+    `}
+  </div>`;
+}
+
+
+// ---------- PICKER MODAL ----------
+function renderPicker(){
+  const {day,rowId}=S.picker;
+  const row=ROWS.find(r=>r.id===rowId);
+  const whoLabel=row.who==="dirk"?"voor Dirk":row.who==="shelley"?"voor Shelley":"samen";
+  const list=recipesForRow(rowId);
+  return `
+  <div class="overlay" onclick="set({picker:null})">
+    <div class="sheet" onclick="event.stopPropagation()">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title">${row.label} · ${DAY_FULL[day]}</div>
+      <div class="sheet-sub">${whoLabel} — kies een recept</div>
+      <input class="search-box" placeholder="Zoeken…" value="${esc(S.search)}" oninput="S.search=this.value;clearTimeout(window._pt);window._pt=setTimeout(render,200)">
+      ${list.length===0?`<div class="empty-state"><div class="empty-emoji">🔍</div><div>Geen recepten gevonden</div></div>`:`
+      <div class="picker-grid">
+        ${list.map(rc=>`
+          <div class="picker-card" onclick="assignRcById(${rc.id})">
+            <div class="pc-name">${esc(rc.name)}</div>
+            <div class="pc-meta">${rc.time} · ${rc.servings||2}p</div>
+          </div>`).join("")}
+      </div>`}
+    </div>
+  </div>`;
+}
+
+// ---------- DETAIL MODAL ----------
+function renderDetail(){
+  const {rc,day,rowId}=S.detail;
+  const tab=S.detailTab;
+  return `
+  <div class="overlay" onclick="set({detail:null})">
+    <div class="sheet" onclick="event.stopPropagation()">
+      <div class="sheet-handle"></div>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <span class="rec-tag">${CL[rc.category]}</span>
+          <div class="sheet-title">${esc(rc.name)}</div>
+          <div class="modal-meta">${rc.time} · ${rc.servings||2} personen · ${EL[rc.ebook]}</div>
+        </div>
+      </div>
+      <div class="detail-tabs">
+        <button class="detail-tab ${tab==="ing"?"active":""}" onclick="set({detailTab:'ing'})">Ingrediënten</button>
+        <button class="detail-tab ${tab==="ber"?"active":""}" onclick="set({detailTab:'ber'})">Bereiding</button>
+      </div>
+      ${tab==="ing"?`<div>
+        <div style="font-family:'Space Mono';font-size:10px;color:var(--ink3);margin-bottom:8px">GESCHAALD NAAR ${HH} PERSONEN</div>
+        ${(rc.ingredients||[]).map(g=>`<div class="ing-line"><span>${esc(g.n)}</span>${g.a?`<span style="color:var(--ink3)">${esc(scaleAmt(g.a,rc.servings))}</span>`:""}</div>`).join("")}
+      </div>`:""}
+      ${tab==="ber"?`<div>
+        ${(rc.steps||[]).map((s,i)=>`<div class="step-line"><div class="step-dot">${i+1}</div><div class="step-txt">${esc(s)}</div></div>`).join("")}
+        ${rc.link?`<a href="${esc(rc.link)}" target="_blank" style="display:inline-block;margin-top:8px;font-family:'Space Mono';font-size:12px;color:var(--terra)">🔗 Origineel recept</a>`:""}
+      </div>`:""}
+      ${day&&rowId?`<div class="btn-row">
+        <button class="btn btn-line" onclick="set({picker:{day:'${day}',rowId:'${rowId}'},detail:null,search:''})">↩ Wissel</button>
+        <button class="btn btn-terra" onclick="clearSlot('${day}','${rowId}')">Verwijder uit menu</button>
+      </div>`:`<button class="btn btn-line" style="margin-top:8px" onclick="set({detail:null})">Sluiten</button>`}
+    </div>
+  </div>`;
+}
+
+// ---------- ADD / IG SHEET ----------
+function renderAddSheet(){
+  const rc=S.editRc;const isEdit=!!rc;
+  const tab=isEdit?"manual":S.addTab;
+  const nl="\n";
+  const ingStr=rc?(rc.ingredients||[]).map(g=>g.n+(g.a?" - "+g.a:"")).join(nl):"";
+  const stepsStr=rc?(rc.steps||[]).join(nl):"";
+  const cat=rc?rc.category:"ontbijt";const srv=rc?rc.servings||2:2;
+  const p=S.igPrev;
+  return `
+  <div class="overlay" onclick="set({addOpen:false,editRc:null,igSt:null,igPrev:null})">
+    <div class="sheet" onclick="event.stopPropagation()">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title">${isEdit?"Recept bewerken":"Nieuw recept"}</div>
+      ${!isEdit?`<div class="tab-row">
+        <button class="tab-btn ${tab==="manual"?"active":""}" onclick="set({addTab:'manual',igSt:null,igPrev:null})">✍️ Handmatig</button>
+        <button class="tab-btn ${tab==="ig"?"active":""}" onclick="set({addTab:'ig'})">📸 Instagram</button>
+      </div>`:""}
+
+      ${tab==="ig"&&!isEdit?`
+        <div style="background:var(--card);border:1px solid var(--cardline);border-radius:14px;padding:14px;font-size:13px;color:var(--ink2);line-height:1.6;margin-bottom:14px">
+          <b style="color:var(--ink)">Zo werkt het:</b><br>
+          1. Open de Instagram post<br>2. Tik op ··· → <b>Kopieer bijschrift</b><br>3. Plak hieronder en klik Analyseer
+        </div>
+        <div class="field"><label>Caption</label><textarea id="ig-cap" rows="5" placeholder="Plak de Instagram caption...">${esc(S.igCap)}</textarea></div>
+        <div class="field"><label>Link (optioneel)</label><input id="ig-url" value="${esc(S.igUrl)}" placeholder="https://instagram.com/..."></div>
+        <button class="btn btn-ink" onclick="doImport()" ${S.igSt==="loading"?"disabled":""}>${S.igSt==="loading"?'<span class="spin">⏳</span> Analyseren...':"🔍 Analyseer recept"}</button>
+        ${S.igSt==="err"?`<div style="background:#CD6A4522;border-radius:13px;padding:12px;font-size:13px;color:var(--rust);margin-top:12px">${esc(S.igErr)}</div>`:""}
+        ${S.igSt==="ok"&&p?`
+        <div style="background:var(--card);border:1px solid var(--olive);border-radius:16px;padding:16px;margin-top:14px">
+          <div style="font-family:'Space Mono';font-size:11px;color:var(--olive);font-weight:700;margin-bottom:12px">✅ RECEPT GEVONDEN — CONTROLEER</div>
+          <div class="field"><label>Naam</label><input id="ig-name" value="${esc(p.name)}"></div>
+          <div class="row-fields">
+            <div class="field" style="flex:1"><label>Categorie</label><select id="ig-cat">${CATS.map(c=>`<option value="${c}" ${p.category===c?"selected":""}>${CL[c]}</option>`).join("")}</select></div>
+            <div class="field" style="flex:1"><label>Tijd</label><input id="ig-time" value="${esc(p.time)}"></div>
+            <div class="field" style="flex:0.6"><label>Pers.</label><select id="ig-srv">${[1,2,3,4,5,6].map(n=>`<option value="${n}" ${p.servings===n?"selected":""}>${n}</option>`).join("")}</select></div>
+          </div>
+          <div class="field"><label>Voor wie</label><div class="tag-pick">
+            <button class="tag-opt dirk ${S.formVoor==="dirk"?"on":""}" onclick="setFormVoor('dirk')">Dirk</button>
+            <button class="tag-opt shelley ${S.formVoor==="shelley"?"on":""}" onclick="setFormVoor('shelley')">Shelley</button>
+            <button class="tag-opt beiden ${S.formVoor==="beiden"?"on":""}" onclick="setFormVoor('beiden')">Beiden</button>
+          </div></div>
+          <div class="field"><label>Ingrediënten</label><textarea id="ig-ing" rows="4">${esc((p.ingredients||[]).map(g=>g.n+(g.a?" - "+g.a:"")).join(nl))}</textarea></div>
+          <div class="field"><label>Stappen</label><textarea id="ig-steps" rows="4">${esc((p.steps||[]).join(nl))}</textarea></div>
+          <button class="btn btn-terra" onclick="saveIgRecipe()">✓ Toevoegen</button>
+        </div>`:""}
+      `:""}
+
+      ${tab==="manual"||isEdit?`
+        <div class="field"><label>Naam</label><input id="rc-name" value="${rc?esc(rc.name):""}" placeholder="Naam recept"></div>
+        <div class="row-fields">
+          <div class="field" style="flex:1"><label>Categorie</label><select id="rc-cat">${CATS.map(c=>`<option value="${c}" ${cat===c?"selected":""}>${CL[c]}</option>`).join("")}</select></div>
+          <div class="field" style="flex:1"><label>Tijd</label><input id="rc-time" value="${rc?esc(rc.time):""}" placeholder="20 min"></div>
+          <div class="field" style="flex:0.6"><label>Pers.</label><select id="rc-srv">${[1,2,3,4,5,6].map(n=>`<option value="${n}" ${srv===n?"selected":""}>${n}</option>`).join("")}</select></div>
+        </div>
+        <div class="field"><label>Voor wie</label><div class="tag-pick">
+          <button class="tag-opt dirk ${S.formVoor==="dirk"?"on":""}" onclick="setFormVoor('dirk')">Dirk</button>
+          <button class="tag-opt shelley ${S.formVoor==="shelley"?"on":""}" onclick="setFormVoor('shelley')">Shelley</button>
+          <button class="tag-opt beiden ${S.formVoor==="beiden"?"on":""}" onclick="setFormVoor('beiden')">Beiden</button>
+        </div></div>
+        <div class="field"><label>Ingrediënten (1 per regel: naam - hoeveelheid)</label><textarea id="rc-ing" rows="5" placeholder="Kipfilet - 300g">${esc(ingStr)}</textarea></div>
+        <div class="field"><label>Stappen (1 per regel)</label><textarea id="rc-steps" rows="4">${esc(stepsStr)}</textarea></div>
+        <div class="field"><label>Link (optioneel)</label><input id="rc-link" value="${rc?esc(rc.link||""):""}" placeholder="https://..."></div>
+        <div class="btn-row">
+          <button class="btn btn-line" onclick="set({addOpen:false,editRc:null})">Annuleer</button>
+          <button class="btn btn-ink" onclick="saveForm(${isEdit})">${isEdit?"Bijwerken":"Opslaan"}</button>
+        </div>
+      `:""}
+    </div>
+  </div>`;
+}
+
+// ---------- WIZARD HELPERS ----------
+const SHELLEY_VERMIJD = ["rauwe vis","alcohol","lever","rauw vlees","rauwe eieren","schimmelkaas","cafeïne","veel suiker","processed food"];
+const SHELLEY_VOORKEUR = ["ijzerrijk","calciumrijk","eiwitrijk","foliumzuur","omega-3","licht verteerbaar","warm","koud","snel klaar"];
+const DAY_MODES = {cook:"🍳 Koken",quick:"⚡ Snel (<20 min)",rest:"🥡 Restjes",busy:"😤 Drukke dag",off:"🚫 Vrij"};
+
+function wizGenPreview(){
+  const {cookDays, shelley, mealprep} = S.wiz;
+  const prev = {};
+  const used = {}; // track used recipe ids for variety
+  const by = {};
+  ["ontbijt","lunch","diner","tussendoortje"].forEach(cat => {
+    by[cat] = shuf(ALL().filter(rc => rc.category === cat));
+  });
+  let idx = {ontbijt:0, lunch:0, diner:0, tussendoortje:0};
+
+  function pick(cat, who){
+    const pool = by[cat].filter(rc => {
+      if(who==="dirk" && rc.voor==="shelley") return false;
+      if(who==="shelley" && rc.voor==="dirk") return false;
+      // Shelley: filter on vermijd
+      if(who==="shelley" && shelley.vermijd.length){
+        const name = rc.name.toLowerCase();
+        const steps = (rc.steps||[]).join(" ").toLowerCase();
+        if(shelley.vermijd.some(v => name.includes(v.toLowerCase()) || steps.includes(v.toLowerCase()))) return false;
+      }
+      return true;
+    });
+    if(!pool.length) return null;
+    const rc = pool[idx[cat] % pool.length];
+    idx[cat]++;
+    return rc;
+  }
+
+  DAYS.forEach(day => {
+    prev[day] = {};
+    const mode = cookDays[day] || "cook";
+    if(mode === "off"){ ROWS.forEach(row => prev[day][row.id] = null); return; }
+
+    // Mealprep: if this day is in mealprep days, copy from first day
+    ROWS.forEach(row => {
+      // Keep existing if already planned
+      if(S.week[day] && S.week[day][row.id]){ prev[day][row.id] = S.week[day][row.id]; return; }
+      // Quick/busy: prefer fast recipes
+      if((mode==="quick"||mode==="busy") && row.cat==="diner"){
+        const fast = by["diner"].filter(rc => {
+          const mins = parseInt(rc.time); return mins && mins <= 20;
+        });
+        prev[day][row.id] = fast.length ? fast[idx["diner"]++ % fast.length] : pick("diner", row.who);
+        return;
+      }
+      // Rest day: skip diner (restjes)
+      if(mode==="rest" && row.id==="diner"){ prev[day][row.id] = null; return; }
+      prev[day][row.id] = pick(row.cat, row.who);
+    });
+  });
+
+  // Apply mealprep: use chosen recipe across selected days
+  if(mealprep.rc && mealprep.days.length > 0){
+    mealprep.days.forEach(d => {
+      if(prev[d]) prev[d][mealprep.rowId] = mealprep.rc;
+    });
+  }
+  // Baksel: save as sunday note (not in meal slots)
+  if(S.wiz.baksel && S.wiz.baksel!=="Nee"){
+    const bakseltxt = S.wiz.baksel+(S.wiz.bakselNote?" — "+S.wiz.bakselNote:"");
+    S.notes["zo"] = {...(S.notes["zo"]||{}), algemeen:"🎂 "+bakseltxt};
+    lsSet(NK, S.notes);
+  }
+  S.wiz.preview = prev;
+  set({wizStep:3});
+}
+
+function wizApplyPreview(){
+  // Apply preview to actual week
+  Object.assign(S.week, S.wiz.preview);
+  set({wizOpen:false, wizStep:1, week:{...S.week}});
+  lsSet(SK, S.week);
+  toast("Week ingepland! 🎉");
+}
+
+function wizSwapSlot(day, rowId){
+  set({wizSlotPicker:{day,rowId}, search:""});
+}
+function wizAssignSlot(rcId){
+  const rc = getRc(rcId);
+  if(!rc || !S.wizSlotPicker) return;
+  const {day,rowId} = S.wizSlotPicker;
+  S.wiz.preview[day][rowId] = rc;
+  set({wizSlotPicker:null});
+}
+function wizClearSlot(day,rowId){
+  S.wiz.preview[day][rowId] = null;
+  set({});
+}
+function wizStartIg(day,rowId){ set({wizSlotIg:{day,rowId},wizIgCap:"",wizIgSt:null,wizIgPrev:null}); }
+async function wizDoImport(){
+  const cap = document.getElementById("wiz-ig-cap").value.trim();
+  if(cap.length<20){toast("Plak eerst een caption");return;}
+  set({wizIgSt:"loading",wizIgErr:"",wizIgPrev:null,wizIgCap:cap});
+  try{
+    const msg="Extraheer het recept uit deze Instagram caption. Geef ALLEEN geldige JSON, geen markdown. "+
+      "Formaat: {name,category,time,servings,ingredients:[{n,a}],steps:[]}. "+
+      "category is: ontbijt, lunch, diner of tussendoortje. Geen recept: {error:true}. Caption: "+cap;
+    const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:1500,messages:[{role:"user",content:msg}]})});
+    if(!res.ok) throw new Error("API fout "+res.status);
+    const data=await res.json();
+    const txt=((data.content||[]).find(b=>b.type==="text")||{}).text||"";
+    const fi=txt.indexOf("{"),li=txt.lastIndexOf("}");
+    if(fi<0) throw new Error("Geen recept gevonden");
+    const p=JSON.parse(txt.slice(fi,li+1));
+    if(p.error) throw new Error("Geen recept in deze tekst");
+    const rc={id:Date.now(),ebook:0,custom:true,voor:"beiden",...p,servings:p.servings||2};
+    // Save to custom recipes
+    S.custom=[...S.custom,rc]; lsSet(CK,S.custom);
+    // Assign to slot
+    const {day,rowId}=S.wizSlotIg;
+    S.wiz.preview[day][rowId]=rc;
+    set({wizIgSt:null,wizSlotIg:null,wizIgPrev:null});
+    toast("Recept geïmporteerd en ingepland! ✨");
+  }catch(e){ set({wizIgSt:"err",wizIgErr:e.message}); }
+}
+
+function wizToggleTag(arr, val){
+  const list = S.wiz.shelley[arr];
+  const idx2 = list.indexOf(val);
+  if(idx2>=0) list.splice(idx2,1); else list.push(val);
+  set({});
+}
+function wizToggleMpDay(day){
+  const days = S.wiz.mealprep.days;
+  const idx2 = days.indexOf(day);
+  if(idx2>=0) days.splice(idx2,1); else days.push(day);
+  set({});
+}
+function wizToggleInHuis(k){
+  S.wiz.inHuis[k] = !S.wiz.inHuis[k];
+  set({});
+}
+
+// ---------- WIZARD ----------
+function renderWizard(){
+  const step = S.wizStep;
+  const st = weekStats();
+
+  // Sub-modal: slot picker inside wizard
+  if(S.wizSlotPicker){
+    const {day,rowId} = S.wizSlotPicker;
+    const row = ROWS.find(r=>r.id===rowId);
+    const list = recipesForRow(rowId);
+    return `
+    <div class="overlay" onclick="set({wizSlotPicker:null})">
+      <div class="sheet" onclick="event.stopPropagation()">
+        <div class="sheet-handle"></div>
+        <div class="kicker" style="color:var(--terra)">Wissel recept · ${DAY_FULL[day]}</div>
+        <div class="sheet-title">${row.label}</div>
+        <input class="search-box" placeholder="Zoeken…" value="${esc(S.search)}" oninput="S.search=this.value;clearTimeout(window._wt);window._wt=setTimeout(render,200)">
+        <div style="display:flex;gap:8px;margin-bottom:14px">
+          <button class="btn btn-line" style="flex:1" onclick="set({wizSlotPicker:null,wizSlotIg:{day:'${day}',rowId:'${rowId}'},wizIgCap:'',wizIgSt:null,wizIgPrev:null})">📸 Instagram importeren</button>
+          <button class="btn btn-line" style="flex:1" onclick="wizClearSlot('${day}','${rowId}');set({wizSlotPicker:null})">🚫 Leeg laten</button>
+        </div>
+        <div class="picker-grid">
+          ${list.map(rc=>`<div class="picker-card" onclick="wizAssignSlot(${rc.id})">
+            <div class="pc-name">${esc(rc.name)}</div>
+            <div class="pc-meta">${rc.time} · ${rc.servings||2}p</div>
+          </div>`).join("")}
+        </div>
+      </div>
+    </div>`;
+  }
+
+  // Sub-modal: IG import inside wizard
+  if(S.wizSlotIg){
+    return `
+    <div class="overlay" onclick="set({wizSlotIg:null})">
+      <div class="sheet" onclick="event.stopPropagation()">
+        <div class="sheet-handle"></div>
+        <div class="kicker" style="color:var(--terra)">Instagram import</div>
+        <div class="sheet-title">Recept ophalen</div>
+        <div style="background:var(--card);border:1px solid var(--cardline);border-radius:14px;padding:14px;font-size:13px;color:var(--ink2);line-height:1.6;margin-bottom:14px">
+          Open de post → tik op <b style="color:var(--ink)">···</b> → <b style="color:var(--ink)">Kopieer bijschrift</b> → plak hier
+        </div>
+        <div class="field"><label>Caption</label><textarea id="wiz-ig-cap" rows="5" placeholder="Plak de Instagram caption...">${esc(S.wizIgCap)}</textarea></div>
+        ${S.wizIgSt==="err"?`<div style="background:#CD6A4522;border-radius:13px;padding:12px;font-size:13px;color:var(--rust);margin-bottom:12px">${esc(S.wizIgErr)}</div>`:""}
+        <div class="btn-row">
+          <button class="btn btn-line" onclick="set({wizSlotIg:null,wizSlotPicker:S.wizSlotIg})">← Terug</button>
+          <button class="btn btn-terra" onclick="wizDoImport()" ${S.wizIgSt==="loading"?"disabled":""}>${S.wizIgSt==="loading"?"⏳ Analyseren...":"🔍 Analyseer"}</button>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  return `
+  <div class="overlay" onclick="set({wizOpen:false,wizStep:1,wizSlotPicker:null,wizSlotIg:null})">
+    <div class="sheet" onclick="event.stopPropagation()" style="max-height:92vh">
+      <div class="sheet-handle" onclick="set({wizOpen:false,wizStep:1})" style="cursor:pointer"></div>
+
+      <!-- Progress -->
+      <div style="display:flex;gap:6px;margin-bottom:16px">
+        ${[1,2,3,4].map(n=>`<div style="flex:1;height:3px;border-radius:2px;background:${n<=step?"var(--terra)":"var(--cardline)"}"></div>`).join("")}
+      </div>
+      <div class="kicker" style="color:var(--terra)">Zondagritueel · stap ${step}/4</div>
+
+      ${step===1?renderWizStep1():""}
+      ${step===2?renderWizStep2():""}
+      ${step===3?renderWizStep3():""}
+      ${step===4?renderWizStep4():""}
+    </div>
+  </div>`;
+}
+
+// STAP 1 — Weekkarakter
+function renderWizStep1(){
+  return `
+  <div class="sheet-title">Hoe ziet jullie week eruit?</div>
+  <div class="sheet-sub" style="margin-bottom:16px">Tap een dag om te wisselen tussen koken, snel, restjes, druk of vrij.</div>
+  ${DAYS.map(day=>{
+    const mode = S.wiz.cookDays[day]||"cook";
+    const colors = {cook:"var(--olive)",quick:"var(--honey)",rest:"var(--terra2)",busy:"var(--rust)",off:"var(--ink3)"};
+    const bg = colors[mode];
+    return `
+    <div onclick="wizCycleDayMode('${day}')"
+      style="display:flex;align-items:center;gap:12px;background:var(--card);border:1.5px solid var(--cardline);border-radius:14px;padding:12px 14px;margin-bottom:8px;cursor:pointer;border-left:4px solid ${bg}">
+      <div style="font-family:'Space Mono',monospace;font-size:13px;font-weight:700;color:var(--ink);min-width:24px">${day}</div>
+      <div style="font-family:'Space Mono',monospace;font-size:11px;color:var(--ink3);min-width:18px">${WEEK.nums[day]}</div>
+      <div style="flex:1;font-family:'Bricolage Grotesque',sans-serif;font-weight:600;font-size:15px;color:var(--ink)">${DAY_MODES[mode]}</div>
+      <div style="font-size:11px;color:var(--ink3)">wissel →</div>
+    </div>`;
+  }).join("")}
+  <div style="font-size:12px;color:var(--ink3);margin:8px 0 16px;line-height:1.5">
+    🍳 Koken · ⚡ Snel (&lt;20 min) · 🥡 Restjes · 😤 Drukke dag · 🚫 Vrij
+  </div>
+  <button class="btn btn-ink" onclick="set({wizStep:2})">Volgende →</button>`;
+}
+
+// STAP 2 — Shelley's wensen
+function renderWizStep2_shelley_UNUSED(){
+  const sh = S.wiz.shelley;
+  return `
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+    <div class="avatar" style="background:var(--shelley);width:28px;height:28px;font-size:12px">S</div>
+    <div class="sheet-title" style="margin:0">Shelley's wensen</div>
+  </div>
+  <div class="sheet-sub" style="margin-bottom:16px">Wat wil Shelley deze week vermijden of juist graag eten?</div>
+
+  <div style="margin-bottom:16px">
+    <div style="font-family:'Space Mono',monospace;font-size:11px;letter-spacing:1px;color:var(--ink3);margin-bottom:8px">VERMIJDEN DEZE WEEK</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px">
+      ${SHELLEY_VERMIJD.map(v=>{
+        const on = sh.vermijd.includes(v);
+        return `<button onclick="wizToggleTag('vermijd','${v}')"
+          style="padding:7px 13px;border-radius:20px;border:1.5px solid ${on?"var(--rust)":"var(--cardline)"};background:${on?"#CD6A4522":"var(--card)"};color:${on?"var(--rust)":"var(--ink2)"};font-size:13px;cursor:pointer">${v}</button>`;
+      }).join("")}
+    </div>
+  </div>
+
+  <div style="margin-bottom:16px">
+    <div style="font-family:'Space Mono',monospace;font-size:11px;letter-spacing:1px;color:var(--ink3);margin-bottom:8px">VOORKEUR DEZE WEEK</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px">
+      ${SHELLEY_VOORKEUR.map(v=>{
+        const on = sh.voorkeur.includes(v);
+        return `<button onclick="wizToggleTag('voorkeur','${v}')"
+          style="padding:7px 13px;border-radius:20px;border:1.5px solid ${on?"var(--olive)":"var(--cardline)"};background:${on?"#8C9E6E22":"var(--card)"};color:${on?"var(--olive)":"var(--ink2)"};font-size:13px;cursor:pointer">${v}</button>`;
+      }).join("")}
+    </div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn btn-line" onclick="set({wizStep:1})">← Terug</button>
+    <button class="btn btn-ink" onclick="set({wizStep:2})">Volgende →</button>
+  </div>`;
+}
+
+// STAP 2 (mealprep) — Dirk
+function renderWizStep2(){
+  const mp = S.wiz.mealprep;
+  const row = ROWS.find(r=>r.id===mp.rowId);
+  const mpRecipes = ALL().filter(rc=>rc.category===(row?row.cat:"lunch"));
+
+  // Sub-picker for mealprep recipe
+  if(S.wizMpPicker){
+    return `<div style="height:100%">
+      <div class="kicker" style="color:var(--dirk)">Mealprep recept kiezen</div>
+      <div class="sheet-title" style="margin-bottom:8px">${row?row.label:""}</div>
+      <input class="search-box" placeholder="Zoeken…" value="${esc(S.search)}"
+        oninput="S.search=this.value;clearTimeout(window._mt);window._mt=setTimeout(render,200)">
+      <div class="picker-grid" style="max-height:55vh">
+        ${mpRecipes.filter(rc=>!S.search||rc.name.toLowerCase().includes(S.search.toLowerCase())).map(rc=>`
+          <div class="picker-card" onclick="S.wiz.mealprep.rc=getRc(${rc.id});set({wizMpPicker:false,search:''})">
+            <div class="pc-name">${esc(rc.name)}</div>
+            <div class="pc-meta">${rc.time} · ${rc.servings||2}p</div>
+          </div>`).join("")}
+      </div>
+      <button class="btn btn-line" style="margin-top:12px" onclick="set({wizMpPicker:false,search:''})">← Terug</button>
+    </div>`;
+  }
+
+  return `
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+    <div class="avatar" style="background:var(--dirk);width:28px;height:28px;font-size:12px">D</div>
+    <div class="sheet-title" style="margin:0">Dirk's mealprep</div>
+  </div>
+  <div class="sheet-sub" style="margin-bottom:16px">Wat kook je zondag in bulk voor meerdere dagen?</div>
+
+  <div style="margin-bottom:14px">
+    <div style="font-family:'Space Mono',monospace;font-size:11px;letter-spacing:1px;color:var(--ink3);margin-bottom:8px">WELKE MAALTIJD?</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      ${[
+        {id:"lunch_dirk",label:"🧔 Lunch Dirk"},
+        {id:"ontbijt_dirk",label:"🧔 Ontbijt Dirk"},
+        {id:"diner",label:"🍽 Diner"},
+      ].map(r=>{
+        const on=mp.rowId===r.id;
+        return `<button onclick="S.wiz.mealprep.rowId='${r.id}';S.wiz.mealprep.rc=null;set({})"
+          style="padding:9px 14px;border-radius:13px;border:1.5px solid ${on?"var(--dirk)":"var(--cardline)"};background:${on?"#8C9E6E22":"var(--card)"};color:${on?"var(--dirk)":"var(--ink2)"};font-family:'Space Mono',monospace;font-size:12px;font-weight:700;cursor:pointer">${r.label}</button>`;
+      }).join("")}
+    </div>
+  </div>
+
+  <div style="margin-bottom:14px">
+    <div style="font-family:'Space Mono',monospace;font-size:11px;letter-spacing:1px;color:var(--ink3);margin-bottom:8px">WELK RECEPT?</div>
+    <div onclick="set({wizMpPicker:true,search:''})"
+      style="display:flex;align-items:center;gap:12px;padding:13px 14px;border-radius:14px;border:1.5px solid ${mp.rc?"var(--dirk)":"var(--cardline)"};background:${mp.rc?"#8C9E6E22":"var(--card)"};cursor:pointer">
+      <div style="flex:1">
+        ${mp.rc
+          ? `<div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:600;font-size:15px;color:var(--ink)">${esc(mp.rc.name)}</div>
+             <div style="font-family:'Space Mono',monospace;font-size:11px;color:var(--ink3);margin-top:2px">${mp.rc.time} · ${mp.rc.servings||2}p</div>`
+          : `<div style="font-size:14px;color:var(--ink3);font-style:italic">Tik om een recept te kiezen…</div>`
+        }
+      </div>
+      <div style="font-size:13px;color:var(--ink3)">→</div>
+    </div>
+  </div>
+
+  <div style="margin-bottom:16px">
+    <div style="font-family:'Space Mono',monospace;font-size:11px;letter-spacing:1px;color:var(--ink3);margin-bottom:8px">VOOR WELKE DAGEN?</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px">
+      ${DAYS.map(d=>{
+        const on=mp.days.includes(d);
+        return `<button onclick="wizToggleMpDay('${d}')"
+          style="padding:9px 14px;border-radius:13px;border:1.5px solid ${on?"var(--dirk)":"var(--cardline)"};background:${on?"#8C9E6E22":"var(--card)"};color:${on?"var(--dirk)":"var(--ink2)"};font-family:'Space Mono',monospace;font-size:12px;font-weight:700;cursor:pointer">${d} ${WEEK.nums[d]}</button>`;
+      }).join("")}
+    </div>
+    ${mp.days.length>0&&mp.rc?`<div style="font-size:12px;color:var(--olive);margin-top:8px">✓ ${esc(mp.rc.name)} ingepland op ${mp.days.join(", ")}</div>`:""}
+  </div>
+
+  <div style="background:var(--card);border:1px solid var(--cardline);border-radius:16px;padding:14px;margin-bottom:14px">
+    <div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:600;font-size:16px;color:var(--ink);margin-bottom:6px">🎂 Zondag baksel</div>
+    <div style="font-size:13px;color:var(--ink2);margin-bottom:10px">Bak je iets voor de week? Verschijnt als notitie op zondag.</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px">
+      ${["Nee","Cake","Muffins","Koekjes","Bananenbread","Havermout balletjes","Energierepen","Granola"].map(opt=>{
+        const on=S.wiz.baksel===opt;
+        return `<button onclick="S.wiz.baksel='${opt}';set({})"
+          style="padding:8px 14px;border-radius:20px;border:1.5px solid ${on?"var(--amber)":"var(--cardline)"};background:${on?"#D9A44122":"var(--card)"};color:${on?"var(--amber)":"var(--ink2)"};font-size:13px;cursor:pointer">${opt}</button>`;
+      }).join("")}
+    ${S.wiz.baksel&&S.wiz.baksel!=="Nee"?`
+    <textarea
+      placeholder="Bijv. chocolade muffins met walnoten..."
+      oninput="S.wiz.bakselNote=this.value"
+      style="width:100%;margin-top:10px;background:var(--paper);border:1.5px solid var(--cardline);border-radius:12px;padding:10px 12px;font-size:13px;color:var(--ink);font-family:inherit;resize:none;outline:none;line-height:1.5"
+      rows="2">${esc(S.wiz.bakselNote||"")}</textarea>`:""}
+  </div>
+
+  <div class="btn-row">
+    <button class="btn btn-line" onclick="set({wizStep:1})">← Terug</button>
+    <button class="btn btn-terra" onclick="wizGenPreview()">🪄 Genereer weekmenu →</button>
+  </div>`;
+}
+
+function renderWizStep3(){
+  const prev = S.wiz.preview;
+  if(!prev||!Object.keys(prev).length){
+    return `<div class="empty-state"><div class="empty-emoji">⏳</div><div>Even genereren...</div></div>`;
+  }
+  return `
+  <div class="sheet-title">Jullie weekmenu</div>
+  <div class="sheet-sub" style="margin-bottom:14px">Tik op een recept om te wisselen of een IG recept te importeren.</div>
+  <div style="max-height:52vh;overflow-y:auto;padding-right:4px">
+  ${DAYS.map(day=>{
+    const mode = S.wiz.cookDays[day]||"cook";
+    const modeColors = {cook:"var(--olive)",quick:"var(--honey)",rest:"var(--terra2)",busy:"var(--rust)",off:"var(--ink3)"};
+    return `
+    <div style="margin-bottom:14px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <div style="font-family:'Space Mono',monospace;font-size:11px;font-weight:700;color:var(--ink)">${DAY_FULL[day].charAt(0).toUpperCase()+DAY_FULL[day].slice(1)}</div>
+        <div style="font-family:'Space Mono',monospace;font-size:10px;color:${modeColors[mode]}">${DAY_MODES[mode]}</div>
+      </div>
+      ${ROWS.map(row=>{
+        const rc = prev[day]&&prev[day][row.id];
+        const personColor = row.who==="dirk"?"var(--dirk)":row.who==="shelley"?"var(--shelley)":"var(--olive2)";
+        return `
+        <div onclick="wizSwapSlot('${day}','${row.id}')"
+          style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:12px;border:1px solid var(--cardline);background:var(--card);margin-bottom:5px;cursor:pointer;border-left:3px solid ${personColor}">
+          <div style="font-size:9px;font-family:'Space Mono',monospace;color:var(--ink3);min-width:38px">${row.label.split(" ")[0]}</div>
+          <div style="flex:1;font-size:13px;font-weight:${rc?600:400};color:${rc?"var(--ink)":"var(--ink3)"};font-style:${rc?"normal":"italic"}">
+            ${rc?esc(rc.name):"leeg laten"}
+          </div>
+          ${rc?`<div style="font-family:'Space Mono',monospace;font-size:10px;color:var(--ink3)">${rc.time}</div>`:""}
+          <div style="font-size:11px;color:var(--ink3)">⇄</div>
+        </div>`;
+      }).join("")}
+    </div>`;
+  }).join("")}
+  </div>
+  <div class="btn-row" style="margin-top:12px">
+    <button class="btn btn-line" onclick="set({wizStep:3})">← Terug</button>
+    <button class="btn btn-ink" onclick="set({wizStep:4})">Akkoord →</button>
+  </div>`;
+}
+
+// STAP 5 — Wat heb je al in huis?
+function renderWizStep4(){
+  // Collect all ingredients from preview
+  const allIng = {};
+  Object.values(S.wiz.preview).forEach(day=>{
+    ROWS.forEach(row=>{
+      const rc = day&&day[row.id];
+      if(!rc)return;
+      (rc.ingredients||[]).forEach(g=>{
+        const k = (g.n||"").toLowerCase();
+        if(!allIng[k]) allIng[k] = {name:g.n, amounts:[]};
+        const sc = scaleAmt(g.a,rc.servings);
+        if(sc&&!allIng[k].amounts.includes(sc)) allIng[k].amounts.push(sc);
+      });
+    });
+  });
+  const items = Object.entries(allIng);
+  const inHuis = items.filter(([k])=>S.wiz.inHuis[k]).length;
+
+  return `
+  <div class="sheet-title">Wat heb je al in huis?</div>
+  <div class="sheet-sub" style="margin-bottom:14px">Vink aan wat je al hebt — die halen we van de boodschappenlijst.</div>
+  <div style="max-height:48vh;overflow-y:auto;background:var(--card);border-radius:16px;border:1px solid var(--cardline);margin-bottom:14px">
+    ${items.map(([k,it])=>{
+      const chk = !!S.wiz.inHuis[k];
+      return `
+      <div onclick="wizToggleInHuis('${esc(k).replace(/'/g,"")}')"
+        style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-bottom:1px solid var(--cardline);cursor:pointer;${chk?"opacity:0.5":""}">
+        <div style="width:22px;height:22px;border-radius:7px;border:2px solid ${chk?"var(--olive)":"var(--cardline)"};background:${chk?"var(--olive)":"transparent"};display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700;flex:0 0 auto">${chk?"✓":""}</div>
+        <span style="flex:1;font-size:14px;color:var(--ink)">${esc(it.name)}</span>
+        ${it.amounts.length?`<span style="font-family:'Space Mono',monospace;font-size:11px;color:var(--ink3)">${esc(it.amounts.join(", "))}</span>`:""}
+      </div>`;
+    }).join("")}
+  </div>
+  ${inHuis>0?`<div style="font-size:13px;color:var(--olive);margin-bottom:10px;font-weight:600">✓ ${inHuis} ingrediënten al in huis — worden niet besteld</div>`:""}
+  <div class="btn-row">
+    <button class="btn btn-line" onclick="set({wizStep:3})">← Terug</button>
+    <button class="btn btn-terra" onclick="wizFinish()">✓ Week inplannen!</button>
+  </div>`;
+}
+
+// ===================== EXTRA WIZARD HELPERS =====================
+const DAY_MODE_CYCLE = {cook:"quick",quick:"rest",rest:"busy",busy:"off",off:"cook"};
+function wizCycleDayMode(day){
+  const cur = S.wiz.cookDays[day]||"cook";
+  S.wiz.cookDays[day] = DAY_MODE_CYCLE[cur];
+  set({});
+}
+
+function wizFinish(){
+  // Apply preview to week
+  DAYS.forEach(day=>{
+    if(!S.wiz.preview[day]) return;
+    ROWS.forEach(row=>{
+      S.week[day][row.id] = S.wiz.preview[day][row.id];
+    });
+  });
+  // Apply in-huis to checked (pre-check items they already have)
+  Object.keys(S.wiz.inHuis).forEach(k=>{
+    if(S.wiz.inHuis[k]) S.checked[k] = true;
+  });
+  lsSet(SK, S.week);
+  lsSet(CHK, S.checked);
+  set({wizOpen:false, wizStep:1});
+  toast("Week ingepland! 🎉");
+}
+
+// ===================== GLOBALS =====================
+
+function getRc(id){return ALL().find(r=>r.id===id);}
+function openDetail(id){const rc=getRc(id);if(rc)set({detail:{rc,day:null,rowId:null},detailTab:'ing'});}
+function assignRcById(id){const rc=getRc(id);if(rc)assignRecipe(rc);}
+window.getRc=getRc; window.openDetail=openDetail; window.assignRcById=assignRcById;
+window.set=set;
+window.wizCycleDayMode=wizCycleDayMode; window.wizGenPreview=wizGenPreview;
+window.wizFinish=wizFinish; window.wizApplyPreview=wizApplyPreview;
+window.wizSwapSlot=wizSwapSlot; window.wizAssignSlot=wizAssignSlot;
+window.wizClearSlot=wizClearSlot; window.wizStartIg=wizStartIg;
+window.wizDoImport=wizDoImport; window.wizToggleTag=wizToggleTag;
+window.wizToggleMpDay=wizToggleMpDay; window.wizToggleInHuis=wizToggleInHuis;
+window.onDayNote=onDayNote; window.S=S; window.render=render;
+window.pickSlot=pickSlot; window.assignRecipe=assignRecipe; window.clearSlot=clearSlot;
+window.onDayNote=onDayNote;
+window.toggleCheck=toggleCheck; window.toggleCookDay=toggleCookDay; window.runAutofill=runAutofill;
+window.doImport=doImport; window.saveIgRecipe=saveIgRecipe; window.saveForm=saveForm; window.setFormVoor=setFormVoor;
+window.deleteCustomRecipe=deleteCustomRecipe; window.openEdit=openEdit;
+window.exportImg=exportImg;
+
+// ===================== INIT =====================
+render();
+</script>
+</body>
+</html>
