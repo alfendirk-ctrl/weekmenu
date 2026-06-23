@@ -1042,7 +1042,7 @@ function renderAddSheet(){
 // ---------- WIZARD HELPERS ----------
 const SHELLEY_VERMIJD = ["rauwe vis","alcohol","lever","rauw vlees","rauwe eieren","schimmelkaas","cafeïne","veel suiker","processed food"];
 const SHELLEY_VOORKEUR = ["ijzerrijk","calciumrijk","eiwitrijk","foliumzuur","omega-3","licht verteerbaar","warm","koud","snel klaar"];
-const DAY_MODES = {cook:"🍳 Koken",quick:"⚡ Snel (<20 min)",rest:"🥡 Restjes",busy:"😤 Drukke dag",off:"🚫 Vrij"};
+const DAY_MODES = {cook:"🍳 Koken",quick:"⚡ Snel (<20 min)",rest:"🥡 Restjes",off:"🚫 Vrij"};
 
 function wizGenPreview(){
   const {cookDays, shelley, mealprep} = S.wiz;
@@ -1081,8 +1081,8 @@ function wizGenPreview(){
     ROWS.forEach(row => {
       // Keep existing if already planned
       if(S.week[day] && S.week[day][row.id]){ prev[day][row.id] = S.week[day][row.id]; return; }
-      // Quick/busy: prefer fast recipes
-      if((mode==="quick"||mode==="busy") && row.cat==="diner"){
+      // Quick: prefer fast recipes
+      if(mode==="quick" && row.cat==="diner"){
         const fast = by["diner"].filter(rc => {
           const mins = parseInt(rc.time); return mins && mins <= 20;
         });
@@ -1253,10 +1253,10 @@ function renderWizard(){
 function renderWizStep1(){
   return `
   <div class="sheet-title">Hoe ziet jullie week eruit?</div>
-  <div class="sheet-sub" style="margin-bottom:16px">Tap een dag om te wisselen tussen koken, snel, restjes, druk of vrij.</div>
+  <div class="sheet-sub" style="margin-bottom:16px">Tap een dag om te wisselen tussen koken, snel, restjes of vrij.</div>
   ${DAYS.map(day=>{
     const mode = S.wiz.cookDays[day]||"cook";
-    const colors = {cook:"var(--olive)",quick:"var(--honey)",rest:"var(--terra2)",busy:"var(--rust)",off:"var(--ink3)"};
+    const colors = {cook:"var(--olive)",quick:"var(--honey)",rest:"var(--terra2)",off:"var(--ink3)"};
     const bg = colors[mode];
     return `
     <div onclick="wizCycleDayMode('${day}')"
@@ -1268,7 +1268,7 @@ function renderWizStep1(){
     </div>`;
   }).join("")}
   <div style="font-size:12px;color:var(--ink3);margin:8px 0 16px;line-height:1.5">
-    🍳 Koken · ⚡ Snel (&lt;20 min) · 🥡 Restjes · 😤 Drukke dag · 🚫 Vrij
+    🍳 Koken · ⚡ Snel (&lt;20 min) · 🥡 Restjes · 🚫 Vrij
   </div>
   <button class="btn btn-ink" onclick="set({wizStep:2})">Volgende →</button>`;
 }
@@ -1418,7 +1418,7 @@ function renderWizStep3(){
   <div style="max-height:52vh;overflow-y:auto;padding-right:4px">
   ${DAYS.map(day=>{
     const mode = S.wiz.cookDays[day]||"cook";
-    const modeColors = {cook:"var(--olive)",quick:"var(--honey)",rest:"var(--terra2)",busy:"var(--rust)",off:"var(--ink3)"};
+    const modeColors = {cook:"var(--olive)",quick:"var(--honey)",rest:"var(--terra2)",off:"var(--ink3)"};
     return `
     <div style="margin-bottom:14px">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
@@ -1490,7 +1490,7 @@ function renderWizStep4(){
 }
 
 // ===================== EXTRA WIZARD HELPERS =====================
-const DAY_MODE_CYCLE = {cook:"quick",quick:"rest",rest:"busy",busy:"off",off:"cook"};
+const DAY_MODE_CYCLE = {cook:"quick",quick:"rest",rest:"off",off:"cook"};
 function wizCycleDayMode(day){
   const cur = S.wiz.cookDays[day]||"cook";
   S.wiz.cookDays[day] = DAY_MODE_CYCLE[cur];
