@@ -731,7 +731,7 @@ function renderDaySlots(day){
   let html="";
   html+=renderMealGroup(day,"Ontbijt","ontbijt",["ontbijt_dirk","ontbijt_shelley"]);
   html+=renderSingleMeal(day,"tussen_ochtend");
-  html+=renderMealGroup(day,"Lunch","lunch",["lunch_dirk","lunch_shelley"]);
+  html+=renderLunchCard(day);
   html+=renderSingleMeal(day,"tussen_middag");
   html+=renderSingleMeal(day,"diner");
   html+=renderNoteCard(day);
@@ -760,6 +760,34 @@ function renderMealGroup(day,label,cat,rowIds){
       <div class="split-name ${shelleyRc?"":"empty"}">${shelleyRc?esc(shelleyRc.name):"+ kies voor Shelley"}</div>
       ${shelleyRc?`<span class="bi-amt">${shelleyRc.time}</span>`:""}
     </div>
+  </div>`;
+}
+
+function renderLunchCard(day){
+  const shelleyRc=S.week[day]["lunch_shelley"];
+  const dirkRc=S.week[day]["lunch_dirk"];
+  const samen=dirkRc&&shelleyRc&&dirkRc.id===shelleyRc.id;
+  const mainRc=shelleyRc||dirkRc;
+  const showMealprep=dirkRc&&(!shelleyRc||dirkRc.id!==shelleyRc.id);
+  return `
+  <div class="meal-card" onclick="pickSlot('${day}','lunch_shelley')" style="${showMealprep?"flex-direction:column;align-items:stretch;gap:0":""}">
+    <div style="display:flex;gap:12px;align-items:center">
+      <div class="meal-thumb" style="background:${THUMB.lunch}">${THUMB_EMOJI.lunch}</div>
+      <div class="meal-info">
+        <div class="meal-label">Lunch${samen?" · samen":""}</div>
+        <div class="meal-name ${mainRc?"":"empty"}">${mainRc?esc(mainRc.name):"Nog niets gekozen"}</div>
+        ${mainRc?`<div class="meal-meta">${mainRc.time} · ${mainRc.servings||2}p</div>`:""}
+      </div>
+      <div class="meal-right">
+        ${mainRc?avatarStack(["shelley"],"mini"):`<div class="meal-add">+</div>`}
+      </div>
+    </div>
+    ${showMealprep?`
+    <div class="split-row" onclick="event.stopPropagation();pickSlot('${day}','lunch_dirk')" style="cursor:pointer;margin-top:6px">
+      <div class="split-badge" style="background:var(--dirk)">D</div>
+      <div class="split-name" style="font-size:12px;color:var(--ink2)">Mealprept: ${esc(dirkRc.name)}</div>
+      <span class="bi-amt">${dirkRc.time}</span>
+    </div>`:""}
   </div>`;
 }
 
@@ -1458,9 +1486,9 @@ function renderWizStep3(){
     </div>`;
   }).join("")}
   </div>
-  <div style="display:flex;gap:8px;margin-top:12px">
+  <div style="display:flex;gap:8px;margin-top:12px;align-items:stretch">
     <button class="btn btn-line" style="flex:1" onclick="set({wizStep:2})">← Terug</button>
-    <button class="btn btn-line" style="flex:0 0 auto;padding:14px 12px;font-size:13px" onclick="wizGenPreview()" title="Opnieuw genereren">↺</button>
+    <button class="btn btn-line" style="width:auto;padding:14px 16px;font-size:18px;flex:0 0 auto" onclick="wizGenPreview()" title="Opnieuw genereren">↺</button>
     <button class="btn btn-ink" style="flex:1" onclick="set({wizStep:4})">Akkoord →</button>
   </div>`;
 }
