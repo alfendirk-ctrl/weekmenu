@@ -1134,10 +1134,17 @@ function wizGenPreview(){
     });
   });
 
-  // Apply mealprep: use chosen recipe across selected days
-  if(mealprep.rc && mealprep.days.length > 0){
+  // Sync lunch_dirk with lunch_shelley for all non-mealprep days
+  DAYS.forEach(day => {
+    if(!prev[day]) return;
+    const isMealprepDay = S.wiz.doMealprep && mealprep.rc && mealprep.days.includes(day);
+    if(!isMealprepDay) prev[day]["lunch_dirk"] = prev[day]["lunch_shelley"];
+  });
+
+  // Apply mealprep: overwrite lunch_dirk on selected days
+  if(S.wiz.doMealprep && mealprep.rc && mealprep.days.length > 0){
     mealprep.days.forEach(d => {
-      if(prev[d]) prev[d][mealprep.rowId] = mealprep.rc;
+      if(prev[d]) prev[d]["lunch_dirk"] = mealprep.rc;
     });
   }
   // Baksel: save as sunday note (not in meal slots)
