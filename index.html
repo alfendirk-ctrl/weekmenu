@@ -1483,9 +1483,11 @@ function renderWizStep3(){
         <div style="font-family:'Space Mono',monospace;font-size:11px;font-weight:700;color:var(--ink)">${DAY_FULL[day].charAt(0).toUpperCase()+DAY_FULL[day].slice(1)}</div>
         <div style="font-family:'Space Mono',monospace;font-size:10px;color:${modeColors[mode]}">${DAY_MODES[mode]}</div>
       </div>
-      ${ROWS.map(row=>{
+      ${ROWS.filter(row=>row.id!=="lunch_dirk").map(row=>{
         const rc = prev[day]&&prev[day][row.id];
         const personColor = row.who==="dirk"?"var(--dirk)":row.who==="shelley"?"var(--shelley)":"var(--olive2)";
+        const dirkLunchRc = row.id==="lunch_shelley"?prev[day]&&prev[day]["lunch_dirk"]:null;
+        const showMealprep = dirkLunchRc&&(!rc||dirkLunchRc.id!==rc.id);
         return `
         <div onclick="wizSwapSlot('${day}','${row.id}')"
           style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:12px;border:1px solid var(--cardline);background:var(--card);margin-bottom:5px;cursor:pointer;border-left:3px solid ${personColor}">
@@ -1495,7 +1497,15 @@ function renderWizStep3(){
           </div>
           ${rc?`<div style="font-family:'Space Mono',monospace;font-size:10px;color:var(--ink3)">${rc.time}</div>`:""}
           <div style="font-size:11px;color:var(--ink3)">⇄</div>
-        </div>`;
+        </div>
+        ${showMealprep?`
+        <div onclick="wizSwapSlot('${day}','lunch_dirk')"
+          style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:12px;border:1px solid var(--cardline);background:var(--card);margin-bottom:5px;cursor:pointer;border-left:3px solid var(--dirk)">
+          <div style="font-size:9px;font-family:'Space Mono',monospace;color:var(--ink3);min-width:38px">Meal&shy;prep</div>
+          <div style="flex:1;font-size:13px;font-weight:600;color:var(--ink)">${esc(dirkLunchRc.name)}</div>
+          <div style="font-family:'Space Mono',monospace;font-size:10px;color:var(--ink3)">${dirkLunchRc.time}</div>
+          <div style="font-size:11px;color:var(--ink3)">⇄</div>
+        </div>`:""}`;
       }).join("")}
     </div>`;
   }).join("")}
