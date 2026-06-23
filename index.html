@@ -732,6 +732,7 @@ function renderDaySlots(day){
   html+=renderMealGroup(day,"Ontbijt","ontbijt",["ontbijt_dirk","ontbijt_shelley"]);
   html+=renderSingleMeal(day,"tussen_ochtend");
   html+=renderLunchCard(day);
+  html+=renderMealprepCard(day);
   html+=renderSingleMeal(day,"tussen_middag");
   html+=renderSingleMeal(day,"diner");
   html+=renderNoteCard(day);
@@ -766,28 +767,34 @@ function renderMealGroup(day,label,cat,rowIds){
 function renderLunchCard(day){
   const shelleyRc=S.week[day]["lunch_shelley"];
   const dirkRc=S.week[day]["lunch_dirk"];
-  const samen=dirkRc&&shelleyRc&&dirkRc.id===shelleyRc.id;
   const mainRc=shelleyRc||dirkRc;
-  const showMealprep=dirkRc&&(!shelleyRc||dirkRc.id!==shelleyRc.id);
   return `
-  <div class="meal-card" onclick="pickSlot('${day}','lunch_shelley')" style="${showMealprep?"flex-direction:column;align-items:stretch;gap:0":""}">
-    <div style="display:flex;gap:12px;align-items:center">
-      <div class="meal-thumb" style="background:${THUMB.lunch}">${THUMB_EMOJI.lunch}</div>
-      <div class="meal-info">
-        <div class="meal-label">Lunch${samen?" · samen":""}</div>
-        <div class="meal-name ${mainRc?"":"empty"}">${mainRc?esc(mainRc.name):"Nog niets gekozen"}</div>
-        ${mainRc?`<div class="meal-meta">${mainRc.time} · ${mainRc.servings||2}p</div>`:""}
-      </div>
-      <div class="meal-right">
-        ${mainRc?avatarStack(["shelley"],"mini"):`<div class="meal-add">+</div>`}
-      </div>
+  <div class="meal-card" onclick="pickSlot('${day}','lunch_shelley')">
+    <div class="meal-thumb" style="background:${THUMB.lunch}">${THUMB_EMOJI.lunch}</div>
+    <div class="meal-info">
+      <div class="meal-label">Lunch · samen</div>
+      <div class="meal-name ${mainRc?"":"empty"}">${mainRc?esc(mainRc.name):"Nog niets gekozen"}</div>
+      ${mainRc?`<div class="meal-meta">${mainRc.time} · ${mainRc.servings||2}p</div>`:""}
     </div>
-    ${showMealprep?`
-    <div class="split-row" onclick="event.stopPropagation();pickSlot('${day}','lunch_dirk')" style="cursor:pointer;margin-top:6px">
-      <div class="split-badge" style="background:var(--dirk)">D</div>
-      <div class="split-name" style="font-size:12px;color:var(--ink2)">Mealprept: ${esc(dirkRc.name)}</div>
-      <span class="bi-amt">${dirkRc.time}</span>
-    </div>`:""}
+    <div class="meal-right">
+      ${mainRc?avatarStack(["shelley","dirk"],"mini"):`<div class="meal-add">+</div>`}
+    </div>
+  </div>`;
+}
+
+function renderMealprepCard(day){
+  const shelleyRc=S.week[day]["lunch_shelley"];
+  const dirkRc=S.week[day]["lunch_dirk"];
+  if(!dirkRc||(shelleyRc&&dirkRc.id===shelleyRc.id)) return "";
+  return `
+  <div class="meal-card" onclick="pickSlot('${day}','lunch_dirk')" style="padding:10px 14px;">
+    <div class="meal-thumb" style="background:var(--dirk);width:38px;height:38px;font-size:18px;border-radius:10px">🥡</div>
+    <div class="meal-info">
+      <div class="meal-label">Mealprep · Dirk</div>
+      <div class="meal-name">${esc(dirkRc.name)}</div>
+      <div class="meal-meta">${dirkRc.time}</div>
+    </div>
+    <div class="meal-right">${avatarStack(["dirk"],"mini")}</div>
   </div>`;
 }
 
@@ -1083,7 +1090,7 @@ const SHELLEY_VERMIJD = ["rauwe vis","alcohol","lever","rauw vlees","rauwe eiere
 const SHELLEY_VOORKEUR = ["ijzerrijk","calciumrijk","eiwitrijk","foliumzuur","omega-3","licht verteerbaar","warm","koud","snel klaar"];
 const DAY_MODES = {cook:"🍳 Koken",quick:"⚡ Snel (<20 min)",rest:"🥡 Restjes",off:"🚫 Vrij"};
 
-function wizGenPreview(){
+function wizGenPreview(force){
   const {cookDays, shelley, mealprep} = S.wiz;
   const prev = {};
   const used = {}; // track used recipe ids for variety
@@ -1118,8 +1125,8 @@ function wizGenPreview(){
 
     // Mealprep: if this day is in mealprep days, copy from first day
     ROWS.forEach(row => {
-      // Keep existing if already planned
-      if(S.week[day] && S.week[day][row.id]){ prev[day][row.id] = S.week[day][row.id]; return; }
+      // Keep existing if already planned (skip when force-regenerating)
+      if(!force && S.week[day] && S.week[day][row.id]){ prev[day][row.id] = S.week[day][row.id]; return; }
       // Quick: prefer fast recipes
       if(mode==="quick" && row.cat==="diner"){
         const fast = by["diner"].filter(rc => {
@@ -1495,7 +1502,7 @@ function renderWizStep3(){
   </div>
   <div style="display:flex;gap:8px;margin-top:12px;align-items:stretch">
     <button class="btn btn-line" style="flex:1" onclick="set({wizStep:2})">← Terug</button>
-    <button class="btn btn-line" style="width:auto;padding:14px 16px;font-size:18px;flex:0 0 auto" onclick="wizGenPreview()" title="Opnieuw genereren">↺</button>
+    <button class="btn btn-line" style="width:auto;padding:14px 16px;font-size:18px;flex:0 0 auto" onclick="wizGenPreview(true)" title="Opnieuw genereren">↺</button>
     <button class="btn btn-ink" style="flex:1" onclick="set({wizStep:4})">Akkoord →</button>
   </div>`;
 }
