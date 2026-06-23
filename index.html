@@ -659,6 +659,11 @@ function setFormVoor(v){S.formVoor=v;document.querySelectorAll(".tag-opt").forEa
 
 // ===================== RENDER =====================
 function render(){
+  const active=document.activeElement;
+  const hadSearch=active&&active.classList.contains('search-box');
+  const selStart=hadSearch?active.selectionStart:null;
+  const selEnd=hadSearch?active.selectionEnd:null;
+
   const app=document.getElementById("app");
   app.innerHTML=`
     <div class="app">
@@ -669,9 +674,14 @@ function render(){
     ${renderBottomNav()}
     ${S.picker?renderPicker():""}
     ${S.detail?renderDetail():""}
-    ${S.addOpen?renderAddSheet():""}
     ${S.wizOpen?renderWizard():""}
+    ${S.addOpen?renderAddSheet():""}
   `;
+
+  if(hadSearch){
+    const el=document.querySelector('.search-box');
+    if(el){el.focus();if(selStart!==null)el.setSelectionRange(selStart,selEnd);}
+  }
 }
 
 // ---------- PLANNER ----------
@@ -1405,7 +1415,10 @@ function renderWizStep2(){
 
   <div class="btn-row">
     <button class="btn btn-line" onclick="set({wizStep:1})">&#8592; Terug</button>
-    <button class="btn btn-terra" onclick="wizGenPreview()">\U0001fa84 Genereer weekmenu →</button>
+    ${S.wiz.preview&&Object.keys(S.wiz.preview).length>0
+      ? `<button class="btn btn-ink" onclick="set({wizStep:3})">Bekijk weekmenu →</button>`
+      : `<button class="btn btn-terra" onclick="wizGenPreview()">🪄 Genereer weekmenu →</button>`
+    }
   </div>`;
 }
 
@@ -1445,9 +1458,10 @@ function renderWizStep3(){
     </div>`;
   }).join("")}
   </div>
-  <div class="btn-row" style="margin-top:12px">
-    <button class="btn btn-line" onclick="set({wizStep:3})">← Terug</button>
-    <button class="btn btn-ink" onclick="set({wizStep:4})">Akkoord →</button>
+  <div style="display:flex;gap:8px;margin-top:12px">
+    <button class="btn btn-line" style="flex:1" onclick="set({wizStep:2})">← Terug</button>
+    <button class="btn btn-line" style="flex:0 0 auto;padding:14px 12px;font-size:13px" onclick="wizGenPreview()" title="Opnieuw genereren">↺</button>
+    <button class="btn btn-ink" style="flex:1" onclick="set({wizStep:4})">Akkoord →</button>
   </div>`;
 }
 
