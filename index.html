@@ -406,7 +406,7 @@ r(85,3,"Bananenbrood","tussendoortje","60 min",[i("Banaan","2"),i("Ei","2"),i("B
 ];
 
 // ===================== STATE & STORAGE =====================
-const SK="wm_week_v2", CK="wm_custom_v2", NK="wm_notes_v2", CHK="wm_check_v2", CFG="wm_cfg_v2";
+const SK="wm_week_v2", CK="wm_custom_v2", NK="wm_notes_v2", CHK="wm_check_v2", CFG="wm_cfg_v2", BOK="wm_boodOver_v1";
 function lsGet(k,d){try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}}
 function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
 
@@ -459,9 +459,11 @@ let S={
   wizIgCap:"", wizIgSt:null, wizIgErr:"", wizIgPrev:null,
   recFilter:"all", recVoor:"all", search:"",
   formVoor:"beiden",
+  boodDetail: null,
+  boodOverride: lsGet(BOK,{}),
 };
 
-function save(){lsSet(SK,S.week);lsSet(CK,S.custom);lsSet(NK,S.notes);lsSet(CHK,S.checked);lsSet(CFG,S.cfg);}
+function save(){lsSet(SK,S.week);lsSet(CK,S.custom);lsSet(NK,S.notes);lsSet(CHK,S.checked);lsSet(CFG,S.cfg);lsSet(BOK,S.boodOverride);}
 function set(patch){Object.assign(S,patch);save();render();}
 function ALL(){return [...RECIPES,...S.custom];}
 
@@ -531,9 +533,10 @@ function boodschappen(){
     const rc=S.week[d]&&S.week[d][row.id];if(!rc)return;
     (rc.ingredients||[]).forEach(g=>{
       const k=(g.n||"").toLowerCase();
-      if(!m[k])m[k]={name:g.n,amounts:[],cat:getBoodCat(g.n)};
+      if(!m[k])m[k]={name:g.n,amounts:[],cat:getBoodCat(g.n),sources:[]};
       const sc=scaleAmt(g.a,rc.servings);
       if(sc&&!m[k].amounts.includes(sc))m[k].amounts.push(sc);
+      m[k].sources.push({day:d,rcName:rc.name,amount:sc||g.a||""});
     });
   }));
   const grouped={};Object.keys(BOOD_CATS).forEach(c=>grouped[c]=[]);
@@ -541,6 +544,18 @@ function boodschappen(){
   return grouped;
 }
 function toggleCheck(k){S.checked={...S.checked,[k]:!S.checked[k]};set({});}
+function openBoodDetail(idx){set({boodDetail:idx});}
+function closeBoodDetail(){set({boodDetail:null});}
+function saveBoodOverride(k){
+  const val=(document.getElementById("bood-amt-input")||{}).value||"";
+  S.boodOverride={...S.boodOverride,[k]:val||undefined};
+  if(!val)delete S.boodOverride[k];
+  set({boodDetail:null});
+}
+function deleteBoodOverride(k){
+  const o={...S.boodOverride};delete o[k];
+  set({boodOverride:o,boodDetail:null});
+}
 
 // ===================== WIZARD =====================
 function toggleCookDay(day){
@@ -674,6 +689,7 @@ function render(){
     ${renderBottomNav()}
     ${S.picker?renderPicker():""}
     ${S.detail?renderDetail():""}
+    ${S.boodDetail!==null?renderBoodDetail():""}
     ${S.wizOpen?renderWizard():""}
     ${S.addOpen?renderAddSheet():""}
   `;
@@ -907,6 +923,7 @@ function openEdit(id){const rc=S.custom.find(x=>x.id===id);if(rc)set({editRc:rc,
 // ---------- BOODSCHAPPEN ----------
 function renderBoodschappen(){
   const grouped=boodschappen();
+  window.__boodList=[];
   const all=Object.values(grouped).flat();
   const total=all.length;
   const done=all.filter(it=>S.checked[it.name.toLowerCase()]).length;
@@ -939,16 +956,56 @@ function renderBoodschappen(){
           <div class="bood-group-count">${catDone}/${items.length}</div>
         </div>
         ${items.map(it=>{
+          const idx=window.__boodList.length; window.__boodList.push(it);
           const k=it.name.toLowerCase();const chk=!!S.checked[k];
-          return `<div class="bood-item ${chk?"checked":""}" onclick="toggleCheck('${esc(k).replace(/'/g,"")}')">
-            <div class="bi-check ${chk?"on":""}">${chk?"✓":""}</div>
+          const displayAmt=S.boodOverride[k]||(it.amounts.length?it.amounts.join(", "):"");
+          const hasOverride=!!S.boodOverride[k];
+          return `<div class="bood-item ${chk?"checked":""}" onclick="openBoodDetail(${idx})">
+            <div class="bi-check ${chk?"on":""}" onclick="event.stopPropagation();toggleCheck('${k.replace(/'/g,"")}')">${chk?"✓":""}</div>
             <span class="bi-name">${esc(it.name)}</span>
-            ${it.amounts.length?`<span class="bi-amt">${esc(it.amounts.join(", "))}</span>`:""}
+            ${displayAmt?`<span class="bi-amt" style="${hasOverride?"color:var(--terra);font-weight:600":""}">${esc(displayAmt)}</span>`:""}
+            <span style="font-size:13px;color:var(--ink3);margin-left:4px">›</span>
           </div>`;
         }).join("")}
       </div>`;
     }).join("")}
     `}
+  </div>`;
+}
+
+function renderBoodDetail(){
+  const it=window.__boodList&&window.__boodList[S.boodDetail];
+  if(!it) return "";
+  const k=it.name.toLowerCase();
+  const safeK=k.replace(/'/g,"");
+  const hasOverride=!!S.boodOverride[k];
+  const currentAmt=S.boodOverride[k]||(it.amounts.length?it.amounts.join(", "):"");
+  const seen=new Set();
+  const uniqSources=(it.sources||[]).filter(s=>{
+    const key=s.day+s.rcName; if(seen.has(key))return false; seen.add(key); return true;
+  });
+  return `
+  <div class="overlay" onclick="closeBoodDetail()">
+    <div class="sheet" onclick="event.stopPropagation()">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title">${esc(it.name)}</div>
+      <div class="sheet-sub" style="margin-bottom:14px">Wordt gebruikt in:</div>
+      <div style="margin-bottom:18px">
+        ${uniqSources.map(s=>`
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--cardline)">
+          <div style="font-family:'Space Mono',monospace;font-size:10px;font-weight:700;color:var(--ink3);min-width:52px;text-transform:uppercase">${(DAY_FULL[s.day]||s.day).slice(0,2)}</div>
+          <div style="flex:1;font-size:14px;color:var(--ink)">${esc(s.rcName)}</div>
+          <div style="font-family:'Space Mono',monospace;font-size:12px;color:var(--ink2)">${esc(s.amount)}</div>
+        </div>`).join("")}
+      </div>
+      <div style="font-family:'Space Mono',monospace;font-size:11px;letter-spacing:1px;color:var(--ink3);margin-bottom:8px">HOEVEELHEID AANPASSEN</div>
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:${hasOverride?"10px":"0"}">
+        <input id="bood-amt-input" type="text" value="${esc(currentAmt)}" placeholder="bijv. 200g"
+          style="flex:1;background:var(--card);border:1px solid var(--cardline);border-radius:13px;padding:12px 14px;font-size:14px;color:var(--ink);outline:none">
+        <button class="btn btn-ink" style="flex:0 0 auto;width:auto;padding:12px 18px" onclick="saveBoodOverride('${safeK}')">Opslaan</button>
+      </div>
+      ${hasOverride?`<button class="btn btn-line" onclick="deleteBoodOverride('${safeK}')">Verwijder aanpassing</button>`:""}
+    </div>
   </div>`;
 }
 
@@ -1601,6 +1658,8 @@ window.onDayNote=onDayNote; window.S=S; window.render=render;
 window.pickSlot=pickSlot; window.assignRecipe=assignRecipe; window.clearSlot=clearSlot;
 window.onDayNote=onDayNote;
 window.toggleCheck=toggleCheck; window.toggleCookDay=toggleCookDay; window.runAutofill=runAutofill;
+window.openBoodDetail=openBoodDetail; window.closeBoodDetail=closeBoodDetail;
+window.saveBoodOverride=saveBoodOverride; window.deleteBoodOverride=deleteBoodOverride;
 window.doImport=doImport; window.saveIgRecipe=saveIgRecipe; window.saveForm=saveForm; window.setFormVoor=setFormVoor;
 window.deleteCustomRecipe=deleteCustomRecipe; window.openEdit=openEdit;
 window.exportImg=exportImg;
