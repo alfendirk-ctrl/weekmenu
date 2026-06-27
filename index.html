@@ -704,6 +704,16 @@ function render(){
   const selStart=hadSearch?active.selectionStart:null;
   const selEnd=hadSearch?active.selectionEnd:null;
 
+  // Save scroll positions before re-render
+  const scrollMap={};
+  document.querySelectorAll('*').forEach(el=>{
+    if(el.scrollTop>0){
+      const key=el.className?el.className.trim().split(/\s+/)[0]:null;
+      if(key&&!scrollMap[key]) scrollMap[key]=el.scrollTop;
+    }
+  });
+  const winScrollY=window.scrollY;
+
   const app=document.getElementById("app");
   app.innerHTML=`
     <div class="app">
@@ -718,6 +728,13 @@ function render(){
     ${S.wizOpen?renderWizard():""}
     ${S.addOpen?renderAddSheet():""}
   `;
+
+  // Restore scroll positions
+  if(winScrollY>0) window.scrollTo(0,winScrollY);
+  Object.entries(scrollMap).forEach(([key,top])=>{
+    const el=document.querySelector('.'+key);
+    if(el) el.scrollTop=top;
+  });
 
   if(hadSearch){
     const el=document.querySelector('.search-box');
