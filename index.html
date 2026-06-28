@@ -440,7 +440,6 @@ function curWeek(){ return weekDates(S.weekOffset||0); }
 
 let S={
   view:"planner",
-  plannerView:"week",
   weekOffset:0,
   activeDay: DAYS[(new Date().getDay()+6)%7],
   week: lsGet(weekStoreKey(0),emptyWeek()),
@@ -642,53 +641,79 @@ async function exportImg(type){
 async function exportWeekImg(type){
   toast("Even exporteren...");
   const W=curWeek();
-  const DAY_NL={ma:"Maandag",di:"Dinsdag",wo:"Woensdag",do:"Donderdag",vr:"Vrijdag",za:"Zaterdag",zo:"Zondag"};
   const C={bg:"#F3EAD8",card:"#FFFDF8",ink:"#2C2416",ink2:"#5C4F3A",ink3:"#8C7B5E",line:"#EAE0CC",
-    terra:"#CD6A45",olive:"#8C9E6E",honey:"#D4A843"};
+    terra:"#CD6A45",olive:"#8C9E6E",honey:"#D4A843",dirk:"#8C9E6E",shelley:"#CD6A45"};
+  const DAY_NL={ma:"Maandag",di:"Dinsdag",wo:"Woensdag",do:"Donderdag",vr:"Vrijdag",za:"Zaterdag",zo:"Zondag"};
 
-  const dayCards=DAYS.map(day=>{
+  // Build one row per day, columns: Ontbijt D | Ontbijt S | Lunch | Diner
+  const rows=DAYS.map(day=>{
     const w=S.week[day]||{};
-    const ob=w.ontbijt_dirk||w.ontbijt_shelley;
-    const lu=w.lunch_shelley||w.lunch_dirk;
-    const luD=w.lunch_dirk;
+    const od=w.ontbijt_dirk, os=w.ontbijt_shelley;
+    const lu=w.lunch_shelley||w.lunch_dirk, luD=w.lunch_dirk, luS=w.lunch_shelley;
     const di=w.diner;
-    const sn=w.tussendoortje_dirk||w.tussen_ochtend;
-    const hasMeals=ob||lu||di;
-    const mealRow=(label,rc,accent)=>rc?`
-      <div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-top:1px solid ${C.line}">
-        <span style="font-family:'Space Mono',monospace;font-size:9px;color:${C.ink3};min-width:48px;padding-top:2px;text-transform:uppercase;letter-spacing:.5px">${label}</span>
-        <span style="font-family:'Hanken Grotesk',sans-serif;font-size:${label==="Diner"?"14px":"13px"};font-weight:${label==="Diner"?700:500};color:${C.ink};line-height:1.3">${esc(rc.name)}</span>
-      </div>`:"";
+    const obSame=od&&os&&od.id===os.id;
+
+    const nameCell=(rc,color,label)=>rc
+      ? `<div style="border-left:3px solid ${color};padding-left:8px">
+           ${label?`<div style="font-size:8px;font-family:'Space Mono',monospace;color:${C.ink3};margin-bottom:2px;text-transform:uppercase;letter-spacing:.5px">${label}</div>`:""}
+           <div style="font-size:12px;font-weight:600;color:${C.ink};line-height:1.35">${esc(rc.name)}</div>
+           <div style="font-size:9px;color:${C.ink3};font-family:'Space Mono',monospace;margin-top:1px">${rc.time}</div>
+         </div>`
+      : `<div style="font-size:12px;color:${C.line};font-style:italic">—</div>`;
+
+    const ontbijt=obSame
+      ? nameCell(od,C.honey,"")
+      : `${nameCell(od,C.dirk,"Dirk")}<div style="height:6px"></div>${nameCell(os,C.shelley,"Shelley")}`;
+
+    const lunch=luD&&luS&&luD.id!==luS.id
+      ? `${nameCell(luS,C.olive,"")} <div style="height:4px"></div>
+         <div style="border-left:3px solid ${C.dirk};padding-left:8px">
+           <div style="display:inline-block;font-size:8px;background:${C.dirk};color:#fff;border-radius:3px;padding:1px 5px;font-family:'Space Mono',monospace;margin-bottom:2px">MEALPREP</div>
+           <div style="font-size:12px;font-weight:600;color:${C.ink};line-height:1.35">${esc(luD.name)}</div>
+           <div style="font-size:9px;color:${C.ink3};font-family:'Space Mono',monospace">${luD.time}</div>
+         </div>`
+      : nameCell(lu,C.olive,"");
+
     return `
-    <div style="background:${C.card};border-radius:16px;padding:12px 16px;margin-bottom:8px;${hasMeals?"":"opacity:0.35"}">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:${hasMeals?4:0}px">
-        <span style="font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:14px;color:${C.ink}">${DAY_NL[day]}</span>
-        <span style="font-family:'Space Mono',monospace;font-size:11px;color:${C.ink3}">${W.nums[day]}</span>
-        ${!hasMeals?`<span style="font-family:'Hanken Grotesk',sans-serif;font-size:12px;color:${C.ink3};margin-left:auto;font-style:italic">niets gepland</span>`:""}
-      </div>
-      ${mealRow("Ontbijt",ob,C.honey)}
-      ${mealRow("Lunch",lu,C.olive)}
-      ${luD&&lu&&luD.id!==lu.id?mealRow("Mealprep",luD,C.dirk):""}
-      ${mealRow("Diner",di,C.terra)}
-    </div>`;
+    <tr>
+      <td style="padding:12px 14px;border-bottom:1px solid ${C.line};vertical-align:top;white-space:nowrap">
+        <div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:13px;color:${C.ink}">${DAY_NL[day]}</div>
+        <div style="font-family:'Space Mono',monospace;font-size:10px;color:${C.ink3};margin-top:1px">${W.nums[day]}</div>
+      </td>
+      <td style="padding:12px 14px;border-bottom:1px solid ${C.line};border-left:1px solid ${C.line};vertical-align:top;width:30%">${ontbijt}</td>
+      <td style="padding:12px 14px;border-bottom:1px solid ${C.line};border-left:1px solid ${C.line};vertical-align:top;width:30%">${lunch}</td>
+      <td style="padding:12px 14px;border-bottom:1px solid ${C.line};border-left:1px solid ${C.line};vertical-align:top;width:30%">${nameCell(di,C.terra,"")}</td>
+    </tr>`;
   }).join("");
 
   const div=document.createElement("div");
-  div.style.cssText="position:fixed;left:-9999px;top:0;width:390px;padding:28px 20px 36px;background:"+C.bg+";";
+  div.style.cssText=`position:fixed;left:-9999px;top:0;width:780px;padding:36px 40px 44px;background:${C.bg};`;
   div.innerHTML=`
-    <div style="margin-bottom:24px;padding:0 2px">
-      <div style="font-family:'Space Mono',monospace;font-size:9px;letter-spacing:2px;color:${C.ink3};margin-bottom:6px;text-transform:uppercase">Week ${W.wk} · ${W.range}</div>
-      <div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:36px;line-height:1;color:${C.ink}">Ons<br>weekmenu</div>
-      <div style="font-family:'Hanken Grotesk',sans-serif;font-size:13px;color:${C.ink3};margin-top:8px">Shelley · Dirk · Maeve</div>
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:28px">
+      <div>
+        <div style="font-family:'Space Mono',monospace;font-size:9px;letter-spacing:2px;color:${C.ink3};margin-bottom:6px;text-transform:uppercase">Week ${W.wk} · ${W.range}</div>
+        <div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:38px;line-height:1;color:${C.ink}">Ons weekmenu</div>
+      </div>
+      <div style="font-family:'Hanken Grotesk',sans-serif;font-size:13px;color:${C.ink3};text-align:right;line-height:1.8">Shelley<br>Dirk<br>Maeve</div>
     </div>
-    ${dayCards}
-    <div style="text-align:center;margin-top:20px;font-family:'Space Mono',monospace;font-size:8px;letter-spacing:2px;color:${C.line};text-transform:uppercase">Weekmenu Planner</div>`;
+    <table style="width:100%;border-collapse:collapse;background:${C.card};border-radius:16px;overflow:hidden">
+      <thead>
+        <tr style="background:${C.ink}">
+          <th style="padding:10px 14px;text-align:left;font-family:'Space Mono',monospace;font-size:9px;letter-spacing:1.5px;color:#fff;font-weight:700;text-transform:uppercase;width:100px">Dag</th>
+          <th style="padding:10px 14px;text-align:left;font-family:'Space Mono',monospace;font-size:9px;letter-spacing:1.5px;color:${C.honey};font-weight:700;text-transform:uppercase;border-left:1px solid rgba(255,255,255,.1)">Ontbijt</th>
+          <th style="padding:10px 14px;text-align:left;font-family:'Space Mono',monospace;font-size:9px;letter-spacing:1.5px;color:#9db87e;font-weight:700;text-transform:uppercase;border-left:1px solid rgba(255,255,255,.1)">Lunch</th>
+          <th style="padding:10px 14px;text-align:left;font-family:'Space Mono',monospace;font-size:9px;letter-spacing:1.5px;color:#e08f72;font-weight:700;text-transform:uppercase;border-left:1px solid rgba(255,255,255,.1)">Diner</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div style="text-align:right;margin-top:16px;font-family:'Space Mono',monospace;font-size:8px;letter-spacing:2px;color:${C.line};text-transform:uppercase">Weekmenu Planner</div>`;
   document.body.appendChild(div);
   try{
     const canvas=await html2canvas(div,{backgroundColor:C.bg,scale:2,useCORS:true,logging:false});
     if(type==="pdf"){
       const {jsPDF}=window.jspdf;
-      const pdf=new jsPDF({orientation:"portrait",unit:"mm",format:"a4"});
+      const pdf=new jsPDF({orientation:"landscape",unit:"mm",format:"a4"});
       const w=pdf.internal.pageSize.getWidth()-20;
       const h=(canvas.height/canvas.width)*w;
       pdf.addImage(canvas.toDataURL("image/png"),"PNG",10,10,w,h);
@@ -811,7 +836,6 @@ function render(){
 function renderPlanner(){
   const st=weekStats();
   const day=S.activeDay;
-  const isWeekView=S.plannerView==="week";
   const cookMode=S.cfg.cookDays[day]||"cook";
   const cookLabel=cookMode==="rest"?"restjes / makkelijk":cookMode==="none"?"vrij":"koken";
   return `
@@ -829,16 +853,12 @@ function renderPlanner(){
       ${avatarStack(["shelley","dirk","maeve"],"big")}
     </div>
     <div class="prog-note">${st.empty===0?"Jullie week staat helemaal klaar. ✨":`Nog ${st.empty} ${st.empty===1?"maaltijd":"maaltijden"} te kiezen — dan staat jullie week klaar.`}</div>
-    <div style="display:flex;gap:6px;margin-top:10px;align-items:center">
-      <button onclick="set({plannerView:'week'})" style="padding:6px 14px;border-radius:20px;border:1.5px solid ${isWeekView?"var(--ink)":"var(--cardline)"};background:${isWeekView?"var(--ink)":"var(--card)"};font-family:'Space Mono',monospace;font-size:10px;font-weight:700;color:${isWeekView?"#fff":"var(--ink2)"};cursor:pointer">Week</button>
-      <button onclick="set({plannerView:'dag'})" style="padding:6px 14px;border-radius:20px;border:1.5px solid ${!isWeekView?"var(--ink)":"var(--cardline)"};background:${!isWeekView?"var(--ink)":"var(--card)"};font-family:'Space Mono',monospace;font-size:10px;font-weight:700;color:${!isWeekView?"#fff":"var(--ink2)"};cursor:pointer">Dag</button>
-      <div style="flex:1"></div>
-      <button onclick="exportWeekImg('jpg')" style="padding:6px 12px;border-radius:20px;border:1.5px solid var(--cardline);background:var(--card);font-family:'Space Mono',monospace;font-size:10px;font-weight:700;color:var(--ink2);cursor:pointer">📷</button>
-      <button onclick="exportWeekImg('pdf')" style="padding:6px 12px;border-radius:20px;border:1.5px solid var(--cardline);background:var(--card);font-family:'Space Mono',monospace;font-size:10px;font-weight:700;color:var(--ink2);cursor:pointer">📄</button>
+    <div style="display:flex;gap:6px;margin-top:10px">
+      <button onclick="exportWeekImg('jpg')" style="padding:6px 12px;border-radius:20px;border:1.5px solid var(--cardline);background:var(--card);font-family:'Space Mono',monospace;font-size:10px;font-weight:700;color:var(--ink2);cursor:pointer;letter-spacing:0.5px">📷 JPG</button>
+      <button onclick="exportWeekImg('pdf')" style="padding:6px 12px;border-radius:20px;border:1.5px solid var(--cardline);background:var(--card);font-family:'Space Mono',monospace;font-size:10px;font-weight:700;color:var(--ink2);cursor:pointer;letter-spacing:0.5px">📄 PDF</button>
     </div>
   </div>
 
-  ${isWeekView ? renderWeekTable() : `
   <div class="weekstrip">
     ${DAYS.map(d=>{
       const n=dayFillCount(d);const mx=ROWS.length;
@@ -849,6 +869,7 @@ function renderPlanner(){
       </button>`;
     }).join("")}
   </div>
+
   <div class="scroll">
     <div class="day-head">
       <h2>${DAY_FULL[day].charAt(0).toUpperCase()+DAY_FULL[day].slice(1)}</h2>
@@ -858,67 +879,7 @@ function renderPlanner(){
     <button class="plan-cta" onclick="set({wizOpen:true,wizStep:1})">
       🪄 Plan de hele week ${st.empty>0?`<span class="badge">${st.empty} leeg</span>`:""}
     </button>
-  </div>`}
-  </div>`;
-}
-
-function renderWeekTable(){
-  const W=curWeek();
-  const st=weekStats();
-  const cell=(rc,empty,onclick,accent)=>`
-    <div onclick="${onclick}" style="cursor:pointer;background:var(--card);border:1px solid var(--cardline);border-left:3px solid ${rc?accent:"var(--cardline)"};border-radius:10px;padding:8px 10px;min-height:52px;display:flex;flex-direction:column;justify-content:center">
-      ${rc
-        ? `<div style="font-size:12px;font-weight:600;color:var(--ink);line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${esc(rc.name)}</div>
-           <div style="font-size:10px;color:var(--ink3);margin-top:2px;font-family:'Space Mono',monospace">${rc.time}</div>`
-        : `<div style="font-size:20px;color:var(--cardline);line-height:1">${empty}</div>`}
-    </div>`;
-
-  return `
-  <div class="scroll" style="padding:12px 14px 80px">
-    <div style="display:flex;gap:6px;margin-bottom:6px;padding:0 2px">
-      <div style="width:46px;flex-shrink:0"></div>
-      <div style="flex:1;font-family:'Space Mono',monospace;font-size:8px;letter-spacing:1px;color:var(--ink3);text-align:center">ONTBIJT</div>
-      <div style="flex:1;font-family:'Space Mono',monospace;font-size:8px;letter-spacing:1px;color:var(--ink3);text-align:center">LUNCH</div>
-      <div style="flex:1;font-family:'Space Mono',monospace;font-size:8px;letter-spacing:1px;color:var(--ink3);text-align:center">DINER</div>
-    </div>
-    ${DAYS.map(day=>{
-      const w=S.week[day]||{};
-      const od=w.ontbijt_dirk, os=w.ontbijt_shelley;
-      const lu=w.lunch_shelley||w.lunch_dirk, luD=w.lunch_dirk, luS=w.lunch_shelley;
-      const di=w.diner;
-      const obSame=od&&os&&od.id===os.id;
-      const luSame=luD&&luS&&luD.id===luS.id;
-
-      // Ontbijt cell: show samen if same, else split
-      const obCell=obSame
-        ? cell(od,"+","pickSlot('"+day+"','ontbijt_dirk')","var(--honey)")
-        : `<div onclick="pickSlot('${day}','ontbijt_dirk')" style="cursor:pointer;background:var(--card);border:1px solid var(--cardline);border-left:3px solid ${(od||os)?"var(--honey)":"var(--cardline)"};border-radius:10px;padding:6px 8px;min-height:52px;display:flex;flex-direction:column;justify-content:center;gap:3px">
-            ${od?`<div style="display:flex;align-items:center;gap:4px"><div style="width:14px;height:14px;border-radius:4px;background:var(--dirk);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;color:#fff">D</div><div style="font-size:11px;font-weight:600;color:var(--ink);line-height:1.3;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden">${esc(od.name)}</div></div>`:'<div style="font-size:10px;color:var(--ink3)">Dirk +</div>'}
-            ${os?`<div onclick="event.stopPropagation();pickSlot('${day}','ontbijt_shelley')" style="display:flex;align-items:center;gap:4px"><div style="width:14px;height:14px;border-radius:4px;background:var(--shelley);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;color:#fff">S</div><div style="font-size:11px;font-weight:600;color:var(--ink);line-height:1.3;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden">${esc(os.name)}</div></div>`:'<div style="font-size:10px;color:var(--ink3)">Shelley +</div>'}
-           </div>`;
-
-      // Lunch cell
-      const lunchCell=!luSame&&luD&&luS
-        ? `<div style="cursor:pointer;background:var(--card);border:1px solid var(--cardline);border-left:3px solid var(--olive);border-radius:10px;padding:6px 8px;min-height:52px;display:flex;flex-direction:column;justify-content:center;gap:3px">
-            <div onclick="pickSlot('${day}','lunch_shelley')" style="font-size:11px;font-weight:600;color:var(--ink);line-height:1.3;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden">${esc(luS.name)}</div>
-            <div onclick="pickSlot('${day}','lunch_dirk')" style="display:flex;align-items:center;gap:4px"><span style="font-size:9px;background:var(--dirk);color:#fff;border-radius:4px;padding:1px 4px;font-family:'Space Mono',monospace;flex-shrink:0">MP</span><span style="font-size:11px;color:var(--ink2);line-height:1.3;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden">${esc(luD.name)}</span></div>
-           </div>`
-        : cell(lu,"+","pickSlot('"+day+"','lunch_shelley')","var(--olive)");
-
-      return `
-      <div style="display:flex;gap:6px;margin-bottom:6px;align-items:stretch">
-        <div onclick="set({activeDay:'${day}',plannerView:'dag'})" style="cursor:pointer;width:46px;flex-shrink:0;background:var(--card);border:1px solid var(--cardline);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px 4px">
-          <div style="font-family:'Space Mono',monospace;font-size:11px;font-weight:700;color:var(--ink)">${day}</div>
-          <div style="font-family:'Space Mono',monospace;font-size:11px;color:var(--ink3)">${W.nums[day]}</div>
-        </div>
-        <div style="flex:1">${obCell}</div>
-        <div style="flex:1">${lunchCell}</div>
-        <div style="flex:1">${cell(di,"+","pickSlot('"+day+"','diner')","var(--terra)")}</div>
-      </div>`;
-    }).join("")}
-    <button class="plan-cta" onclick="set({wizOpen:true,wizStep:1})">
-      🪄 Plan de hele week ${st.empty>0?`<span class="badge">${st.empty} leeg</span>`:""}
-    </button>
+  </div>
   </div>`;
 }
 
