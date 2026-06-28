@@ -645,25 +645,30 @@ async function exportWeekImg(type){
     terra:"#CD6A45",olive:"#8C9E6E",honey:"#D4A843",dirk:"#8C9E6E",shelley:"#CD6A45"};
   const DAY_NL={ma:"Maandag",di:"Dinsdag",wo:"Woensdag",do:"Donderdag",vr:"Vrijdag",za:"Zaterdag",zo:"Zondag"};
 
-  // Build one row per day, columns: Ontbijt D | Ontbijt S | Lunch | Diner
+  const nameCell=(rc,color,label)=>rc
+    ? `<div style="border-left:3px solid ${color};padding-left:8px">
+         ${label?`<div style="font-size:8px;font-family:'Space Mono',monospace;color:${C.ink3};margin-bottom:2px;text-transform:uppercase;letter-spacing:.5px">${label}</div>`:""}
+         <div style="font-size:12px;font-weight:600;color:${C.ink};line-height:1.35">${esc(rc.name)}</div>
+         <div style="font-size:9px;color:${C.ink3};font-family:'Space Mono',monospace;margin-top:1px">${rc.time}</div>
+       </div>`
+    : `<div style="font-size:12px;color:${C.line};font-style:italic">—</div>`;
+
   const rows=DAYS.map(day=>{
     const w=S.week[day]||{};
     const od=w.ontbijt_dirk, os=w.ontbijt_shelley;
     const lu=w.lunch_shelley||w.lunch_dirk, luD=w.lunch_dirk, luS=w.lunch_shelley;
+    const to=w.tussen_ochtend, tm=w.tussen_middag;
     const di=w.diner;
+    const note=(S.notes[day]&&S.notes[day].algemeen)||"";
     const obSame=od&&os&&od.id===os.id;
-
-    const nameCell=(rc,color,label)=>rc
-      ? `<div style="border-left:3px solid ${color};padding-left:8px">
-           ${label?`<div style="font-size:8px;font-family:'Space Mono',monospace;color:${C.ink3};margin-bottom:2px;text-transform:uppercase;letter-spacing:.5px">${label}</div>`:""}
-           <div style="font-size:12px;font-weight:600;color:${C.ink};line-height:1.35">${esc(rc.name)}</div>
-           <div style="font-size:9px;color:${C.ink3};font-family:'Space Mono',monospace;margin-top:1px">${rc.time}</div>
-         </div>`
-      : `<div style="font-size:12px;color:${C.line};font-style:italic">—</div>`;
 
     const ontbijt=obSame
       ? nameCell(od,C.honey,"")
       : `${nameCell(od,C.dirk,"Dirk")}<div style="height:6px"></div>${nameCell(os,C.shelley,"Shelley")}`;
+
+    const tussendoor=(to||tm)
+      ? `${to?nameCell(to,"#B0A898","Ochtend"):""}${to&&tm?`<div style="height:6px"></div>`:""}${tm?nameCell(tm,"#B0A898","Middag"):""}`
+      : `<div style="font-size:12px;color:${C.line};font-style:italic">—</div>`;
 
     const lunch=luD&&luS&&luD.id!==luS.id
       ? `${nameCell(luS,C.olive,"")} <div style="height:4px"></div>
@@ -674,20 +679,27 @@ async function exportWeekImg(type){
          </div>`
       : nameCell(lu,C.olive,"");
 
-    return `
-    <tr>
+    const noteCell=note
+      ? `<div style="font-size:11px;color:${C.ink2};line-height:1.5;font-family:'Hanken Grotesk',sans-serif;font-style:italic">${esc(note)}</div>`
+      : `<div style="font-size:12px;color:${C.line};font-style:italic">—</div>`;
+
+    const td=(content,w)=>`<td style="padding:12px 14px;border-bottom:1px solid ${C.line};border-left:1px solid ${C.line};vertical-align:top;${w?`width:${w};`:""}">${content}</td>`;
+
+    return `<tr>
       <td style="padding:12px 14px;border-bottom:1px solid ${C.line};vertical-align:top;white-space:nowrap">
         <div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:13px;color:${C.ink}">${DAY_NL[day]}</div>
         <div style="font-family:'Space Mono',monospace;font-size:10px;color:${C.ink3};margin-top:1px">${W.nums[day]}</div>
       </td>
-      <td style="padding:12px 14px;border-bottom:1px solid ${C.line};border-left:1px solid ${C.line};vertical-align:top;width:30%">${ontbijt}</td>
-      <td style="padding:12px 14px;border-bottom:1px solid ${C.line};border-left:1px solid ${C.line};vertical-align:top;width:30%">${lunch}</td>
-      <td style="padding:12px 14px;border-bottom:1px solid ${C.line};border-left:1px solid ${C.line};vertical-align:top;width:30%">${nameCell(di,C.terra,"")}</td>
+      ${td(ontbijt,"20%")}
+      ${td(tussendoor,"14%")}
+      ${td(lunch,"22%")}
+      ${td(nameCell(di,C.terra,""),"22%")}
+      ${td(noteCell,"18%")}
     </tr>`;
   }).join("");
 
   const div=document.createElement("div");
-  div.style.cssText=`position:fixed;left:-9999px;top:0;width:780px;padding:36px 40px 44px;background:${C.bg};`;
+  div.style.cssText=`position:fixed;left:-9999px;top:0;width:900px;padding:36px 40px 44px;background:${C.bg};`;
   div.innerHTML=`
     <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:28px">
       <div>
@@ -699,10 +711,12 @@ async function exportWeekImg(type){
     <table style="width:100%;border-collapse:collapse;background:${C.card};border-radius:16px;overflow:hidden">
       <thead>
         <tr style="background:${C.ink}">
-          <th style="padding:10px 14px;text-align:left;font-family:'Space Mono',monospace;font-size:9px;letter-spacing:1.5px;color:#fff;font-weight:700;text-transform:uppercase;width:100px">Dag</th>
+          <th style="padding:10px 14px;text-align:left;font-family:'Space Mono',monospace;font-size:9px;letter-spacing:1.5px;color:#fff;font-weight:700;text-transform:uppercase">Dag</th>
           <th style="padding:10px 14px;text-align:left;font-family:'Space Mono',monospace;font-size:9px;letter-spacing:1.5px;color:${C.honey};font-weight:700;text-transform:uppercase;border-left:1px solid rgba(255,255,255,.1)">Ontbijt</th>
+          <th style="padding:10px 14px;text-align:left;font-family:'Space Mono',monospace;font-size:9px;letter-spacing:1.5px;color:#c8b88a;font-weight:700;text-transform:uppercase;border-left:1px solid rgba(255,255,255,.1)">Tussendoor</th>
           <th style="padding:10px 14px;text-align:left;font-family:'Space Mono',monospace;font-size:9px;letter-spacing:1.5px;color:#9db87e;font-weight:700;text-transform:uppercase;border-left:1px solid rgba(255,255,255,.1)">Lunch</th>
           <th style="padding:10px 14px;text-align:left;font-family:'Space Mono',monospace;font-size:9px;letter-spacing:1.5px;color:#e08f72;font-weight:700;text-transform:uppercase;border-left:1px solid rgba(255,255,255,.1)">Diner</th>
+          <th style="padding:10px 14px;text-align:left;font-family:'Space Mono',monospace;font-size:9px;letter-spacing:1.5px;color:#aaa;font-weight:700;text-transform:uppercase;border-left:1px solid rgba(255,255,255,.1)">Opmerkingen</th>
         </tr>
       </thead>
       <tbody>${rows}</tbody>
@@ -713,7 +727,7 @@ async function exportWeekImg(type){
     const canvas=await html2canvas(div,{backgroundColor:C.bg,scale:2,useCORS:true,logging:false});
     if(type==="pdf"){
       const {jsPDF}=window.jspdf;
-      const pdf=new jsPDF({orientation:"landscape",unit:"mm",format:"a4"});
+      const pdf=new jsPDF({orientation:"landscape",unit:"mm",format:"a3"});
       const w=pdf.internal.pageSize.getWidth()-20;
       const h=(canvas.height/canvas.width)*w;
       pdf.addImage(canvas.toDataURL("image/png"),"PNG",10,10,w,h);
