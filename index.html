@@ -440,6 +440,7 @@ function curWeek(){ return weekDates(S.weekOffset||0); }
 
 let S={
   view:"planner",
+  plannerView:"week",
   weekOffset:0,
   activeDay: DAYS[(new Date().getDay()+6)%7],
   week: lsGet(weekStoreKey(0),emptyWeek()),
@@ -810,6 +811,7 @@ function render(){
 function renderPlanner(){
   const st=weekStats();
   const day=S.activeDay;
+  const isWeekView=S.plannerView==="week";
   const cookMode=S.cfg.cookDays[day]||"cook";
   const cookLabel=cookMode==="rest"?"restjes / makkelijk":cookMode==="none"?"vrij":"koken";
   return `
@@ -827,12 +829,16 @@ function renderPlanner(){
       ${avatarStack(["shelley","dirk","maeve"],"big")}
     </div>
     <div class="prog-note">${st.empty===0?"Jullie week staat helemaal klaar. ✨":`Nog ${st.empty} ${st.empty===1?"maaltijd":"maaltijden"} te kiezen — dan staat jullie week klaar.`}</div>
-    <div style="display:flex;gap:6px;margin-top:10px">
-      <button onclick="exportWeekImg('jpg')" style="padding:6px 12px;border-radius:20px;border:1.5px solid var(--cardline);background:var(--card);font-family:'Space Mono',monospace;font-size:10px;font-weight:700;color:var(--ink2);cursor:pointer;letter-spacing:0.5px">📷 JPG</button>
-      <button onclick="exportWeekImg('pdf')" style="padding:6px 12px;border-radius:20px;border:1.5px solid var(--cardline);background:var(--card);font-family:'Space Mono',monospace;font-size:10px;font-weight:700;color:var(--ink2);cursor:pointer;letter-spacing:0.5px">📄 PDF</button>
+    <div style="display:flex;gap:6px;margin-top:10px;align-items:center">
+      <button onclick="set({plannerView:'week'})" style="padding:6px 14px;border-radius:20px;border:1.5px solid ${isWeekView?"var(--ink)":"var(--cardline)"};background:${isWeekView?"var(--ink)":"var(--card)"};font-family:'Space Mono',monospace;font-size:10px;font-weight:700;color:${isWeekView?"#fff":"var(--ink2)"};cursor:pointer">Week</button>
+      <button onclick="set({plannerView:'dag'})" style="padding:6px 14px;border-radius:20px;border:1.5px solid ${!isWeekView?"var(--ink)":"var(--cardline)"};background:${!isWeekView?"var(--ink)":"var(--card)"};font-family:'Space Mono',monospace;font-size:10px;font-weight:700;color:${!isWeekView?"#fff":"var(--ink2)"};cursor:pointer">Dag</button>
+      <div style="flex:1"></div>
+      <button onclick="exportWeekImg('jpg')" style="padding:6px 12px;border-radius:20px;border:1.5px solid var(--cardline);background:var(--card);font-family:'Space Mono',monospace;font-size:10px;font-weight:700;color:var(--ink2);cursor:pointer">📷</button>
+      <button onclick="exportWeekImg('pdf')" style="padding:6px 12px;border-radius:20px;border:1.5px solid var(--cardline);background:var(--card);font-family:'Space Mono',monospace;font-size:10px;font-weight:700;color:var(--ink2);cursor:pointer">📄</button>
     </div>
   </div>
 
+  ${isWeekView ? renderWeekTable() : `
   <div class="weekstrip">
     ${DAYS.map(d=>{
       const n=dayFillCount(d);const mx=ROWS.length;
@@ -843,7 +849,6 @@ function renderPlanner(){
       </button>`;
     }).join("")}
   </div>
-
   <div class="scroll">
     <div class="day-head">
       <h2>${DAY_FULL[day].charAt(0).toUpperCase()+DAY_FULL[day].slice(1)}</h2>
@@ -853,7 +858,67 @@ function renderPlanner(){
     <button class="plan-cta" onclick="set({wizOpen:true,wizStep:1})">
       🪄 Plan de hele week ${st.empty>0?`<span class="badge">${st.empty} leeg</span>`:""}
     </button>
-  </div>
+  </div>`}
+  </div>`;
+}
+
+function renderWeekTable(){
+  const W=curWeek();
+  const st=weekStats();
+  const cell=(rc,empty,onclick,accent)=>`
+    <div onclick="${onclick}" style="cursor:pointer;background:var(--card);border:1px solid var(--cardline);border-left:3px solid ${rc?accent:"var(--cardline)"};border-radius:10px;padding:8px 10px;min-height:52px;display:flex;flex-direction:column;justify-content:center">
+      ${rc
+        ? `<div style="font-size:12px;font-weight:600;color:var(--ink);line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${esc(rc.name)}</div>
+           <div style="font-size:10px;color:var(--ink3);margin-top:2px;font-family:'Space Mono',monospace">${rc.time}</div>`
+        : `<div style="font-size:20px;color:var(--cardline);line-height:1">${empty}</div>`}
+    </div>`;
+
+  return `
+  <div class="scroll" style="padding:12px 14px 80px">
+    <div style="display:flex;gap:6px;margin-bottom:6px;padding:0 2px">
+      <div style="width:46px;flex-shrink:0"></div>
+      <div style="flex:1;font-family:'Space Mono',monospace;font-size:8px;letter-spacing:1px;color:var(--ink3);text-align:center">ONTBIJT</div>
+      <div style="flex:1;font-family:'Space Mono',monospace;font-size:8px;letter-spacing:1px;color:var(--ink3);text-align:center">LUNCH</div>
+      <div style="flex:1;font-family:'Space Mono',monospace;font-size:8px;letter-spacing:1px;color:var(--ink3);text-align:center">DINER</div>
+    </div>
+    ${DAYS.map(day=>{
+      const w=S.week[day]||{};
+      const od=w.ontbijt_dirk, os=w.ontbijt_shelley;
+      const lu=w.lunch_shelley||w.lunch_dirk, luD=w.lunch_dirk, luS=w.lunch_shelley;
+      const di=w.diner;
+      const obSame=od&&os&&od.id===os.id;
+      const luSame=luD&&luS&&luD.id===luS.id;
+
+      // Ontbijt cell: show samen if same, else split
+      const obCell=obSame
+        ? cell(od,"+","pickSlot('"+day+"','ontbijt_dirk')","var(--honey)")
+        : `<div onclick="pickSlot('${day}','ontbijt_dirk')" style="cursor:pointer;background:var(--card);border:1px solid var(--cardline);border-left:3px solid ${(od||os)?"var(--honey)":"var(--cardline)"};border-radius:10px;padding:6px 8px;min-height:52px;display:flex;flex-direction:column;justify-content:center;gap:3px">
+            ${od?`<div style="display:flex;align-items:center;gap:4px"><div style="width:14px;height:14px;border-radius:4px;background:var(--dirk);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;color:#fff">D</div><div style="font-size:11px;font-weight:600;color:var(--ink);line-height:1.3;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden">${esc(od.name)}</div></div>`:'<div style="font-size:10px;color:var(--ink3)">Dirk +</div>'}
+            ${os?`<div onclick="event.stopPropagation();pickSlot('${day}','ontbijt_shelley')" style="display:flex;align-items:center;gap:4px"><div style="width:14px;height:14px;border-radius:4px;background:var(--shelley);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;color:#fff">S</div><div style="font-size:11px;font-weight:600;color:var(--ink);line-height:1.3;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden">${esc(os.name)}</div></div>`:'<div style="font-size:10px;color:var(--ink3)">Shelley +</div>'}
+           </div>`;
+
+      // Lunch cell
+      const lunchCell=!luSame&&luD&&luS
+        ? `<div style="cursor:pointer;background:var(--card);border:1px solid var(--cardline);border-left:3px solid var(--olive);border-radius:10px;padding:6px 8px;min-height:52px;display:flex;flex-direction:column;justify-content:center;gap:3px">
+            <div onclick="pickSlot('${day}','lunch_shelley')" style="font-size:11px;font-weight:600;color:var(--ink);line-height:1.3;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden">${esc(luS.name)}</div>
+            <div onclick="pickSlot('${day}','lunch_dirk')" style="display:flex;align-items:center;gap:4px"><span style="font-size:9px;background:var(--dirk);color:#fff;border-radius:4px;padding:1px 4px;font-family:'Space Mono',monospace;flex-shrink:0">MP</span><span style="font-size:11px;color:var(--ink2);line-height:1.3;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden">${esc(luD.name)}</span></div>
+           </div>`
+        : cell(lu,"+","pickSlot('"+day+"','lunch_shelley')","var(--olive)");
+
+      return `
+      <div style="display:flex;gap:6px;margin-bottom:6px;align-items:stretch">
+        <div onclick="set({activeDay:'${day}',plannerView:'dag'})" style="cursor:pointer;width:46px;flex-shrink:0;background:var(--card);border:1px solid var(--cardline);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px 4px">
+          <div style="font-family:'Space Mono',monospace;font-size:11px;font-weight:700;color:var(--ink)">${day}</div>
+          <div style="font-family:'Space Mono',monospace;font-size:11px;color:var(--ink3)">${W.nums[day]}</div>
+        </div>
+        <div style="flex:1">${obCell}</div>
+        <div style="flex:1">${lunchCell}</div>
+        <div style="flex:1">${cell(di,"+","pickSlot('"+day+"','diner')","var(--terra)")}</div>
+      </div>`;
+    }).join("")}
+    <button class="plan-cta" onclick="set({wizOpen:true,wizStep:1})">
+      🪄 Plan de hele week ${st.empty>0?`<span class="badge">${st.empty} leeg</span>`:""}
+    </button>
   </div>`;
 }
 
