@@ -406,7 +406,7 @@ r(85,3,"Bananenbrood","tussendoortje","60 min",[i("Banaan","2"),i("Ei","2"),i("B
 ];
 
 // ===================== STATE & STORAGE =====================
-const SK="wm_week_v2", CK="wm_custom_v2", NK="wm_notes_v2", CHK="wm_check_v2", CFG="wm_cfg_v2", BOK="wm_boodOver_v1";
+const SK="wm_week_v2", CK="wm_custom_v2", NK="wm_notes_v2", CHK="wm_check_v2", CFG="wm_cfg_v2", BOK="wm_boodOver_v1", AK="wm_apikey_v1";
 function lsGet(k,d){try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}}
 function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
 
@@ -452,7 +452,7 @@ let S={
   detail:null,     // {rc,day,rowId}
   detailTab:"ing",
   addOpen:false, addTab:"manual", editRc:null,
-  igCap:"", igUrl:"", igSt:null, igErr:"", igPrev:null,
+  igCap:"", igUrl:"", igSt:null, igErr:"", igPrev:null, igApiKey:lsGet(AK,""),
   wizOpen:false, wizStep:1,
   // wizard config
   wiz:{
@@ -746,14 +746,18 @@ async function exportWeekImg(type){
 async function doImport(){
   const cap=document.getElementById("ig-cap").value.trim();
   const url=document.getElementById("ig-url").value.trim();
+  const keyInput=document.getElementById("ig-key");
+  const apiKey=(keyInput?keyInput.value.trim():"")||S.igApiKey;
+  if(!apiKey){toast("Vul eerst je Anthropic API key in");return;}
   if(cap.length<20){toast("Plak eerst een caption");return;}
-  set({igSt:"loading",igErr:"",igPrev:null,igCap:cap,igUrl:url});
+  if(apiKey!==S.igApiKey){lsSet(AK,apiKey);}
+  set({igSt:"loading",igErr:"",igPrev:null,igCap:cap,igUrl:url,igApiKey:apiKey});
   try{
     const msg="Extraheer het recept uit deze Instagram caption. Geef ALLEEN geldige JSON, geen markdown. "+
       "Formaat: {name, category, time, servings, ingredients:[{n,a}], steps:[]}. "+
       "category is: ontbijt, lunch, diner of tussendoortje. servings is een getal. "+
       "Geen recept gevonden: {error:true}. Caption: "+cap;
-    const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1500,messages:[{role:"user",content:msg}]})});
+    const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-allow-browser-calls":"true"},body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:1500,messages:[{role:"user",content:msg}]})});
     if(!res.ok)throw new Error("API fout "+res.status);
     const data=await res.json();
     const block=(data.content||[]).find(b=>b.type==="text");
@@ -1248,6 +1252,7 @@ function renderAddSheet(){
           <b style="color:var(--ink)">Zo werkt het:</b><br>
           1. Open de Instagram post<br>2. Tik op ··· → <b>Kopieer bijschrift</b><br>3. Plak hieronder en klik Analyseer
         </div>
+        <div class="field"><label>Anthropic API key ${S.igApiKey?'<span style="color:var(--olive)">✓ opgeslagen</span>':''}</label><input id="ig-key" type="password" value="${esc(S.igApiKey)}" placeholder="sk-ant-api03-..."></div>
         <div class="field"><label>Caption</label><textarea id="ig-cap" rows="5" placeholder="Plak de Instagram caption...">${esc(S.igCap)}</textarea></div>
         <div class="field"><label>Link (optioneel)</label><input id="ig-url" value="${esc(S.igUrl)}" placeholder="https://instagram.com/..."></div>
         <button class="btn btn-ink" onclick="doImport()" ${S.igSt==="loading"?"disabled":""}>${S.igSt==="loading"?'<span class="spin">⏳</span> Analyseren...':"🔍 Analyseer recept"}</button>
