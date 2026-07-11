@@ -816,19 +816,25 @@ async function fetchCaption(){
   const url=(document.getElementById("ig-url")||{value:""}).value.trim();
   if(!url){toast("Plak eerst een Instagram link");return;}
   set({igFetchSt:"loading",igErr:"",igUrl:url});
-  try{
-    const proxy="https://api.allorigins.win/get?url="+encodeURIComponent(url);
-    const res=await fetch(proxy);
-    if(!res.ok)throw new Error("Proxy fout "+res.status);
-    const data=await res.json();
-    const html=data.contents||"";
+  const extractOgDesc=(html)=>{
     const m=html.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i)
            ||html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:description["']/i);
-    if(!m||!m[1])throw new Error("Geen bijschrift gevonden — Instagram blokte de aanvraag");
-    const cap=m[1].replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&#39;/g,"'").replace(/&quot;/g,'"');
-    set({igCap:cap,igFetchSt:"ok"});
-    const ta=document.getElementById("ig-cap");if(ta)ta.value=cap;
-  }catch(e){set({igFetchSt:"err",igErr:e.message||"Ophalen mislukt"});}
+    return m?m[1]:null;
+  };
+  const decode=(s)=>s.replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&#39;/g,"'").replace(/&quot;/g,'"');
+  let html=null;
+  // Try corsproxy.io first (returns raw HTML)
+  try{const r=await fetch(`https://corsproxy.io/?${encodeURIComponent(url)}`);if(r.ok)html=await r.text();}catch(e){}
+  // Fallback: allorigins.win (returns JSON with contents field)
+  if(!html){
+    try{const r=await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`);if(r.ok){const d=await r.json();html=d.contents||"";}}catch(e){}
+  }
+  if(!html){set({igFetchSt:"err",igErr:"Proxy niet bereikbaar — controleer je verbinding"});return;}
+  const raw=extractOgDesc(html);
+  if(!raw){set({igFetchSt:"err",igErr:"Instagram blokkeert automatisch ophalen. Plak het bijschrift handmatig hieronder."});return;}
+  const cap=decode(raw);
+  set({igCap:cap,igFetchSt:"ok"});
+  const ta=document.getElementById("ig-cap");if(ta)ta.value=cap;
 }
 async function doImport(){
   const cap=(document.getElementById("ig-cap")||{value:""}).value.trim()||S.igCap;
@@ -1346,12 +1352,10 @@ function renderAddSheet(){
         </div>
         <div class="field">
           <label>Instagram link</label>
-          <div style="display:flex;gap:8px;align-items:center">
-            <input id="ig-url" value="${esc(S.igUrl)}" placeholder="https://www.instagram.com/p/..." style="flex:1;min-width:0">
-            <button class="btn btn-line" onclick="fetchCaption()" style="white-space:nowrap;flex-shrink:0" ${S.igFetchSt==="loading"?"disabled":""}>${S.igFetchSt==="loading"?'<span class="spin">⏳</span>':"⬇ Ophalen"}</button>
-          </div>
-          ${S.igFetchSt==="ok"?'<div style="color:var(--olive);font-size:12px;margin-top:5px">✓ Bijschrift opgehaald</div>':""}
-          ${S.igFetchSt==="err"?`<div style="color:var(--rust);font-size:12px;margin-top:5px">⚠️ ${esc(S.igErr)} — plak het bijschrift handmatig hieronder</div>`:""}
+          <input id="ig-url" value="${esc(S.igUrl)}" placeholder="https://www.instagram.com/p/...">
+          <button class="btn btn-line" onclick="fetchCaption()" style="margin-top:8px;width:100%" ${S.igFetchSt==="loading"?"disabled":""}>${S.igFetchSt==="loading"?'<span class="spin">⏳</span> Ophalen...':"⬇ Bijschrift ophalen"}</button>
+          ${S.igFetchSt==="ok"?'<div style="color:var(--olive);font-size:12px;margin-top:6px">✓ Bijschrift opgehaald</div>':""}
+          ${S.igFetchSt==="err"?`<div style="color:var(--rust);font-size:12px;margin-top:6px">⚠️ ${esc(S.igErr)}</div>`:""}
         </div>
         <div class="field"><label>Bijschrift <span style="color:var(--ink3);font-size:11px">(automatisch gevuld, of plak handmatig)</span></label><textarea id="ig-cap" rows="4" placeholder="Bijschrift verschijnt hier na ophalen, of plak het zelf...">${esc(S.igCap)}</textarea></div>
         <button class="btn btn-ink" onclick="doImport()" ${S.igSt==="loading"?"disabled":""}>${S.igSt==="loading"?'<span class="spin">⏳</span> Analyseren...':"🔍 Analyseer recept"}</button>
