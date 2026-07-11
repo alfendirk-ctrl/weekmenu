@@ -131,7 +131,7 @@ input,textarea,select{font-family:inherit}
 /* MODAL */
 .overlay{position:fixed;inset:0;background:rgba(33,30,25,0.6);backdrop-filter:blur(3px);display:flex;align-items:flex-end;justify-content:center;z-index:100}
 @media(min-width:560px){.overlay{align-items:center}}
-.sheet{background:var(--paper);width:100%;max-width:560px;max-height:90vh;overflow-y:auto;border-radius:28px 28px 0 0;padding:8px 20px 30px}
+.sheet{background:var(--paper);width:100%;max-width:560px;max-height:90dvh;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;border-radius:28px 28px 0 0;padding:8px 20px calc(env(safe-area-inset-bottom,0px) + 30px)}
 @media(min-width:560px){.sheet{border-radius:28px}}
 .sheet-handle{width:40px;height:4px;border-radius:2px;background:var(--cardline);margin:8px auto 16px}
 .sheet-title{font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:24px;letter-spacing:-0.5px;color:var(--ink);margin-bottom:4px}
@@ -821,7 +821,19 @@ async function fetchCaption(){
            ||html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:description["']/i);
     return m?m[1]:null;
   };
-  const decode=(s)=>s.replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&#39;/g,"'").replace(/&quot;/g,'"');
+  const decode=(s)=>{
+    // decode numeric HTML entities (emojis) and named entities
+    return s.replace(/&#x([0-9a-fA-F]+);/g,(_,h)=>String.fromCodePoint(parseInt(h,16)))
+            .replace(/&#(\d+);/g,(_,d)=>String.fromCodePoint(parseInt(d,10)))
+            .replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">")
+            .replace(/&#39;/g,"'").replace(/&apos;/g,"'").replace(/&quot;/g,'"');
+  };
+  const stripIgMeta=(s)=>{
+    // og:description starts with "144K likes, 75 comments - username on Date: "caption""
+    // strip that prefix and surrounding quotes
+    const m=s.match(/^[^:]+:\s*[""“]?([\s\S]+?)[""”]?$/);
+    return m?m[1].trim():s.trim();
+  };
   let html=null;
   // Try corsproxy.io first (returns raw HTML)
   try{const r=await fetch(`https://corsproxy.io/?${encodeURIComponent(url)}`);if(r.ok)html=await r.text();}catch(e){}
@@ -832,7 +844,7 @@ async function fetchCaption(){
   if(!html){set({igFetchSt:"err",igErr:"Proxy niet bereikbaar — controleer je verbinding"});return;}
   const raw=extractOgDesc(html);
   if(!raw){set({igFetchSt:"err",igErr:"Instagram blokkeert automatisch ophalen. Plak het bijschrift handmatig hieronder."});return;}
-  const cap=decode(raw);
+  const cap=stripIgMeta(decode(raw));
   set({igCap:cap,igFetchSt:"ok"});
   const ta=document.getElementById("ig-cap");if(ta)ta.value=cap;
 }
@@ -850,10 +862,10 @@ async function doImport(){
       "Formaat: {name, category, time, servings, ingredients:[{n,a}], steps:[]}. "+
       "category is: ontbijt, lunch, diner of tussendoortje. servings is een getal. "+
       "Geen recept gevonden: {error:true}. Caption: "+cap;
-    const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
+    const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
       {method:"POST",headers:{"Content-Type":"application/json"},
        body:JSON.stringify({contents:[{parts:[{text:msg}]}]})});
-    if(!res.ok)throw new Error("API fout "+res.status+(res.status===400?" — controleer je API key":""));
+    if(!res.ok)throw new Error("API fout "+res.status+(res.status===400||res.status===403?" — ongeldige API key (moet beginnen met AIzaSy...)":(res.status===404?" — model niet gevonden":"")));
     const data=await res.json();
     const txt=((data.candidates||[])[0]?.content?.parts||[])[0]?.text||"";
     const fi=txt.indexOf("{"),li=txt.lastIndexOf("}");
