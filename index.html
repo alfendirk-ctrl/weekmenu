@@ -407,7 +407,7 @@ r(85,3,"Bananenbrood","tussendoortje","60 min",[i("Banaan","2"),i("Ei","2"),i("B
 ];
 
 // ===================== STATE & STORAGE =====================
-const SK="wm_week_v2", CK="wm_custom_v2", NK="wm_notes_v2", CHK="wm_check_v2", CFG="wm_cfg_v2", BOK="wm_boodOver_v1", AK="wm_apikey_v1";
+const SK="wm_week_v2", CK="wm_custom_v2", NK="wm_notes_v2", CHK="wm_check_v2", CFG="wm_cfg_v2", BOK="wm_boodOver_v1", AK="wm_apikey_v1", GK="wm_geminikey_v1";
 const SB_URL="https://nejjocgplgbgmdornurw.supabase.co";
 const SB_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5lampvY2dwbGdiZ21kb3JudXJ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM2MTk4MzEsImV4cCI6MjA5OTE5NTgzMX0.dJ_xMqV4Qp-1gZKifYJ-qTW6p9GhoMdfxlr_zIJx7Ko";
 const HHID_KEY="wm_household_v1";
@@ -458,7 +458,7 @@ let S={
   detail:null,     // {rc,day,rowId}
   detailTab:"ing",
   addOpen:false, addTab:"manual", editRc:null,
-  igCap:"", igUrl:"", igSt:null, igErr:"", igPrev:null, igApiKey:lsGet(AK,""),
+  igCap:"", igUrl:"", igSt:null, igFetchSt:null, igErr:"", igPrev:null, geminiKey:lsGet(GK,""),
   syncOpen:false, syncSt:"idle",
   wizOpen:false, wizStep:1,
   // wizard config
@@ -812,29 +812,48 @@ async function exportWeekImg(type){
 }
 
 // ===================== IG IMPORT =====================
+async function fetchCaption(){
+  const url=(document.getElementById("ig-url")||{value:""}).value.trim();
+  if(!url){toast("Plak eerst een Instagram link");return;}
+  set({igFetchSt:"loading",igErr:"",igUrl:url});
+  try{
+    const proxy="https://api.allorigins.win/get?url="+encodeURIComponent(url);
+    const res=await fetch(proxy);
+    if(!res.ok)throw new Error("Proxy fout "+res.status);
+    const data=await res.json();
+    const html=data.contents||"";
+    const m=html.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i)
+           ||html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:description["']/i);
+    if(!m||!m[1])throw new Error("Geen bijschrift gevonden — Instagram blokte de aanvraag");
+    const cap=m[1].replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&#39;/g,"'").replace(/&quot;/g,'"');
+    set({igCap:cap,igFetchSt:"ok"});
+    const ta=document.getElementById("ig-cap");if(ta)ta.value=cap;
+  }catch(e){set({igFetchSt:"err",igErr:e.message||"Ophalen mislukt"});}
+}
 async function doImport(){
-  const cap=document.getElementById("ig-cap").value.trim();
-  const url=document.getElementById("ig-url").value.trim();
+  const cap=(document.getElementById("ig-cap")||{value:""}).value.trim()||S.igCap;
+  const url=(document.getElementById("ig-url")||{value:""}).value.trim()||S.igUrl;
   const keyInput=document.getElementById("ig-key");
-  const apiKey=(keyInput?keyInput.value.trim():"")||S.igApiKey;
-  if(!apiKey){toast("Vul eerst je Anthropic API key in");return;}
-  if(cap.length<20){toast("Plak eerst een caption");return;}
-  if(apiKey!==S.igApiKey){lsSet(AK,apiKey);}
-  set({igSt:"loading",igErr:"",igPrev:null,igCap:cap,igUrl:url,igApiKey:apiKey});
+  const apiKey=(keyInput?keyInput.value.trim():"")||S.geminiKey;
+  if(!cap||cap.length<20){toast("Haal eerst het bijschrift op via de link, of plak het handmatig");return;}
+  if(!apiKey){toast("Vul je gratis Google Gemini API key in");return;}
+  if(apiKey!==S.geminiKey){lsSet(GK,apiKey);}
+  set({igSt:"loading",igErr:"",igPrev:null,igCap:cap,igUrl:url,geminiKey:apiKey});
   try{
     const msg="Extraheer het recept uit deze Instagram caption. Geef ALLEEN geldige JSON, geen markdown. "+
       "Formaat: {name, category, time, servings, ingredients:[{n,a}], steps:[]}. "+
       "category is: ontbijt, lunch, diner of tussendoortje. servings is een getal. "+
       "Geen recept gevonden: {error:true}. Caption: "+cap;
-    const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-allow-browser-calls":"true"},body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:1500,messages:[{role:"user",content:msg}]})});
-    if(!res.ok)throw new Error("API fout "+res.status);
+    const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
+      {method:"POST",headers:{"Content-Type":"application/json"},
+       body:JSON.stringify({contents:[{parts:[{text:msg}]}]})});
+    if(!res.ok)throw new Error("API fout "+res.status+(res.status===400?" — controleer je API key":""));
     const data=await res.json();
-    const block=(data.content||[]).find(b=>b.type==="text");
-    const txt=block?block.text:"";
+    const txt=((data.candidates||[])[0]?.content?.parts||[])[0]?.text||"";
     const fi=txt.indexOf("{"),li=txt.lastIndexOf("}");
-    if(fi<0||li<=fi)throw new Error("Geen recept gevonden");
+    if(fi<0||li<=fi)throw new Error("Geen recept gevonden in de tekst");
     const p=JSON.parse(txt.slice(fi,li+1));
-    if(p.error)throw new Error("Geen recept in deze tekst gevonden");
+    if(p.error)throw new Error("Geen recept in dit bijschrift gevonden");
     set({igSt:"ok",igPrev:{id:Date.now(),ebook:0,custom:true,voor:"beiden",name:p.name||"",category:p.category||"ontbijt",time:p.time||"?",servings:p.servings||2,ingredients:p.ingredients||[],steps:p.steps||[],link:url||null}});
   }catch(e){set({igSt:"err",igErr:e.message||"Mislukt"});}
 }
@@ -851,7 +870,7 @@ function saveIgRecipe(){
     steps:document.getElementById("ig-steps").value.split(nl).filter(Boolean),
   };
   saveCustomRecipe(rc);
-  set({igSt:null,igPrev:null,igCap:"",igUrl:""});
+  set({igSt:null,igFetchSt:null,igPrev:null,igCap:"",igUrl:""});
 }
 
 // ===================== FORM =====================
@@ -1311,23 +1330,30 @@ function renderAddSheet(){
   const cat=rc?rc.category:"ontbijt";const srv=rc?rc.servings||2:2;
   const p=S.igPrev;
   return `
-  <div class="overlay" onclick="set({addOpen:false,editRc:null,igSt:null,igPrev:null})">
+  <div class="overlay" onclick="set({addOpen:false,editRc:null,igSt:null,igFetchSt:null,igPrev:null,igCap:'',igUrl:''})">
     <div class="sheet" onclick="event.stopPropagation()">
       <div class="sheet-handle"></div>
       <div class="sheet-title">${isEdit?"Recept bewerken":"Nieuw recept"}</div>
       ${!isEdit?`<div class="tab-row">
-        <button class="tab-btn ${tab==="manual"?"active":""}" onclick="set({addTab:'manual',igSt:null,igPrev:null})">✍️ Handmatig</button>
+        <button class="tab-btn ${tab==="manual"?"active":""}" onclick="set({addTab:'manual',igSt:null,igFetchSt:null,igPrev:null})">✍️ Handmatig</button>
         <button class="tab-btn ${tab==="ig"?"active":""}" onclick="set({addTab:'ig'})">📸 Instagram</button>
       </div>`:""}
 
       ${tab==="ig"&&!isEdit?`
-        <div style="background:var(--card);border:1px solid var(--cardline);border-radius:14px;padding:14px;font-size:13px;color:var(--ink2);line-height:1.6;margin-bottom:14px">
-          <b style="color:var(--ink)">Zo werkt het:</b><br>
-          1. Open de Instagram post<br>2. Tik op ··· → <b>Kopieer bijschrift</b><br>3. Plak hieronder en klik Analyseer
+        <div class="field">
+          <label>Google Gemini API key ${S.geminiKey?'<span style="color:var(--olive)">✓ opgeslagen</span>':''} <a href="https://aistudio.google.com/apikey" target="_blank" style="color:var(--ink3);font-size:11px;font-family:\'Space Mono\',monospace">→ gratis ophalen</a></label>
+          <input id="ig-key" type="password" value="${esc(S.geminiKey)}" placeholder="AIzaSy...">
         </div>
-        <div class="field"><label>Anthropic API key ${S.igApiKey?'<span style="color:var(--olive)">✓ opgeslagen</span>':''}</label><input id="ig-key" type="password" value="${esc(S.igApiKey)}" placeholder="sk-ant-api03-..."></div>
-        <div class="field"><label>Caption</label><textarea id="ig-cap" rows="5" placeholder="Plak de Instagram caption...">${esc(S.igCap)}</textarea></div>
-        <div class="field"><label>Link (optioneel)</label><input id="ig-url" value="${esc(S.igUrl)}" placeholder="https://instagram.com/..."></div>
+        <div class="field">
+          <label>Instagram link</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input id="ig-url" value="${esc(S.igUrl)}" placeholder="https://www.instagram.com/p/..." style="flex:1;min-width:0">
+            <button class="btn btn-line" onclick="fetchCaption()" style="white-space:nowrap;flex-shrink:0" ${S.igFetchSt==="loading"?"disabled":""}>${S.igFetchSt==="loading"?'<span class="spin">⏳</span>':"⬇ Ophalen"}</button>
+          </div>
+          ${S.igFetchSt==="ok"?'<div style="color:var(--olive);font-size:12px;margin-top:5px">✓ Bijschrift opgehaald</div>':""}
+          ${S.igFetchSt==="err"?`<div style="color:var(--rust);font-size:12px;margin-top:5px">⚠️ ${esc(S.igErr)} — plak het bijschrift handmatig hieronder</div>`:""}
+        </div>
+        <div class="field"><label>Bijschrift <span style="color:var(--ink3);font-size:11px">(automatisch gevuld, of plak handmatig)</span></label><textarea id="ig-cap" rows="4" placeholder="Bijschrift verschijnt hier na ophalen, of plak het zelf...">${esc(S.igCap)}</textarea></div>
         <button class="btn btn-ink" onclick="doImport()" ${S.igSt==="loading"?"disabled":""}>${S.igSt==="loading"?'<span class="spin">⏳</span> Analyseren...':"🔍 Analyseer recept"}</button>
         ${S.igSt==="err"?`<div style="background:#CD6A4522;border-radius:13px;padding:12px;font-size:13px;color:var(--rust);margin-top:12px">${esc(S.igErr)}</div>`:""}
         ${S.igSt==="ok"&&p?`
@@ -1911,7 +1937,7 @@ window.onDayNote=onDayNote;
 window.toggleCheck=toggleCheck; window.toggleCookDay=toggleCookDay; window.runAutofill=runAutofill;
 window.openBoodDetail=openBoodDetail; window.closeBoodDetail=closeBoodDetail;
 window.saveBoodOverride=saveBoodOverride; window.deleteBoodOverride=deleteBoodOverride;
-window.doImport=doImport; window.saveIgRecipe=saveIgRecipe; window.saveForm=saveForm; window.setFormVoor=setFormVoor;
+window.fetchCaption=fetchCaption; window.doImport=doImport; window.saveIgRecipe=saveIgRecipe; window.saveForm=saveForm; window.setFormVoor=setFormVoor;
 window.deleteCustomRecipe=deleteCustomRecipe; window.openEdit=openEdit;
 window.exportImg=exportImg; window.exportWeekImg=exportWeekImg;
 window.syncPush=syncPush; window.syncPull=syncPull; window.joinHousehold=joinHousehold;
