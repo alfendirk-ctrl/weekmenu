@@ -813,9 +813,9 @@ async function exportWeekImg(type){
 
 // ===================== IG IMPORT =====================
 async function fetchCaption(){
-  const url=(document.getElementById("ig-url")||{value:""}).value.trim();
+  const url=S.igUrl||(document.getElementById("ig-url")||{value:""}).value.trim();
   if(!url){toast("Plak eerst een Instagram link");return;}
-  set({igFetchSt:"loading",igErr:"",igUrl:url});
+  set({igFetchSt:"loading",igErr:""});
   const extractOgDesc=(html)=>{
     const m=html.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i)
            ||html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:description["']/i);
@@ -849,14 +849,15 @@ async function fetchCaption(){
   const ta=document.getElementById("ig-cap");if(ta)ta.value=cap;
 }
 async function doImport(){
-  const cap=(document.getElementById("ig-cap")||{value:""}).value.trim()||S.igCap;
-  const url=(document.getElementById("ig-url")||{value:""}).value.trim()||S.igUrl;
-  const keyInput=document.getElementById("ig-key");
-  const apiKey=(keyInput?keyInput.value.trim():"")||S.geminiKey;
+  const cap=S.igCap||(document.getElementById("ig-cap")||{value:""}).value.trim();
+  const url=S.igUrl||(document.getElementById("ig-url")||{value:""}).value.trim();
+  const apiKey=S.geminiKey;
   if(!cap||cap.length<20){toast("Haal eerst het bijschrift op via de link, of plak het handmatig");return;}
-  if(!apiKey){toast("Vul je gratis Google Gemini API key in");return;}
-  if(apiKey!==S.geminiKey){lsSet(GK,apiKey);}
-  set({igSt:"loading",igErr:"",igPrev:null,igCap:cap,igUrl:url,geminiKey:apiKey});
+  if(!apiKey){toast("Vul je Google Gemini API key in");return;}
+  if(!apiKey.startsWith("AIza")){
+    set({igSt:"err",igErr:"Ongeldige key — een Gemini API key begint altijd met 'AIzaSy'. Haal een gratis key op via aistudio.google.com/apikey"});return;
+  }
+  set({igSt:"loading",igErr:"",igPrev:null});
   try{
     const msg="Extraheer het recept uit deze Instagram caption. Geef ALLEEN geldige JSON, geen markdown. "+
       "Formaat: {name, category, time, servings, ingredients:[{n,a}], steps:[]}. "+
@@ -865,7 +866,11 @@ async function doImport(){
     const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
       {method:"POST",headers:{"Content-Type":"application/json"},
        body:JSON.stringify({contents:[{parts:[{text:msg}]}]})});
-    if(!res.ok)throw new Error("API fout "+res.status+(res.status===400||res.status===403?" — ongeldige API key (moet beginnen met AIzaSy...)":(res.status===404?" — model niet gevonden":"")));
+    if(!res.ok){
+      let errMsg="API fout "+res.status;
+      try{const ed=await res.json();errMsg=ed?.error?.message||errMsg;}catch(e){}
+      throw new Error(errMsg);
+    }
     const data=await res.json();
     const txt=((data.candidates||[])[0]?.content?.parts||[])[0]?.text||"";
     const fi=txt.indexOf("{"),li=txt.lastIndexOf("}");
@@ -1360,16 +1365,17 @@ function renderAddSheet(){
       ${tab==="ig"&&!isEdit?`
         <div class="field">
           <label>Google Gemini API key ${S.geminiKey?'<span style="color:var(--olive)">✓ opgeslagen</span>':''} <a href="https://aistudio.google.com/apikey" target="_blank" style="color:var(--ink3);font-size:11px;font-family:\'Space Mono\',monospace">→ gratis ophalen</a></label>
-          <input id="ig-key" type="password" value="${esc(S.geminiKey)}" placeholder="AIzaSy...">
+          <input id="ig-key" type="password" value="${esc(S.geminiKey)}" placeholder="AIzaSy..." oninput="S.geminiKey=this.value;lsSet(GK,this.value)">
+          ${S.geminiKey&&!S.geminiKey.startsWith("AIza")?'<div style="color:var(--rust);font-size:12px;margin-top:5px">⚠️ Ongeldige key — moet beginnen met AIzaSy</div>':""}
         </div>
         <div class="field">
           <label>Instagram link</label>
-          <input id="ig-url" value="${esc(S.igUrl)}" placeholder="https://www.instagram.com/p/...">
+          <input id="ig-url" value="${esc(S.igUrl)}" placeholder="https://www.instagram.com/p/..." oninput="S.igUrl=this.value">
           <button class="btn btn-line" onclick="fetchCaption()" style="margin-top:8px;width:100%" ${S.igFetchSt==="loading"?"disabled":""}>${S.igFetchSt==="loading"?'<span class="spin">⏳</span> Ophalen...':"⬇ Bijschrift ophalen"}</button>
           ${S.igFetchSt==="ok"?'<div style="color:var(--olive);font-size:12px;margin-top:6px">✓ Bijschrift opgehaald</div>':""}
           ${S.igFetchSt==="err"?`<div style="color:var(--rust);font-size:12px;margin-top:6px">⚠️ ${esc(S.igErr)}</div>`:""}
         </div>
-        <div class="field"><label>Bijschrift <span style="color:var(--ink3);font-size:11px">(automatisch gevuld, of plak handmatig)</span></label><textarea id="ig-cap" rows="4" placeholder="Bijschrift verschijnt hier na ophalen, of plak het zelf...">${esc(S.igCap)}</textarea></div>
+        <div class="field"><label>Bijschrift <span style="color:var(--ink3);font-size:11px">(automatisch gevuld, of plak handmatig)</span></label><textarea id="ig-cap" rows="4" placeholder="Bijschrift verschijnt hier na ophalen, of plak het zelf..." oninput="S.igCap=this.value">${esc(S.igCap)}</textarea></div>
         <button class="btn btn-ink" onclick="doImport()" ${S.igSt==="loading"?"disabled":""}>${S.igSt==="loading"?'<span class="spin">⏳</span> Analyseren...':"🔍 Analyseer recept"}</button>
         ${S.igSt==="err"?`<div style="background:#CD6A4522;border-radius:13px;padding:12px;font-size:13px;color:var(--rust);margin-top:12px">${esc(S.igErr)}</div>`:""}
         ${S.igSt==="ok"&&p?`
