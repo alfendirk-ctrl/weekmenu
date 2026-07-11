@@ -9,6 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@10..48,400..700&family=Hanken+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root{
   --bg:#211E19; --paper:#F3EAD8; --card:#FBF6EC; --cardline:#E6D9C2;
@@ -407,6 +408,11 @@ r(85,3,"Bananenbrood","tussendoortje","60 min",[i("Banaan","2"),i("Ei","2"),i("B
 
 // ===================== STATE & STORAGE =====================
 const SK="wm_week_v2", CK="wm_custom_v2", NK="wm_notes_v2", CHK="wm_check_v2", CFG="wm_cfg_v2", BOK="wm_boodOver_v1", AK="wm_apikey_v1";
+const SB_URL="https://nejjocgplgbgmdornurw.supabase.co";
+const SB_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5lampvY2dwbGdiZ21kb3JudXJ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM2MTk4MzEsImV4cCI6MjA5OTE5NTgzMX0.dJ_xMqV4Qp-1gZKifYJ-qTW6p9GhoMdfxlr_zIJx7Ko";
+const HHID_KEY="wm_household_v1";
+let _sb=null;
+function getSb(){if(!_sb)_sb=window.supabase.createClient(SB_URL,SB_KEY);return _sb;}
 function lsGet(k,d){try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}}
 function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
 
@@ -453,6 +459,7 @@ let S={
   detailTab:"ing",
   addOpen:false, addTab:"manual", editRc:null,
   igCap:"", igUrl:"", igSt:null, igErr:"", igPrev:null, igApiKey:lsGet(AK,""),
+  syncOpen:false, syncSt:"idle",
   wizOpen:false, wizStep:1,
   // wizard config
   wiz:{
@@ -482,6 +489,68 @@ function save(){
   lsSet(weekStoreKey(S.weekOffset||0),S.week);
   lsSet(notesStoreKey(S.weekOffset||0),S.notes);
   lsSet(CK,S.custom);lsSet(CHK,S.checked);lsSet(CFG,S.cfg);lsSet(BOK,S.boodOverride);
+  clearTimeout(window._syncT);window._syncT=setTimeout(syncPush,3000);
+}
+
+// ===================== SYNC =====================
+async function syncPush(){
+  const hid=lsGet(HHID_KEY,null);if(!hid)return;
+  S.syncSt="syncing";render();
+  try{
+    const state={};
+    for(let i=0;i<localStorage.length;i++){
+      const k=localStorage.key(i);
+      if(k&&k.startsWith('wm_')&&k!==HHID_KEY){try{state[k]=JSON.parse(localStorage.getItem(k));}catch(e){}}
+    }
+    const {error}=await getSb().from('weekmenu_sync').upsert({household_id:hid,state,updated_at:new Date().toISOString()});
+    S.syncSt=error?"err":"ok";
+  }catch(e){S.syncSt="err";}
+  render();setTimeout(()=>{S.syncSt="idle";render();},3000);
+}
+async function syncPull(hid){
+  hid=hid||lsGet(HHID_KEY,null);if(!hid)return;
+  S.syncSt="syncing";render();
+  try{
+    const {data,error}=await getSb().from('weekmenu_sync').select('state').eq('household_id',hid).single();
+    if(!error&&data?.state){
+      Object.entries(data.state).forEach(([k,v])=>localStorage.setItem(k,JSON.stringify(v)));
+      S.custom=lsGet(CK,[]);S.checked=lsGet(CHK,{});
+      S.cfg=lsGet(CFG,{cookDays:{},store:"Albert Heijn"});
+      S.boodOverride=lsGet(BOK,{});
+      S.week=lsGet(weekStoreKey(S.weekOffset||0),emptyWeek());
+      S.notes=lsGet(notesStoreKey(S.weekOffset||0),{});
+      S.syncSt="ok";
+    }else{S.syncSt=error?"err":"ok";}
+  }catch(e){S.syncSt="err";}
+  render();setTimeout(()=>{S.syncSt="idle";render();},3000);
+}
+function joinHousehold(id){
+  if(!id||id.length<10){toast("Ongeldige code");return;}
+  lsSet(HHID_KEY,id);set({syncOpen:false});
+  toast("Verbonden! Data wordt geladen...");
+  syncPull(id);
+}
+function renderSyncModal(){
+  const hid=lsGet(HHID_KEY,null)||"";
+  const st=S.syncSt;
+  return `
+  <div class="overlay" onclick="set({syncOpen:false})">
+    <div class="sheet" onclick="event.stopPropagation()">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title">Synchronisatie ☁️</div>
+      <div class="sheet-sub">Voer dezelfde code in op elk apparaat om te synchroniseren</div>
+      <div style="font-family:'Space Mono',monospace;font-size:11px;word-break:break-all;background:var(--card);border:1px solid var(--cardline);border-radius:14px;padding:14px;color:var(--ink);margin-bottom:10px;line-height:1.8">${esc(hid)}</div>
+      <button class="btn btn-line" style="margin-bottom:20px" onclick="navigator.clipboard.writeText('${esc(hid)}').then(()=>toast('Code gekopieerd!'))">📋 Kopieer sync code</button>
+      <div style="font-family:'Space Mono',monospace;font-size:11px;letter-spacing:1px;color:var(--ink3);margin-bottom:8px">ANDER APPARAAT KOPPELEN</div>
+      <div class="field"><input id="sync-code-in" placeholder="Plak hier de sync code van het andere apparaat" style="font-family:'Space Mono',monospace;font-size:12px"></div>
+      <button class="btn btn-terra" onclick="joinHousehold(document.getElementById('sync-code-in').value.trim())">→ Verbinden & laden</button>
+      <div class="btn-row" style="margin-top:12px">
+        <button class="btn btn-line" onclick="syncPull()" ${st==='syncing'?'disabled':''}>⬇ Ophalen</button>
+        <button class="btn btn-ink" onclick="syncPush()" ${st==='syncing'?'disabled':''}>⬆ Opslaan</button>
+      </div>
+      ${st==='err'?'<div style="color:var(--rust);font-size:13px;margin-top:10px;text-align:center">⚠️ Sync mislukt — controleer je verbinding</div>':""}
+    </div>
+  </div>`;
 }
 function switchWeek(offset){
   save(); // flush current week first
@@ -835,6 +904,7 @@ function render(){
     ${S.boodDetail!==null?renderBoodDetail():""}
     ${S.wizOpen?renderWizard():""}
     ${S.addOpen?renderAddSheet():""}
+    ${S.syncOpen?renderSyncModal():""}
   `;
 
   // Restore scroll positions
@@ -868,7 +938,10 @@ function renderPlanner(){
         </div>
         <div class="h-title">Ons<br>weekmenu</div>
       </div>
-      ${avatarStack(["shelley","dirk","maeve"],"big")}
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+        ${avatarStack(["shelley","dirk","maeve"],"big")}
+        <button onclick="set({syncOpen:true})" style="background:none;border:none;cursor:pointer;font-family:'Space Mono',monospace;font-size:10px;color:${S.syncSt==='ok'?'var(--olive)':S.syncSt==='err'?'var(--rust)':'var(--ink3)'};display:flex;align-items:center;gap:3px">${S.syncSt==='syncing'?'<span class="spin">⏳</span>':S.syncSt==='ok'?'☁️✓':S.syncSt==='err'?'⚠️':'☁️'} sync</button>
+      </div>
     </div>
     <div class="prog-note">${st.empty===0?"Jullie week staat helemaal klaar. ✨":`Nog ${st.empty} ${st.empty===1?"maaltijd":"maaltijden"} te kiezen — dan staat jullie week klaar.`}</div>
     <div style="display:flex;gap:6px;margin-top:10px">
@@ -1841,9 +1914,12 @@ window.saveBoodOverride=saveBoodOverride; window.deleteBoodOverride=deleteBoodOv
 window.doImport=doImport; window.saveIgRecipe=saveIgRecipe; window.saveForm=saveForm; window.setFormVoor=setFormVoor;
 window.deleteCustomRecipe=deleteCustomRecipe; window.openEdit=openEdit;
 window.exportImg=exportImg; window.exportWeekImg=exportWeekImg;
+window.syncPush=syncPush; window.syncPull=syncPull; window.joinHousehold=joinHousehold;
 
 // ===================== INIT =====================
+if(!lsGet(HHID_KEY,null)){lsSet(HHID_KEY,crypto.randomUUID());}
 render();
+syncPull().catch(()=>{});
 </script>
 </body>
 </html>
