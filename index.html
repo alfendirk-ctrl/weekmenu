@@ -855,30 +855,33 @@ async function doImport(){
   if(!apiKey){toast("Vul je Google Gemini API key in");return;}
   set({igSt:"loading",igErr:"",igPrev:null});
   try{
+    // Step 1: discover which models are available for this key
+    const base="https://generativelanguage.googleapis.com/v1beta";
+    const keyParam="?key="+encodeURIComponent(apiKey);
+    let model="gemini-2.0-flash"; // default fallback
+    try{
+      const lr=await fetch(`${base}/models${keyParam}`);
+      if(lr.ok){
+        const ld=await lr.json();
+        const supported=(ld.models||[])
+          .filter(m=>(m.supportedGenerationMethods||[]).includes("generateContent"))
+          .map(m=>m.name.replace("models/",""));
+        // prefer flash models, pick first available
+        const pref=["gemini-2.0-flash","gemini-2.5-flash","gemini-1.5-flash","gemini-2.0-flash-lite"];
+        const pick=pref.find(p=>supported.some(s=>s.startsWith(p)))||supported[0];
+        if(pick)model=supported.find(s=>s.startsWith(pick))||pick;
+      }
+    }catch(e){}
+    // Step 2: call the model
     const msg="Extraheer het recept uit deze Instagram caption. Geef ALLEEN geldige JSON, geen markdown. "+
       "Formaat: {name, category, time, servings, ingredients:[{n,a}], steps:[]}. "+
       "category is: ontbijt, lunch, diner of tussendoortje. servings is een getal. "+
       "Geen recept gevonden: {error:true}. Caption: "+cap;
-    // Build attempts: multiple models × two auth methods
-    const models=["gemini-2.0-flash","gemini-1.5-flash","gemini-2.0-flash-exp","gemini-1.5-flash-latest"];
-    const attempts=[];
-    for(const v of["v1beta","v1"])for(const model of models){
-      attempts.push({url:`https://generativelanguage.googleapis.com/${v}/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,hdrs:{"Content-Type":"application/json"},lbl:`${v}/${model}+querykey`});
-      attempts.push({url:`https://generativelanguage.googleapis.com/${v}/models/${model}:generateContent`,hdrs:{"Content-Type":"application/json","x-goog-api-key":apiKey},lbl:`${v}/${model}+header`});
-    }
-    let res=null,lastErr="";
-    for(const att of attempts){
-      try{
-        res=await fetch(att.url,{method:"POST",headers:att.hdrs,body:JSON.stringify({contents:[{parts:[{text:msg}]}]})});
-        if(res.ok)break;
-        let errMsg=`${att.lbl}: ${res.status}`;
-        try{const ed=await res.json();errMsg=`${att.lbl}: ${ed?.error?.message||res.status}`;}catch(e){}
-        lastErr=errMsg;res=null;
-      }catch(e){lastErr=`${att.lbl}: ${e.message}`;res=null;}
-    }
-    if(!res){throw new Error(lastErr||"Alle methodes gefaald");}
+    const res=await fetch(`${base}/models/${model}:generateContent${keyParam}`,
+      {method:"POST",headers:{"Content-Type":"application/json"},
+       body:JSON.stringify({contents:[{parts:[{text:msg}]}]})});
     if(!res.ok){
-      let errMsg="API fout "+res.status;
+      let errMsg=`Model ${model}: fout ${res.status}`;
       try{const ed=await res.json();errMsg=ed?.error?.message||errMsg;}catch(e){}
       throw new Error(errMsg);
     }
