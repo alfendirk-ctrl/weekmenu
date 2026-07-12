@@ -872,14 +872,23 @@ async function doImport(){
         if(pick)model=supported.find(s=>s.startsWith(pick))||pick;
       }
     }catch(e){}
-    // Step 2: call the model
+    // Step 2: call the model, auto-retry once on 429 rate limit
     const msg="Extraheer het recept uit deze Instagram caption. Geef ALLEEN geldige JSON, geen markdown. "+
       "Formaat: {name, category, time, servings, ingredients:[{n,a}], steps:[]}. "+
       "category is: ontbijt, lunch, diner of tussendoortje. servings is een getal. "+
       "Geen recept gevonden: {error:true}. Caption: "+cap;
-    const res=await fetch(`${base}/models/${model}:generateContent${keyParam}`,
+    const callModel=()=>fetch(`${base}/models/${model}:generateContent${keyParam}`,
       {method:"POST",headers:{"Content-Type":"application/json"},
        body:JSON.stringify({contents:[{parts:[{text:msg}]}]})});
+    let res=await callModel();
+    if(res.status===429){
+      // rate limited — read retry delay from error body and wait
+      let wait=20;
+      try{const ed=await res.json();const m2=JSON.stringify(ed).match(/retry in ([\d.]+)s/i);if(m2)wait=Math.ceil(parseFloat(m2[1]))+1;}catch(e){}
+      set({igSt:"loading",igErr:`Even wachten... (rate limit, retry over ${wait}s)`});
+      await new Promise(r=>setTimeout(r,wait*1000));
+      res=await callModel();
+    }
     if(!res.ok){
       let errMsg=`Model ${model}: fout ${res.status}`;
       try{const ed=await res.json();errMsg=ed?.error?.message||errMsg;}catch(e){}
