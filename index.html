@@ -12,11 +12,11 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root{
-  --bg:#211E19; --paper:#F3EAD8; --card:#FBF6EC; --cardline:#E6D9C2;
-  --ink:#29241D; --ink2:#6f6757; --ink3:#9a8e78; --gold:#A98A5E;
-  --terra:#C2724E; --terra2:#E0916B; --olive:#8C9E6E; --olive2:#9DAA78;
-  --honey:#E8C06A; --amber:#D9A441; --rust:#CD6A45;
-  --shelley:#E0916B; --dirk:#8C9E6E; --maeve:#D9A441;
+  --bg:#F5F5F5; --paper:#FFFFFF; --card:#FFFFFF; --cardline:#E8E8E8;
+  --ink:#111111; --ink2:#666666; --ink3:#999999; --gold:#FF6B00;
+  --terra:#FF6B00; --terra2:#FF8C33; --olive:#27AE60; --olive2:#2ECC71;
+  --honey:#F4C430; --amber:#F9A825; --rust:#E53935;
+  --shelley:#FF6B00; --dirk:#27AE60; --maeve:#F9A825;
 }
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{background:var(--bg);font-family:'Hanken Grotesk',sans-serif;color:var(--ink);-webkit-font-smoothing:antialiased}
@@ -32,7 +32,7 @@ input,textarea,select{font-family:inherit}
 
 /* STATUS / HEADER */
 .topbar{padding:16px 22px 0}
-.kicker{font-family:'Space Mono',monospace;font-size:11px;letter-spacing:2px;color:var(--gold);text-transform:uppercase}
+.kicker{font-family:'Space Mono',monospace;font-size:11px;letter-spacing:2px;color:var(--terra);text-transform:uppercase}
 .h-title{font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:34px;letter-spacing:-1.2px;color:var(--ink);line-height:0.96;margin-top:3px}
 .avatars{display:flex}
 .avatar{width:34px;height:34px;border-radius:50%;border:2px solid var(--paper);display:flex;align-items:center;justify-content:center;font-family:'Space Mono',monospace;font-size:13px;font-weight:700;color:#fff}
@@ -44,9 +44,9 @@ input,textarea,select{font-family:inherit}
 /* WEEK STRIP */
 .weekstrip{display:flex;gap:6px;padding:16px 22px 4px;overflow-x:auto;-webkit-overflow-scrolling:touch}
 .weekstrip::-webkit-scrollbar{display:none}
-.day-pill{flex:0 0 auto;min-width:54px;padding:10px 6px;border-radius:16px;text-align:center;background:var(--card);border:1px solid var(--cardline)}
-.day-pill.active{background:var(--ink);border-color:var(--ink)}
-.day-pill.active .dp-day,.day-pill.active .dp-num,.day-pill.active .dp-dot{color:var(--paper)}
+.day-pill{flex:0 0 auto;min-width:54px;padding:10px 6px;border-radius:16px;text-align:center;background:var(--card);border:1px solid var(--cardline);box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.day-pill.active{background:var(--terra);border-color:var(--terra)}
+.day-pill.active .dp-day,.day-pill.active .dp-num,.day-pill.active .dp-dot{color:#fff}
 .dp-day{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--ink3)}
 .dp-num{font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:19px;color:var(--ink);line-height:1.1;margin-top:2px}
 .dp-fill{display:flex;gap:2px;justify-content:center;margin-top:4px}
@@ -62,7 +62,7 @@ input,textarea,select{font-family:inherit}
 .cook-tag{font-family:'Space Mono',monospace;font-size:11px;color:var(--ink3)}
 
 /* MEAL CARD */
-.meal-card{background:var(--card);border:1px solid var(--cardline);border-radius:18px;padding:13px 14px;display:flex;gap:12px;align-items:center;margin-bottom:10px;cursor:pointer;transition:transform .12s,box-shadow .12s}
+.meal-card{background:var(--card);border:1px solid var(--cardline);border-radius:18px;padding:13px 14px;display:flex;gap:12px;align-items:center;margin-bottom:10px;cursor:pointer;transition:transform .12s,box-shadow .12s;box-shadow:0 2px 10px rgba(0,0,0,.07)}
 .meal-card:active{transform:scale(0.985)}
 .meal-thumb{width:46px;height:46px;border-radius:13px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:22px}
 .meal-info{flex:1;min-width:0}
@@ -74,7 +74,7 @@ input,textarea,select{font-family:inherit}
 .mini-av{display:flex}
 .mini-avatar{width:22px;height:22px;border-radius:50%;border:1.5px solid var(--card);font-family:'Space Mono',monospace;font-size:9px;font-weight:700;color:#fff;display:flex;align-items:center;justify-content:center}
 .mini-avatar+.mini-avatar{margin-left:-7px}
-.meal-add{width:30px;height:30px;border-radius:50%;background:var(--ink);color:var(--paper);font-size:18px;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.meal-add{width:30px;height:30px;border-radius:50%;background:var(--terra);color:#fff;font-size:18px;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
 
 /* PERSON SUB-CARD (for split meals) */
 .split-row{display:flex;gap:8px;align-items:center;padding:8px 10px;border-radius:12px;margin-top:6px;background:rgba(0,0,0,0.025)}
@@ -83,28 +83,28 @@ input,textarea,select{font-family:inherit}
 .split-name.empty{color:var(--ink3);font-style:italic}
 
 /* PLAN BUTTON */
-.plan-cta{width:100%;background:var(--ink);color:var(--paper);border-radius:18px;padding:16px;display:flex;align-items:center;justify-content:center;gap:10px;font-family:'Bricolage Grotesque',sans-serif;font-weight:600;font-size:16px;margin:8px 0 4px}
-.plan-cta .badge{background:var(--terra);color:#fff;font-family:'Space Mono',monospace;font-size:11px;padding:2px 8px;border-radius:10px;font-weight:700}
+.plan-cta{width:100%;background:var(--terra);color:#fff;border-radius:14px;padding:16px;display:flex;align-items:center;justify-content:center;gap:10px;font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:16px;margin:8px 0 4px;box-shadow:0 4px 14px rgba(255,107,0,.3)}
+.plan-cta .badge{background:rgba(0,0,0,.18);color:#fff;font-family:'Space Mono',monospace;font-size:11px;padding:2px 8px;border-radius:10px;font-weight:700}
 
 /* BOTTOM NAV */
-.bottomnav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:560px;background:var(--card);border-top:1px solid var(--cardline);display:flex;justify-content:space-around;padding:10px 0 calc(10px + env(safe-area-inset-bottom));z-index:50}
+.bottomnav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:560px;background:#fff;border-top:none;box-shadow:0 -4px 20px rgba(0,0,0,.09);display:flex;justify-content:space-around;padding:10px 0 calc(10px + env(safe-area-inset-bottom));z-index:50}
 .nav-item{display:flex;flex-direction:column;align-items:center;gap:4px;opacity:0.42;background:none;padding:4px 18px}
 .nav-item.active{opacity:1}
 .nav-item .label{font-family:'Space Mono',monospace;font-size:9px;font-weight:700;letter-spacing:0.5px;color:var(--ink)}
 .nav-item.active .label{color:var(--terra)}
 
 /* RECEPTEN */
-.search-box{width:100%;background:var(--card);border:1px solid var(--cardline);border-radius:16px;padding:13px 16px;font-size:14px;color:var(--ink);outline:none;margin-bottom:12px}
+.search-box{width:100%;background:#F7F7F7;border:1.5px solid var(--cardline);border-radius:14px;padding:13px 16px;font-size:14px;color:var(--ink);outline:none;margin-bottom:12px}
 .search-box::placeholder{color:var(--ink3)}
 .chips{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;margin-bottom:14px;-webkit-overflow-scrolling:touch}
 .chips::-webkit-scrollbar{display:none}
-.chip{flex:0 0 auto;padding:8px 15px;border-radius:20px;background:var(--card);border:1px solid var(--cardline);font-family:'Space Mono',monospace;font-size:11px;color:var(--ink2);white-space:nowrap}
-.chip.active{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.chip{flex:0 0 auto;padding:8px 15px;border-radius:20px;background:var(--card);border:1.5px solid var(--cardline);font-family:'Space Mono',monospace;font-size:11px;color:var(--ink2);white-space:nowrap}
+.chip.active{background:var(--terra);color:#fff;border-color:var(--terra)}
 .chip.dirk.active{background:var(--dirk);border-color:var(--dirk)}
 .chip.shelley.active{background:var(--shelley);border-color:var(--shelley)}
 
-.rec-card{background:var(--card);border:1px solid var(--cardline);border-radius:20px;padding:15px;margin-bottom:11px;cursor:pointer}
-.rec-card.feature{background:linear-gradient(135deg,#E8C06A22,#CD6A4522);border:1px solid #E0916B55}
+.rec-card{background:var(--card);border:1px solid var(--cardline);border-radius:16px;padding:15px;margin-bottom:11px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.06)}
+.rec-card.feature{background:linear-gradient(135deg,#FF6B0010,#FF6B0006);border:1px solid #FF6B0033}
 .rec-tag{display:inline-block;font-family:'Space Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--terra);margin-bottom:5px}
 .rec-name{font-family:'Bricolage Grotesque',sans-serif;font-weight:600;font-size:18px;color:var(--ink);letter-spacing:-0.5px;line-height:1.1}
 .rec-desc{font-size:13px;color:var(--ink2);line-height:1.45;margin-top:5px}
@@ -113,14 +113,14 @@ input,textarea,select{font-family:inherit}
 .rec-mini-btn{font-family:'Space Mono',monospace;font-size:10px;padding:5px 10px;border-radius:10px;background:rgba(0,0,0,0.04);color:var(--ink2)}
 
 /* BOODSCHAPPEN */
-.bood-progress{background:var(--card);border:1px solid var(--cardline);border-radius:20px;padding:18px;margin-bottom:18px}
+.bood-progress{background:var(--card);border:1px solid var(--cardline);border-radius:20px;padding:18px;margin-bottom:18px;box-shadow:0 2px 10px rgba(0,0,0,.07)}
 .bood-bar{height:8px;border-radius:4px;background:var(--cardline);overflow:hidden;margin-top:10px}
 .bood-bar-fill{height:100%;background:var(--olive);border-radius:4px;transition:width .3s}
 .bood-group{margin-bottom:20px}
 .bood-group-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
 .bood-group-title{font-family:'Bricolage Grotesque',sans-serif;font-weight:600;font-size:16px;color:var(--ink)}
 .bood-group-count{font-family:'Space Mono',monospace;font-size:11px;color:var(--ink3)}
-.bood-item{display:flex;align-items:center;gap:13px;padding:13px 15px;background:var(--card);border:1px solid var(--cardline);border-radius:14px;margin-bottom:7px;cursor:pointer}
+.bood-item{display:flex;align-items:center;gap:13px;padding:13px 15px;background:var(--card);border:1px solid var(--cardline);border-radius:14px;margin-bottom:7px;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.05)}
 .bood-item.checked{opacity:0.5}
 .bood-item.checked .bi-name{text-decoration:line-through}
 .bi-check{width:22px;height:22px;border-radius:7px;border:2px solid var(--cardline);flex:0 0 auto;display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:700;transition:all .15s}
@@ -129,9 +129,9 @@ input,textarea,select{font-family:inherit}
 .bi-amt{font-family:'Space Mono',monospace;font-size:11px;color:var(--ink3)}
 
 /* MODAL */
-.overlay{position:fixed;inset:0;background:rgba(33,30,25,0.6);backdrop-filter:blur(3px);display:flex;align-items:flex-end;justify-content:center;z-index:100}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,0.45);backdrop-filter:blur(4px);display:flex;align-items:flex-end;justify-content:center;z-index:100}
 @media(min-width:560px){.overlay{align-items:center}}
-.sheet{background:var(--paper);width:100%;max-width:560px;max-height:90dvh;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;border-radius:28px 28px 0 0;padding:8px 20px calc(env(safe-area-inset-bottom,0px) + 30px)}
+.sheet{background:#fff;width:100%;max-width:560px;max-height:90dvh;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;border-radius:24px 24px 0 0;padding:8px 20px calc(env(safe-area-inset-bottom,0px) + 30px);box-shadow:0 -4px 30px rgba(0,0,0,.12)}
 @media(min-width:560px){.sheet{border-radius:28px}}
 .sheet-handle{width:40px;height:4px;border-radius:2px;background:var(--cardline);margin:8px auto 16px}
 .sheet-title{font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:24px;letter-spacing:-0.5px;color:var(--ink);margin-bottom:4px}
@@ -140,8 +140,8 @@ input,textarea,select{font-family:inherit}
 /* MODAL TABS / PICKER */
 .modal-meta{font-family:'Space Mono',monospace;font-size:11px;color:var(--ink3);margin-bottom:14px}
 .tab-row{display:flex;gap:8px;margin-bottom:16px}
-.tab-btn{flex:1;padding:10px;border-radius:14px;background:var(--card);border:1px solid var(--cardline);font-family:'Space Mono',monospace;font-size:12px;font-weight:700;color:var(--ink2)}
-.tab-btn.active{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.tab-btn{flex:1;padding:10px;border-radius:12px;background:#F5F5F5;border:1.5px solid transparent;font-family:'Space Mono',monospace;font-size:12px;font-weight:700;color:var(--ink2)}
+.tab-btn.active{background:#fff;color:var(--terra);border-color:var(--terra)}
 .detail-tabs{display:flex;border-bottom:1px solid var(--cardline);margin-bottom:14px}
 .detail-tab{flex:1;padding:10px;font-family:'Space Mono',monospace;font-size:12px;font-weight:700;color:var(--ink3);border-bottom:2px solid transparent}
 .detail-tab.active{color:var(--terra);border-bottom-color:var(--terra)}
@@ -154,7 +154,7 @@ input,textarea,select{font-family:inherit}
 /* FORM */
 .field{margin-bottom:14px}
 .field label{display:block;font-family:'Space Mono',monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink3);margin-bottom:6px}
-.field input,.field select,.field textarea{width:100%;background:var(--card);border:1px solid var(--cardline);border-radius:13px;padding:12px 14px;font-size:14px;color:var(--ink);outline:none}
+.field input,.field select,.field textarea{width:100%;background:#F7F7F7;border:1.5px solid var(--cardline);border-radius:12px;padding:12px 14px;font-size:14px;color:var(--ink);outline:none}
 .field textarea{resize:vertical;line-height:1.5}
 .row-fields{display:flex;gap:10px}
 .tag-pick{display:flex;gap:8px}
@@ -165,16 +165,16 @@ input,textarea,select{font-family:inherit}
 
 /* PICKER GRID */
 .picker-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;max-height:50vh;overflow-y:auto}
-.picker-card{background:var(--card);border:1px solid var(--cardline);border-radius:15px;padding:12px;cursor:pointer}
+.picker-card{background:var(--card);border:1.5px solid var(--cardline);border-radius:16px;padding:12px;cursor:pointer;box-shadow:0 1px 6px rgba(0,0,0,.06)}
 .picker-card:active{transform:scale(0.97)}
 .pc-name{font-family:'Bricolage Grotesque',sans-serif;font-weight:600;font-size:14px;color:var(--ink);line-height:1.15}
 .pc-meta{font-family:'Space Mono',monospace;font-size:10px;color:var(--ink3);margin-top:5px}
 
 /* BTN */
-.btn{border-radius:15px;padding:14px;font-family:'Bricolage Grotesque',sans-serif;font-weight:600;font-size:15px;text-align:center;width:100%}
-.btn-ink{background:var(--ink);color:var(--paper)}
-.btn-line{background:var(--card);border:1px solid var(--cardline);color:var(--ink2)}
-.btn-terra{background:var(--terra);color:#fff}
+.btn{border-radius:12px;padding:14px;font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:15px;text-align:center;width:100%}
+.btn-ink{background:#111;color:#fff}
+.btn-line{background:#fff;border:1.5px solid var(--cardline);color:var(--ink2)}
+.btn-terra{background:var(--terra);color:#fff;box-shadow:0 4px 14px rgba(255,107,0,.28)}
 .btn-row{display:flex;gap:10px;margin-top:8px}
 
 /* WIZARD */
@@ -472,6 +472,7 @@ let S={
     doMealprep: null,
     mealprep:{days:[],rowId:"lunch_dirk",rc:null},  // days: [{wo,day}]
     baksel:"Nee", bakselNote:"",
+    snackDays: lsGet(CFG,{}).snackDays||["za","zo"],
     wizMpPicker:false,
     vasteRc:[],    // [{rowId, rc, days:[{wo,day}]}]
     preview:{},      // day->rowId->rc
@@ -521,6 +522,7 @@ async function syncPull(hid){
       S.boodOverride=lsGet(BOK,{});
       S.week=lsGet(weekStoreKey(S.weekOffset||0),emptyWeek());
       S.notes=lsGet(notesStoreKey(S.weekOffset||0),{});
+      S.geminiKey=lsGet(GK,"");
       S.syncSt="ok";
     }else{S.syncSt=error?"err":"ok";}
   }catch(e){S.syncSt="err";}
@@ -928,10 +930,11 @@ async function doImport(){
   if(!apiKey){toast("Vul je Google Gemini API key in");return;}
   set({igSt:"loading",igErr:"",igPrev:null});
   try{
-    // Step 1: discover which models are available for this key
     const base="https://generativelanguage.googleapis.com/v1beta";
     const keyParam="?key="+encodeURIComponent(apiKey);
-    let model="gemini-2.0-flash"; // default fallback
+    // Build ordered list of models to try
+    const pref=["gemini-2.0-flash","gemini-2.5-flash","gemini-1.5-flash","gemini-2.0-flash-lite"];
+    let models=[...pref];
     try{
       const lr=await fetch(`${base}/models${keyParam}`);
       if(lr.ok){
@@ -939,41 +942,51 @@ async function doImport(){
         const supported=(ld.models||[])
           .filter(m=>(m.supportedGenerationMethods||[]).includes("generateContent"))
           .map(m=>m.name.replace("models/",""));
-        // prefer flash models, pick first available
-        const pref=["gemini-2.0-flash","gemini-2.5-flash","gemini-1.5-flash","gemini-2.0-flash-lite"];
-        const pick=pref.find(p=>supported.some(s=>s.startsWith(p)))||supported[0];
-        if(pick)model=supported.find(s=>s.startsWith(pick))||pick;
+        const sorted=pref.flatMap(p=>supported.filter(s=>s.startsWith(p)))
+          .concat(supported.filter(s=>!pref.some(p=>s.startsWith(p))));
+        if(sorted.length)models=sorted;
       }
     }catch(e){}
-    // Step 2: call the model, auto-retry once on 429 rate limit
     const msg="Extraheer het recept uit deze Instagram caption. Geef ALLEEN geldige JSON, geen markdown. "+
       "Formaat: {name, category, time, servings, ingredients:[{n,a}], steps:[]}. "+
       "category is: ontbijt, lunch, diner of tussendoortje. servings is een getal. "+
       "Geen recept gevonden: {error:true}. Caption: "+cap;
-    const callModel=()=>fetch(`${base}/models/${model}:generateContent${keyParam}`,
-      {method:"POST",headers:{"Content-Type":"application/json"},
-       body:JSON.stringify({contents:[{parts:[{text:msg}]}]})});
-    let res=await callModel();
-    if(res.status===429){
-      // rate limited — read retry delay from error body and wait
-      let wait=20;
-      try{const ed=await res.json();const m2=JSON.stringify(ed).match(/retry in ([\d.]+)s/i);if(m2)wait=Math.ceil(parseFloat(m2[1]))+1;}catch(e){}
-      set({igSt:"loading",igErr:`Even wachten... (rate limit, retry over ${wait}s)`});
-      await new Promise(r=>setTimeout(r,wait*1000));
-      res=await callModel();
+    let lastErr="";
+    for(const model of models){
+      const callModel=()=>fetch(`${base}/models/${model}:generateContent${keyParam}`,
+        {method:"POST",headers:{"Content-Type":"application/json"},
+         body:JSON.stringify({contents:[{parts:[{text:msg}]}]})});
+      let res=await callModel();
+      if(res.status===429){
+        let errBody="";
+        try{const ed=await res.json();errBody=JSON.stringify(ed);}catch(e){}
+        // "limit: 0" means free quota exhausted — skip to next model immediately
+        if(/,"limit":\s*0[,}]/.test(errBody)){lastErr=`${model}: quota op`;continue;}
+        // temporary rate limit — wait and retry this model once
+        let wait=20;
+        const m2=errBody.match(/retry in ([\d.]+)s/i);if(m2)wait=Math.ceil(parseFloat(m2[1]))+1;
+        set({igSt:"loading",igErr:`Even wachten... (rate limit, retry over ${wait}s met ${model})`});
+        await new Promise(r=>setTimeout(r,wait*1000));
+        res=await callModel();
+      }
+      if(!res.ok){
+        let errMsg=`Model ${model}: fout ${res.status}`;
+        try{const ed=await res.json();errMsg=ed?.error?.message||errMsg;}catch(e){}
+        lastErr=errMsg;continue;
+      }
+      const data=await res.json();
+      const txt=((data.candidates||[])[0]?.content?.parts||[])[0]?.text||"";
+      const fi=txt.indexOf("{"),li=txt.lastIndexOf("}");
+      if(fi<0||li<=fi){lastErr="Geen recept gevonden in de tekst";continue;}
+      const p=JSON.parse(txt.slice(fi,li+1));
+      if(p.error)throw new Error("Geen recept in dit bijschrift gevonden");
+      set({igSt:"ok",igPrev:{id:Date.now(),ebook:0,custom:true,voor:"beiden",name:p.name||"",category:p.category||"ontbijt",time:p.time||"?",servings:p.servings||2,ingredients:p.ingredients||[],steps:p.steps||[],link:url||null}});
+      return;
     }
-    if(!res.ok){
-      let errMsg=`Model ${model}: fout ${res.status}`;
-      try{const ed=await res.json();errMsg=ed?.error?.message||errMsg;}catch(e){}
-      throw new Error(errMsg);
-    }
-    const data=await res.json();
-    const txt=((data.candidates||[])[0]?.content?.parts||[])[0]?.text||"";
-    const fi=txt.indexOf("{"),li=txt.lastIndexOf("}");
-    if(fi<0||li<=fi)throw new Error("Geen recept gevonden in de tekst");
-    const p=JSON.parse(txt.slice(fi,li+1));
-    if(p.error)throw new Error("Geen recept in dit bijschrift gevonden");
-    set({igSt:"ok",igPrev:{id:Date.now(),ebook:0,custom:true,voor:"beiden",name:p.name||"",category:p.category||"ontbijt",time:p.time||"?",servings:p.servings||2,ingredients:p.ingredients||[],steps:p.steps||[],link:url||null}});
+    // All models failed
+    throw new Error(/quota op/.test(lastErr)
+      ?"Je gratis Gemini quota is op. Voeg betaling toe op ai.google.dev (ca. €0,001 per recept)."
+      :lastErr||"Mislukt");
   }catch(e){set({igSt:"err",igErr:e.message||"Mislukt"});}
 }
 function saveIgRecipe(){
@@ -1186,20 +1199,31 @@ function renderMealprepCard(day){
 function renderSingleMeal(day,rowId){
   const row=ROWS.find(r=>r.id===rowId);
   const rc=S.week[day][rowId];
-  const isTussen=row.cat==="tussendoortje";
-  const subLabel=isTussen?(row.sub==="ochtend"?"ochtend · samen":"middag · samen"):"samen";
+  const isSnack=row.cat==="tussendoortje";
+  const snackDays=S.cfg.snackDays||["za","zo"];
+
+  // Empty snack on a non-snack day → compact ghost button
+  if(isSnack&&!rc&&!snackDays.includes(day)){
+    const label=row.sub==="ochtend"?"ochtend snack":"middag snack";
+    return `<button onclick="pickSlot('${day}','${rowId}')"
+      style="display:block;width:100%;text-align:left;padding:9px 14px;border-radius:13px;border:1.5px dashed var(--cardline);background:none;color:var(--ink3);font-size:13px;margin-bottom:10px;cursor:pointer;letter-spacing:0">
+      ＋ ${label} toevoegen
+    </button>`;
+  }
+
+  const subLabel=isSnack?(row.sub==="ochtend"?"ochtend · samen":"middag · samen"):"samen";
   const whoList=rowId==="diner"?["shelley","dirk","maeve"]:["shelley","dirk"];
-  const emptyTxt=isTussen?"+ tussendoortje kiezen":"Nog niets gekozen";
+  const emptyTxt=isSnack?"+ snack kiezen":"Nog niets gekozen";
   return `
-  <div class="meal-card" onclick="pickSlot('${day}','${rowId}')" style="${isTussen?"padding:10px 14px;":""}">
-    <div class="meal-thumb" style="background:${THUMB[row.cat]};${isTussen?"width:38px;height:38px;font-size:18px;border-radius:10px":""}">${THUMB_EMOJI[row.cat]}</div>
+  <div class="meal-card" onclick="pickSlot('${day}','${rowId}')" style="${isSnack?"padding:10px 14px;":""}">
+    <div class="meal-thumb" style="background:${THUMB[row.cat]};${isSnack?"width:38px;height:38px;font-size:18px;border-radius:10px":""}">${THUMB_EMOJI[row.cat]}</div>
     <div class="meal-info">
       <div class="meal-label">${row.label} · ${subLabel}</div>
-      <div class="meal-name ${rc?"":"empty"}" style="${isTussen&&!rc?"font-size:14px":""}">${rc?esc(rc.name):emptyTxt}</div>
+      <div class="meal-name ${rc?"":"empty"}" style="${isSnack&&!rc?"font-size:14px":""}">${rc?esc(rc.name):emptyTxt}</div>
       ${rc?`<div class="meal-meta">${rc.time} · ${rc.servings||2}p</div>`:""}
     </div>
     <div class="meal-right">
-      ${rc?avatarStack(whoList,"mini"):`<div class="meal-add" style="${isTussen?"width:24px;height:24px;font-size:14px":""}">+</div>`}
+      ${rc?avatarStack(whoList,"mini"):`<div class="meal-add" style="${isSnack?"width:24px;height:24px;font-size:14px":""}">+</div>`}
     </div>
   </div>`;
 }
@@ -1569,6 +1593,7 @@ function wizGenPreview(force){
           prev[wo][day][row.id]=fast.length?fast[idx["diner"]++%fast.length]:pick("diner",row.who);return;
         }
         if(mode==="rest"&&row.id==="diner"){prev[wo][day][row.id]=null;return;}
+        if(row.cat==="tussendoortje"&&!(S.wiz.snackDays||["za","zo"]).includes(day)){prev[wo][day][row.id]=null;return;}
         prev[wo][day][row.id]=pick(row.cat,row.who);
       });
     });
@@ -1767,6 +1792,19 @@ function renderWizStep1(){
     }).join("")}`;
   }).join("")}
   <div style="font-size:12px;color:var(--ink3);margin:8px 0 16px;line-height:1.5">🍳 Koken · ⚡ Snel (&lt;20 min) · 🥡 Restjes · 🚫 Vrij</div>
+
+  <div style="background:var(--card);border:1.5px solid var(--cardline);border-radius:16px;padding:14px;margin-bottom:16px">
+    <div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:16px;color:var(--ink);margin-bottom:4px">🍎 Snack inplannen op</div>
+    <div style="font-size:13px;color:var(--ink2);margin-bottom:12px">Autofill vult snackslots alleen in op aangevinkte dagen</div>
+    <div style="display:flex;flex-wrap:wrap;gap:7px">
+      ${DAYS.map(d=>{
+        const on=(S.wiz.snackDays||["za","zo"]).includes(d);
+        return `<button onclick="wizToggleSnackDay('${d}')"
+          style="padding:9px 14px;border-radius:13px;border:1.5px solid ${on?'var(--terra)':'var(--cardline)'};background:${on?'#FF6B0018':'var(--card)'};color:${on?'var(--terra)':'var(--ink2)'};font-family:'Space Mono',monospace;font-size:12px;font-weight:700;cursor:pointer">${d}</button>`;
+      }).join("")}
+    </div>
+  </div>
+
   <button class="btn btn-ink" onclick="set({wizStep:2})">Volgende →</button>`;
 }
 
@@ -1878,23 +1916,6 @@ function renderWizStep2(){
   </div>
   ` : ""}
 
-  <div style="background:var(--card);border:1px solid var(--cardline);border-radius:16px;padding:14px;margin-bottom:14px">
-    <div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:600;font-size:16px;color:var(--ink);margin-bottom:6px">\U0001f382 Zondag baksel</div>
-    <div style="font-size:13px;color:var(--ink2);margin-bottom:10px">Bak je iets voor de week? Verschijnt als notitie op zondag.</div>
-    <div style="display:flex;flex-wrap:wrap;gap:6px">
-      ${["Nee","Cake","Muffins","Koekjes","Bananenbread","Havermout balletjes","Energierepen","Granola"].map(opt=>{
-        const on=S.wiz.baksel===opt;
-        return `<button onclick="S.wiz.baksel='${opt}';set({})"
-          style="padding:8px 14px;border-radius:20px;border:1.5px solid ${on?'var(--amber)':'var(--cardline)'};background:${on?'#D9A44122':'var(--card)'};color:${on?'var(--amber)':'var(--ink2)'};font-size:13px;cursor:pointer">${opt}</button>`;
-      }).join("")}
-    ${S.wiz.baksel&&S.wiz.baksel!=="Nee"?`
-    <textarea
-      placeholder="Bijv. chocolade muffins met walnoten..."
-      oninput="S.wiz.bakselNote=this.value"
-      style="width:100%;margin-top:10px;background:var(--paper);border:1.5px solid var(--cardline);border-radius:12px;padding:10px 12px;font-size:13px;color:var(--ink);font-family:inherit;resize:none;outline:none;line-height:1.5"
-      rows="2">${esc(S.wiz.bakselNote||"")}</textarea>`:""}
-  </div>
-
   <div class="btn-row">
     <button class="btn btn-line" onclick="set({wizStep:1})">&#8592; Terug</button>
     <button class="btn btn-ink" onclick="set({wizStep:3})">Volgende →</button>
@@ -1952,8 +1973,28 @@ function renderWizStep3(){
 
   // Main view
   return `
-  <div class="sheet-title">Vaste maaltijden</div>
-  <div class="sheet-sub" style="margin-bottom:14px">Wil je iets meerdere ochtenden herhalen? Kies een maaltijdmoment, recept en op welke dagen.</div>
+  <div class="sheet-title">Vaste maaltijden & baksel</div>
+  <div class="sheet-sub" style="margin-bottom:14px">Pin recepten voor specifieke dagen, en geef aan of je iets bakt voor de week.</div>
+
+  <div style="background:var(--card);border:1.5px solid var(--cardline);border-radius:16px;padding:14px;margin-bottom:16px;box-shadow:0 2px 8px rgba(0,0,0,.05)">
+    <div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:16px;color:var(--ink);margin-bottom:4px">🎂 Zondag baksel</div>
+    <div style="font-size:13px;color:var(--ink2);margin-bottom:10px">Bak je iets voor de week? Verschijnt als notitie op zondag.</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px">
+      ${["Nee","Cake","Muffins","Koekjes","Bananenbread","Havermout balletjes","Energierepen","Granola"].map(opt=>{
+        const on=S.wiz.baksel===opt;
+        return `<button onclick="S.wiz.baksel='${opt}';set({})"
+          style="padding:8px 14px;border-radius:20px;border:1.5px solid ${on?'var(--amber)':'var(--cardline)'};background:${on?'#F9A82522':'var(--card)'};color:${on?'var(--amber)':'var(--ink2)'};font-size:13px;cursor:pointer;font-weight:${on?'700':'400'}">${opt}</button>`;
+      }).join("")}
+    </div>
+    ${S.wiz.baksel&&S.wiz.baksel!=="Nee"?`
+    <textarea
+      placeholder="Bijv. chocolade muffins met walnoten..."
+      oninput="S.wiz.bakselNote=this.value"
+      style="width:100%;margin-top:10px;background:#F7F7F7;border:1.5px solid var(--cardline);border-radius:12px;padding:10px 12px;font-size:13px;color:var(--ink);font-family:inherit;resize:none;outline:none;line-height:1.5"
+      rows="2">${esc(S.wiz.bakselNote||"")}</textarea>`:""}
+  </div>
+
+  <div style="font-family:'Space Mono',monospace;font-size:11px;letter-spacing:1px;color:var(--ink3);margin-bottom:10px;text-transform:uppercase">Vaste maaltijden</div>
 
   ${vasteRc.length===0?`
   <div style="text-align:center;padding:20px 0 16px;color:var(--ink3);font-size:14px;font-style:italic">Nog geen vaste maaltijden — tik ＋ om er een toe te voegen</div>
@@ -2137,6 +2178,11 @@ function wizToggleMpDay(wo, day){
   S.wiz.mealprep.days=isIn?days.filter(m=>!(m.wo===wo&&m.day===day)):[...days,{wo,day}];
   set({});
 }
+function wizToggleSnackDay(day){
+  const days=S.wiz.snackDays||["za","zo"];
+  S.wiz.snackDays=days.includes(day)?days.filter(d=>d!==day):[...days,day];
+  set({});
+}
 
 function wizFinish(){
   // Apply preview to correct week(s) in localStorage
@@ -2157,6 +2203,8 @@ function wizFinish(){
     if(S.wiz.inHuis[k]) S.checked[k] = true;
   });
   lsSet(CHK, S.checked);
+  S.cfg.snackDays = S.wiz.snackDays||["za","zo"];
+  lsSet(CFG, S.cfg);
   set({wizOpen:false, wizStep:1});
   toast("Week ingepland! 🎉");
 }
@@ -2176,6 +2224,7 @@ window.wizDoImport=wizDoImport; window.wizToggleTag=wizToggleTag;
 window.wizToggleMpDay=wizToggleMpDay; window.wizToggleInHuis=wizToggleInHuis;
 window.wizToggleVasteDay=wizToggleVasteDay; window.wizRemoveVaste=wizRemoveVaste;
 window.wizPickVasteRow=wizPickVasteRow; window.wizPickVasteRc=wizPickVasteRc;
+window.wizToggleSnackDay=wizToggleSnackDay;
 window.onDayNote=onDayNote; window.S=S; window.render=render;
 window.pickSlot=pickSlot; window.assignRecipe=assignRecipe; window.clearSlot=clearSlot;
 window.onDayNote=onDayNote;
