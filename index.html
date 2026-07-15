@@ -815,37 +815,98 @@ async function exportWeekImg(type){
 
 // ===================== IG IMPORT =====================
 async function fetchCaption(){
-  const url=S.igUrl||(document.getElementById("ig-url")||{value:""}).value.trim();
-  if(!url){toast("Plak eerst een Instagram link");return;}
+  const rawUrl=(S.igUrl||(document.getElementById("ig-url")||{value:""}).value).trim();
+  if(!rawUrl){toast("Plak eerst een Instagram link");return;}
   set({igFetchSt:"loading",igErr:""});
-  const extractOgDesc=(html)=>{
-    const m=html.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i)
-           ||html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:description["']/i);
-    return m?m[1]:null;
-  };
-  const decode=(s)=>{
-    // decode numeric HTML entities (emojis) and named entities
-    return s.replace(/&#x([0-9a-fA-F]+);/g,(_,h)=>String.fromCodePoint(parseInt(h,16)))
-            .replace(/&#(\d+);/g,(_,d)=>String.fromCodePoint(parseInt(d,10)))
-            .replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">")
-            .replace(/&#39;/g,"'").replace(/&apos;/g,"'").replace(/&quot;/g,'"');
-  };
-  const stripIgMeta=(s)=>{
-    const colonIdx=s.lastIndexOf(": ");
-    if(colonIdx>0&&colonIdx<s.length*0.6){let cap=s.slice(colonIdx+2).trim().replace(/^[\u201c\u201d\u2018\u2019'"]+/,"").replace(/[\u201c\u201d\u2018\u2019'"]+$/,"");if(cap.length>10)return cap;}
+
+  const decode=s=>s
+    .replace(/&#x([0-9a-fA-F]+);/g,(_,h)=>String.fromCodePoint(parseInt(h,16)))
+    .replace(/&#(\d+);/g,(_,d)=>String.fromCodePoint(parseInt(d,10)))
+    .replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">")
+    .replace(/&#39;/g,"'").replace(/&apos;/g,"'").replace(/&quot;/g,'"');
+
+  const stripPrefix=s=>{
+    const ci=s.lastIndexOf(": ");
+    if(ci>0&&ci<s.length*0.6){const c=s.slice(ci+2).trim().replace(/^[“”‘’'"]+/,"").replace(/[“”‘’'"]+$/,"");if(c.length>10)return c;}
     return s.trim();
   };
-  let html=null;
-  // Try corsproxy.io first (returns raw HTML)
-  try{const r=await fetch(`https://corsproxy.io/?${encodeURIComponent(url)}`);if(r.ok)html=await r.text();}catch(e){}
-  // Fallback: allorigins.win (returns JSON with contents field)
-  if(!html){
-    try{const r=await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`);if(r.ok){const d=await r.json();html=d.contents||"";}}catch(e){}
+
+  // Multiple extraction strategies, best to worst
+  const extractCap=html=>{
+    // 1. JSON-LD articleBody: cleanest, no like/follower prefix
+    try{
+      const tags=[...html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)];
+      for(const [,json] of tags){
+        const d=JSON.parse(json);
+        const body=d.articleBody||(Array.isArray(d)?d.find(x=>x.articleBody)?.articleBody:null);
+        if(body&&body.length>5)return body;
+      }
+    }catch(e){}
+    // 2. __additionalDataLoaded GraphQL blob (embed page)
+    try{
+      const m=html.match(/window\.__additionalDataLoaded\(['"][^'"]*['"]\s*,\s*(\{[\s\S]+?\})\)/);
+      if(m){const d=JSON.parse(m[1]);const t=d?.graphql?.shortcode_media?.edge_media_to_caption?.edges?.[0]?.node?.text;if(t&&t.length>5)return t;}
+    }catch(e){}
+    // 3. _sharedData GraphQL (older Instagram pages)
+    try{
+      const m=html.match(/window\._sharedData\s*=\s*(\{[\s\S]+?\});\s*<\/script>/);
+      if(m){const d=JSON.parse(m[1]);const t=d?.entry_data?.PostPage?.[0]?.graphql?.shortcode_media?.edge_media_to_caption?.edges?.[0]?.node?.text;if(t&&t.length>5)return t;}
+    }catch(e){}
+    // 4. og:description with prefix strip
+    const om=html.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i)
+            ||html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:description["']/i);
+    if(om){const c=stripPrefix(decode(om[1]));if(c.length>5)return c;}
+    return null;
+  };
+
+  // Extract shortcode (works for /p/ and /reel/)
+  const scm=rawUrl.match(/\/(p|reel)\/([A-Za-z0-9_-]+)/);
+  const sc=scm?scm[2]:null;
+
+  // Target URLs: embed page first (designed to be embedded, less blocked), then original
+  const targetUrls=[];
+  if(sc){
+    targetUrls.push(`https://www.instagram.com/p/${sc}/embed/captioned/`);
+    targetUrls.push(`https://www.instagram.com/p/${sc}/embed/`);
   }
-  if(!html){set({igFetchSt:"err",igErr:"Proxy niet bereikbaar — controleer je verbinding"});return;}
-  const raw=extractOgDesc(html);
-  if(!raw){set({igFetchSt:"err",igErr:"Instagram blokkeert automatisch ophalen. Plak het bijschrift handmatig hieronder."});return;}
-  const cap=stripIgMeta(decode(raw));
+  targetUrls.push(rawUrl);
+
+  // 4 CORS proxy configs — mix of raw and JSON-response proxies
+  const proxyFor=t=>[
+    {p:`https://corsproxy.io/?${encodeURIComponent(t)}`,json:false},
+    {p:`https://api.allorigins.win/get?url=${encodeURIComponent(t)}`,json:true},
+    {p:`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(t)}`,json:false},
+    {p:`https://thingproxy.freeboard.io/fetch/${encodeURIComponent(t)}`,json:false},
+  ];
+
+  // Fire all combinations in parallel — first success wins (race)
+  const tryOne=async({p,json})=>{
+    const ctrl=new AbortController();
+    const tid=setTimeout(()=>ctrl.abort(),8000);
+    try{
+      const r=await fetch(p,{signal:ctrl.signal});
+      clearTimeout(tid);
+      if(!r.ok)throw new Error("http "+r.status);
+      const html=json?(await r.json()).contents||"":await r.text();
+      const cap=extractCap(html);
+      if(!cap||cap.length<10)throw new Error("no cap");
+      return cap;
+    }finally{clearTimeout(tid);}
+  };
+
+  const attempts=targetUrls.flatMap(t=>proxyFor(t).map(cfg=>tryOne(cfg)));
+  const cap=await new Promise(resolve=>{
+    let done=false,fails=0;
+    attempts.forEach(p=>
+      p.then(c=>{if(!done){done=true;resolve(c);}})
+       .catch(()=>{if(++fails===attempts.length&&!done){done=true;resolve(null);}})
+    );
+  });
+
+  if(!cap){
+    set({igFetchSt:"err",igErr:"Instagram blokkeert automatisch ophalen. Plak het bijschrift handmatig hieronder."});
+    return;
+  }
   set({igCap:cap,igFetchSt:"ok"});
   const ta=document.getElementById("ig-cap");if(ta)ta.value=cap;
 }
