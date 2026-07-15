@@ -929,10 +929,11 @@ async function doImport(){
   if(!apiKey){toast("Vul je Google Gemini API key in");return;}
   set({igSt:"loading",igErr:"",igPrev:null});
   try{
-    // Step 1: discover which models are available for this key
     const base="https://generativelanguage.googleapis.com/v1beta";
     const keyParam="?key="+encodeURIComponent(apiKey);
-    let model="gemini-2.0-flash"; // default fallback
+    // Build ordered list of models to try
+    const pref=["gemini-2.0-flash","gemini-2.5-flash","gemini-1.5-flash","gemini-2.0-flash-lite"];
+    let models=[...pref];
     try{
       const lr=await fetch(`${base}/models${keyParam}`);
       if(lr.ok){
@@ -940,41 +941,51 @@ async function doImport(){
         const supported=(ld.models||[])
           .filter(m=>(m.supportedGenerationMethods||[]).includes("generateContent"))
           .map(m=>m.name.replace("models/",""));
-        // prefer flash models, pick first available
-        const pref=["gemini-2.0-flash","gemini-2.5-flash","gemini-1.5-flash","gemini-2.0-flash-lite"];
-        const pick=pref.find(p=>supported.some(s=>s.startsWith(p)))||supported[0];
-        if(pick)model=supported.find(s=>s.startsWith(pick))||pick;
+        const sorted=pref.flatMap(p=>supported.filter(s=>s.startsWith(p)))
+          .concat(supported.filter(s=>!pref.some(p=>s.startsWith(p))));
+        if(sorted.length)models=sorted;
       }
     }catch(e){}
-    // Step 2: call the model, auto-retry once on 429 rate limit
     const msg="Extraheer het recept uit deze Instagram caption. Geef ALLEEN geldige JSON, geen markdown. "+
       "Formaat: {name, category, time, servings, ingredients:[{n,a}], steps:[]}. "+
       "category is: ontbijt, lunch, diner of tussendoortje. servings is een getal. "+
       "Geen recept gevonden: {error:true}. Caption: "+cap;
-    const callModel=()=>fetch(`${base}/models/${model}:generateContent${keyParam}`,
-      {method:"POST",headers:{"Content-Type":"application/json"},
-       body:JSON.stringify({contents:[{parts:[{text:msg}]}]})});
-    let res=await callModel();
-    if(res.status===429){
-      // rate limited — read retry delay from error body and wait
-      let wait=20;
-      try{const ed=await res.json();const m2=JSON.stringify(ed).match(/retry in ([\d.]+)s/i);if(m2)wait=Math.ceil(parseFloat(m2[1]))+1;}catch(e){}
-      set({igSt:"loading",igErr:`Even wachten... (rate limit, retry over ${wait}s)`});
-      await new Promise(r=>setTimeout(r,wait*1000));
-      res=await callModel();
+    let lastErr="";
+    for(const model of models){
+      const callModel=()=>fetch(`${base}/models/${model}:generateContent${keyParam}`,
+        {method:"POST",headers:{"Content-Type":"application/json"},
+         body:JSON.stringify({contents:[{parts:[{text:msg}]}]})});
+      let res=await callModel();
+      if(res.status===429){
+        let errBody="";
+        try{const ed=await res.json();errBody=JSON.stringify(ed);}catch(e){}
+        // "limit: 0" means free quota exhausted — skip to next model immediately
+        if(/,"limit":\s*0[,}]/.test(errBody)){lastErr=`${model}: quota op`;continue;}
+        // temporary rate limit — wait and retry this model once
+        let wait=20;
+        const m2=errBody.match(/retry in ([\d.]+)s/i);if(m2)wait=Math.ceil(parseFloat(m2[1]))+1;
+        set({igSt:"loading",igErr:`Even wachten... (rate limit, retry over ${wait}s met ${model})`});
+        await new Promise(r=>setTimeout(r,wait*1000));
+        res=await callModel();
+      }
+      if(!res.ok){
+        let errMsg=`Model ${model}: fout ${res.status}`;
+        try{const ed=await res.json();errMsg=ed?.error?.message||errMsg;}catch(e){}
+        lastErr=errMsg;continue;
+      }
+      const data=await res.json();
+      const txt=((data.candidates||[])[0]?.content?.parts||[])[0]?.text||"";
+      const fi=txt.indexOf("{"),li=txt.lastIndexOf("}");
+      if(fi<0||li<=fi){lastErr="Geen recept gevonden in de tekst";continue;}
+      const p=JSON.parse(txt.slice(fi,li+1));
+      if(p.error)throw new Error("Geen recept in dit bijschrift gevonden");
+      set({igSt:"ok",igPrev:{id:Date.now(),ebook:0,custom:true,voor:"beiden",name:p.name||"",category:p.category||"ontbijt",time:p.time||"?",servings:p.servings||2,ingredients:p.ingredients||[],steps:p.steps||[],link:url||null}});
+      return;
     }
-    if(!res.ok){
-      let errMsg=`Model ${model}: fout ${res.status}`;
-      try{const ed=await res.json();errMsg=ed?.error?.message||errMsg;}catch(e){}
-      throw new Error(errMsg);
-    }
-    const data=await res.json();
-    const txt=((data.candidates||[])[0]?.content?.parts||[])[0]?.text||"";
-    const fi=txt.indexOf("{"),li=txt.lastIndexOf("}");
-    if(fi<0||li<=fi)throw new Error("Geen recept gevonden in de tekst");
-    const p=JSON.parse(txt.slice(fi,li+1));
-    if(p.error)throw new Error("Geen recept in dit bijschrift gevonden");
-    set({igSt:"ok",igPrev:{id:Date.now(),ebook:0,custom:true,voor:"beiden",name:p.name||"",category:p.category||"ontbijt",time:p.time||"?",servings:p.servings||2,ingredients:p.ingredients||[],steps:p.steps||[],link:url||null}});
+    // All models failed
+    throw new Error(/quota op/.test(lastErr)
+      ?"Je gratis Gemini quota is op. Voeg betaling toe op ai.google.dev (ca. €0,001 per recept)."
+      :lastErr||"Mislukt");
   }catch(e){set({igSt:"err",igErr:e.message||"Mislukt"});}
 }
 function saveIgRecipe(){
