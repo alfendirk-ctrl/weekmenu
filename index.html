@@ -521,6 +521,7 @@ async function syncPull(hid){
       S.boodOverride=lsGet(BOK,{});
       S.week=lsGet(weekStoreKey(S.weekOffset||0),emptyWeek());
       S.notes=lsGet(notesStoreKey(S.weekOffset||0),{});
+      S.geminiKey=lsGet(GK,"");
       S.syncSt="ok";
     }else{S.syncSt=error?"err":"ok";}
   }catch(e){S.syncSt="err";}
