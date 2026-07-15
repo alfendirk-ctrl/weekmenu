@@ -910,6 +910,16 @@ async function fetchCaption(){
   set({igCap:cap,igFetchSt:"ok"});
   const ta=document.getElementById("ig-cap");if(ta)ta.value=cap;
 }
+async function importFromUrl(){
+  const url=(S.igUrl||(document.getElementById("ig-url")||{value:""}).value).trim();
+  if(!url){toast("Plak eerst een Instagram link");return;}
+  if(!S.geminiKey){toast("Vul je Google Gemini API key in");return;}
+  set({igSt:null,igFetchSt:null,igErr:"",igPrev:null,igCap:""});
+  await fetchCaption();
+  if(S.igFetchSt==="ok"&&S.igCap&&S.igCap.length>=20){
+    await doImport();
+  }
+}
 async function doImport(){
   const cap=S.igCap||(document.getElementById("ig-cap")||{value:""}).value.trim();
   const url=S.igUrl||(document.getElementById("ig-url")||{value:""}).value.trim();
@@ -1456,13 +1466,18 @@ function renderAddSheet(){
         <div class="field">
           <label>Instagram link</label>
           <input id="ig-url" value="${esc(S.igUrl)}" placeholder="https://www.instagram.com/p/..." oninput="S.igUrl=this.value">
-          <button class="btn btn-line" onclick="fetchCaption()" style="margin-top:8px;width:100%" ${S.igFetchSt==="loading"?"disabled":""}>${S.igFetchSt==="loading"?'<span class="spin">⏳</span> Ophalen...':"⬇ Bijschrift ophalen"}</button>
-          ${S.igFetchSt==="ok"?'<div style="color:var(--olive);font-size:12px;margin-top:6px">✓ Bijschrift opgehaald</div>':""}
-          ${S.igFetchSt==="err"?`<div style="color:var(--rust);font-size:12px;margin-top:6px">⚠️ ${esc(S.igErr)}</div>`:""}
         </div>
-        <div class="field"><label>Bijschrift <span style="color:var(--ink3);font-size:11px">(automatisch gevuld, of plak handmatig)</span></label><textarea id="ig-cap" rows="4" placeholder="Bijschrift verschijnt hier na ophalen, of plak het zelf..." oninput="S.igCap=this.value">${esc(S.igCap)}</textarea></div>
-        <button class="btn btn-ink" onclick="doImport()" ${S.igSt==="loading"?"disabled":""}>${S.igSt==="loading"?'<span class="spin">⏳</span> Analyseren...':"🔍 Analyseer recept"}</button>
-        ${S.igSt==="err"?`<div style="background:#CD6A4522;border-radius:13px;padding:12px;font-size:13px;color:var(--rust);margin-top:12px">${esc(S.igErr)}</div>`:""}
+        ${(()=>{
+          const busy=S.igFetchSt==="loading"||S.igSt==="loading";
+          const label=S.igFetchSt==="loading"?"Bijschrift ophalen...":S.igSt==="loading"?"Recept analyseren...":"📸 Importeer recept";
+          return `<button class="btn btn-ink" onclick="importFromUrl()" style="width:100%;margin-bottom:12px" ${busy?"disabled":""}>${busy?`<span class="spin">⏳</span> ${esc(label)}`:label}</button>`;
+        })()}
+        ${S.igFetchSt==="err"?`
+          <div style="background:#CD6A4522;border-radius:13px;padding:12px;font-size:13px;color:var(--rust);margin-bottom:12px">⚠️ ${esc(S.igErr)}</div>
+          <div class="field"><label>Bijschrift handmatig plakken</label><textarea id="ig-cap" rows="4" placeholder="Kopieer het bijschrift van Instagram en plak het hier..." oninput="S.igCap=this.value">${esc(S.igCap)}</textarea></div>
+          <button class="btn btn-line" onclick="doImport()" style="width:100%;margin-bottom:12px" ${S.igSt==="loading"?"disabled":""}>${S.igSt==="loading"?'<span class="spin">⏳</span> Analyseren...':"🔍 Analyseer handmatig"}</button>
+        `:""}
+        ${S.igSt==="err"?`<div style="background:#CD6A4522;border-radius:13px;padding:12px;font-size:13px;color:var(--rust);margin-bottom:12px">⚠️ ${esc(S.igErr)}</div>`:""}
         ${S.igSt==="ok"&&p?`
         <div style="background:var(--card);border:1px solid var(--olive);border-radius:16px;padding:16px;margin-top:14px">
           <div style="font-family:'Space Mono';font-size:11px;color:var(--olive);font-weight:700;margin-bottom:12px">✅ RECEPT GEVONDEN — CONTROLEER</div>
@@ -2167,7 +2182,7 @@ window.onDayNote=onDayNote;
 window.toggleCheck=toggleCheck; window.toggleCookDay=toggleCookDay; window.runAutofill=runAutofill;
 window.openBoodDetail=openBoodDetail; window.closeBoodDetail=closeBoodDetail;
 window.saveBoodOverride=saveBoodOverride; window.deleteBoodOverride=deleteBoodOverride;
-window.fetchCaption=fetchCaption; window.doImport=doImport; window.saveIgRecipe=saveIgRecipe; window.saveForm=saveForm; window.setFormVoor=setFormVoor;
+window.fetchCaption=fetchCaption; window.importFromUrl=importFromUrl; window.doImport=doImport; window.saveIgRecipe=saveIgRecipe; window.saveForm=saveForm; window.setFormVoor=setFormVoor;
 window.deleteCustomRecipe=deleteCustomRecipe; window.openEdit=openEdit;
 window.exportImg=exportImg; window.exportWeekImg=exportWeekImg;
 window.syncPush=syncPush; window.syncPull=syncPull; window.joinHousehold=joinHousehold;
