@@ -408,7 +408,7 @@ r(85,3,"Bananenbrood","tussendoortje","60 min",[i("Banaan","2"),i("Ei","2"),i("B
 ];
 
 // ===================== STATE & STORAGE =====================
-const SK="wm_week_v2", CK="wm_custom_v2", NK="wm_notes_v2", CHK="wm_check_v2", CFG="wm_cfg_v2", BOK="wm_boodOver_v1", AK="wm_apikey_v1", GK="wm_geminikey_v1";
+const SK="wm_week_v2", CK="wm_custom_v2", NK="wm_notes_v2", CHK="wm_check_v2", CFG="wm_cfg_v2", BOK="wm_boodOver_v1", AK="wm_apikey_v1", GK="wm_geminikey_v1", SAK="wm_snackavond_v1";
 const SB_URL="https://nejjocgplgbgmdornurw.supabase.co";
 const SB_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5lampvY2dwbGdiZ21kb3JudXJ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM2MTk4MzEsImV4cCI6MjA5OTE5NTgzMX0.dJ_xMqV4Qp-1gZKifYJ-qTW6p9GhoMdfxlr_zIJx7Ko";
 const HHID_KEY="wm_household_v1";
@@ -487,12 +487,13 @@ let S={
   formVoor:"beiden",
   boodDetail: null,
   boodOverride: lsGet(BOK,{}),
+  avondSnack: lsGet(SAK,{}),
 };
 
 function save(){
   lsSet(weekStoreKey(S.weekOffset||0),S.week);
   lsSet(notesStoreKey(S.weekOffset||0),S.notes);
-  lsSet(CK,S.custom);lsSet(CHK,S.checked);lsSet(CFG,S.cfg);lsSet(BOK,S.boodOverride);
+  lsSet(CK,S.custom);lsSet(CHK,S.checked);lsSet(CFG,S.cfg);lsSet(BOK,S.boodOverride);lsSet(SAK,S.avondSnack);
   clearTimeout(window._syncT);window._syncT=setTimeout(syncPush,3000);
 }
 
@@ -524,6 +525,7 @@ async function syncPull(hid){
       S.week=lsGet(weekStoreKey(S.weekOffset||0),emptyWeek());
       S.notes=lsGet(notesStoreKey(S.weekOffset||0),{});
       S.geminiKey=lsGet(GK,"");
+      S.avondSnack=lsGet(SAK,{});
       S.syncSt="ok";
     }else{S.syncSt=error?"err":"ok";}
   }catch(e){S.syncSt="err";}
@@ -1198,18 +1200,38 @@ function renderMealprepCard(day){
   </div>`;
 }
 
+function setAvondSnack(day,val){S.avondSnack[day]=val;lsSet(SAK,S.avondSnack);clearTimeout(window._syncT);window._syncT=setTimeout(syncPush,3000);}
+
 function renderSingleMeal(day,rowId){
   const row=ROWS.find(r=>r.id===rowId);
   const rc=S.week[day][rowId];
   const isSnack=row.cat==="tussendoortje";
   const snackDays=S.cfg.snackDays||["za","zo"];
 
-  // Empty avondsnack on a non-snack day → compact ghost button
-  if(rowId==="snack_avond"&&!rc&&!snackDays.includes(day)){
-    return `<button onclick="pickSlot('${day}','${rowId}')"
-      style="display:block;width:100%;text-align:left;padding:9px 14px;border-radius:13px;border:1.5px dashed var(--cardline);background:none;color:var(--ink3);font-size:13px;margin-bottom:10px;cursor:pointer;letter-spacing:0">
-      ＋ avondsnack toevoegen
-    </button>`;
+  // Avondsnack → vrij tekstveld (geen receptkiezer)
+  if(rowId==="snack_avond"){
+    const val=esc(S.avondSnack[day]||"");
+    const isSnackDay=snackDays.includes(day);
+    if(isSnackDay){
+      return `
+      <div class="meal-card" style="padding:10px 14px;align-items:center">
+        <div class="meal-thumb" style="background:#3d2f1e;width:38px;height:38px;font-size:18px;border-radius:10px;flex-shrink:0">🍿</div>
+        <div class="meal-info" style="width:100%">
+          <div class="meal-label">Avondsnack · avond · samen</div>
+          <input type="text" placeholder="bijv. chips, popcorn, nootjes..." value="${val}"
+            style="width:100%;border:none;background:none;font-size:14px;color:var(--ink);outline:none;font-family:inherit;margin-top:2px"
+            onchange="setAvondSnack('${day}',this.value)">
+        </div>
+      </div>`;
+    } else {
+      return `
+      <div style="display:flex;align-items:center;gap:8px;padding:7px 12px;border-radius:13px;border:1.5px dashed var(--cardline);background:none;margin-bottom:10px">
+        <span style="font-size:15px">🍿</span>
+        <input type="text" placeholder="avondsnack (optioneel)..." value="${val}"
+          style="flex:1;border:none;background:none;font-size:13px;color:var(--ink2);outline:none;font-family:inherit"
+          onchange="setAvondSnack('${day}',this.value)">
+      </div>`;
+    }
   }
 
   const subLabel=isSnack?(row.sub==="ochtend"?"ochtend · samen":row.sub==="avond"?"avond · samen":"middag · samen"):"samen";
@@ -1594,7 +1616,7 @@ function wizGenPreview(force){
           prev[wo][day][row.id]=fast.length?fast[idx["diner"]++%fast.length]:pick("diner",row.who);return;
         }
         if(mode==="rest"&&row.id==="diner"){prev[wo][day][row.id]=null;return;}
-        if(row.id==="snack_avond"&&!(S.wiz.snackDays||["za","zo"]).includes(day)){prev[wo][day][row.id]=null;return;}
+        if(row.id==="snack_avond"){prev[wo][day][row.id]=null;return;} // vrij tekstveld, geen recept
         prev[wo][day][row.id]=pick(row.cat,row.who);
       });
     });
