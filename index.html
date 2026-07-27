@@ -434,43 +434,38 @@ function weekDates(offsetWeeks=0){
   const key=`${mon.getFullYear()}_${wk}`;
   return {nums, wk, range, key};
 }
-function weekStoreKey(offset){ return `wm_week_${weekDates(offset).key}`; }
-function notesStoreKey(offset){ return `wm_notes_${weekDates(offset).key}`; }
+// Sleutel op basis van de maandag-datum (YYYY-MM-DD) — nooit afhankelijk van weeknummer
+function mondayStr(offsetWeeks){
+  const now=new Date();now.setDate(now.getDate()+offsetWeeks*7);
+  const day=now.getDay();
+  const mon=new Date(now);mon.setDate(now.getDate()-((day+6)%7));
+  const y=mon.getFullYear(),m=String(mon.getMonth()+1).padStart(2,'0'),d=String(mon.getDate()).padStart(2,'0');
+  return `${y}-${m}-${d}`;
+}
+function weekStoreKey(offset){ return `wm_week_${mondayStr(offset)}`; }
+function notesStoreKey(offset){ return `wm_notes_${mondayStr(offset)}`; }
 function curWeek(){ return weekDates(S.weekOffset||0); }
-// Fallback: migrate old single-week data to new keyed format on first load
+// Migreer alle oude sleutels (wm_week_YYYY_WW) naar nieuw formaat (wm_week_YYYY-MM-DD)
+// voor offsets -4..+4. Oud en nieuw formaat botsen nooit, dus geen overwrite-risico.
+function migrateOldWeekKeys(){
+  for(let off=-4;off<=4;off++){
+    const now=new Date();now.setDate(now.getDate()+off*7);
+    const jan1=new Date(now.getFullYear(),0,1);
+    const wk=Math.ceil((((now-jan1)/86400000)+jan1.getDay()+1)/7);
+    [['wm_week',weekStoreKey(off)],['wm_notes',notesStoreKey(off)]].forEach(([pfx,nk])=>{
+      const ok=`${pfx}_${now.getFullYear()}_${wk}`;
+      if(ok===nk)return;
+      const v=localStorage.getItem(ok);
+      if(v&&!localStorage.getItem(nk))localStorage.setItem(nk,v);
+    });
+  }
+}
 (function migrate(){
   const old=lsGet(SK,null);
   if(old){const k=weekStoreKey(0);if(!lsGet(k,null)){lsSet(k,old);}try{localStorage.removeItem(SK);}catch(e){}}
   const oldN=lsGet(NK,null);
   if(oldN){const k=notesStoreKey(0);if(!lsGet(k,null)){lsSet(k,oldN);}try{localStorage.removeItem(NK);}catch(e){}}
-})();
-// Fix: week keys berekend vanuit een zaterdag/zondag kregen wk+1 i.p.v. wk
-// omdat `now` (met offset) een zat/zon was maar `mon` een week eerder lag.
-// Hernoem foute sleutels naar correcte sleutel (op basis van maandag).
-(function migrateWeekKeyBug(){
-  const all=[];
-  for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k)all.push(k);}
-  // Verwerk oplopend op weeknummer zodat vroegere verschuivingen ruimte maken voor latere
-  all.sort((a,b)=>{const ma=a.match(/_(\d+)$/),mb=b.match(/_(\d+)$/);return ma&&mb?parseInt(ma[1])-parseInt(mb[1]):0;});
-  all.forEach(k=>{
-    const m=k.match(/^(wm_(?:week|notes))_(\d{4})_(\d+)$/);if(!m)return;
-    const prefix=m[1],year=parseInt(m[2]),wk=parseInt(m[3]);
-    // Bereken de startdatum van dit weeknummer (via oude formule)
-    const jan1=new Date(year,0,1);
-    const startDate=new Date(year,0,1+(wk-1)*7-jan1.getDay());
-    const sd=startDate.getDay();
-    if(sd!==6&&sd!==0)return; // Alleen zat/zon = bug-kandidaat
-    // Bereken de maandag van die startdatum en de correcte sleutel
-    const mon=new Date(startDate);mon.setDate(startDate.getDate()-((sd+6)%7));
-    const jan1c=new Date(mon.getFullYear(),0,1);
-    const wkCorrect=Math.ceil((((mon-jan1c)/86400000)+jan1c.getDay()+1)/7);
-    if(wkCorrect===wk)return;
-    const newKey=`${prefix}_${mon.getFullYear()}_${wkCorrect}`;
-    const src=localStorage.getItem(k);
-    if(src&&!localStorage.getItem(newKey)){
-      localStorage.setItem(newKey,src);
-    }
-  });
+  migrateOldWeekKeys();
 })();
 
 let S={
@@ -554,6 +549,9 @@ async function syncPull(hid){
       S.notes=lsGet(notesStoreKey(S.weekOffset||0),{});
       S.geminiKey=lsGet(GK,"");
       S.avondSnack=lsGet(SAK,{});
+      migrateOldWeekKeys(); // herstel foute sleutels na sync
+      S.week=lsGet(weekStoreKey(S.weekOffset||0),emptyWeek());
+      S.notes=lsGet(notesStoreKey(S.weekOffset||0),{});
       S.syncSt="ok";
     }else{S.syncSt=error?"err":"ok";}
   }catch(e){S.syncSt="err";}
