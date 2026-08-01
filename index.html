@@ -511,7 +511,7 @@ let S={
   wizSlotPicker:null,  // {day,rowId} slot being swapped in preview
   wizSlotIg:null,      // {day,rowId} slot doing IG import
   wizVastePicker:null, // null | {step:'row'|'rc', rowId:string}
-  wizIgCap:"", wizIgSt:null, wizIgErr:"", wizIgPrev:null,
+  wizIgCap:"", wizIgUrl:"", wizIgSt:null, wizIgErr:"", wizIgPrev:null,
   recFilter:"all", recVoor:"all", search:"",
   formVoor:"beiden",
   boodDetail: null,
@@ -856,96 +856,117 @@ async function fetchCaption(){
   if(!rawUrl){toast("Plak eerst een Instagram link");return;}
   set({igFetchSt:"loading",igErr:""});
 
-  const decode=s=>s
-    .replace(/&#x([0-9a-fA-F]+);/g,(_,h)=>String.fromCodePoint(parseInt(h,16)))
-    .replace(/&#(\d+);/g,(_,d)=>String.fromCodePoint(parseInt(d,10)))
-    .replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">")
-    .replace(/&#39;/g,"'").replace(/&apos;/g,"'").replace(/&quot;/g,'"');
-
-  const stripPrefix=s=>{
-    const ci=s.lastIndexOf(": ");
-    if(ci>0&&ci<s.length*0.6){const c=s.slice(ci+2).trim().replace(/^[“”‘’'"]+/,"").replace(/[“”‘’'"]+$/,"");if(c.length>10)return c;}
-    return s.trim();
-  };
-
-  // Multiple extraction strategies, best to worst
-  const extractCap=html=>{
-    // 1. JSON-LD articleBody: cleanest, no like/follower prefix
-    try{
-      const tags=[...html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)];
-      for(const [,json] of tags){
-        const d=JSON.parse(json);
-        const body=d.articleBody||(Array.isArray(d)?d.find(x=>x.articleBody)?.articleBody:null);
-        if(body&&body.length>5)return body;
-      }
-    }catch(e){}
-    // 2. __additionalDataLoaded GraphQL blob (embed page)
-    try{
-      const m=html.match(/window\.__additionalDataLoaded\(['"][^'"]*['"]\s*,\s*(\{[\s\S]+?\})\)/);
-      if(m){const d=JSON.parse(m[1]);const t=d?.graphql?.shortcode_media?.edge_media_to_caption?.edges?.[0]?.node?.text;if(t&&t.length>5)return t;}
-    }catch(e){}
-    // 3. _sharedData GraphQL (older Instagram pages)
-    try{
-      const m=html.match(/window\._sharedData\s*=\s*(\{[\s\S]+?\});\s*<\/script>/);
-      if(m){const d=JSON.parse(m[1]);const t=d?.entry_data?.PostPage?.[0]?.graphql?.shortcode_media?.edge_media_to_caption?.edges?.[0]?.node?.text;if(t&&t.length>5)return t;}
-    }catch(e){}
-    // 4. og:description with prefix strip
-    const om=html.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i)
-            ||html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:description["']/i);
-    if(om){const c=stripPrefix(decode(om[1]));if(c.length>5)return c;}
-    return null;
-  };
-
-  // Extract shortcode (works for /p/ and /reel/)
-  const scm=rawUrl.match(/\/(p|reel)\/([A-Za-z0-9_-]+)/);
-  const sc=scm?scm[2]:null;
-
-  // Target URLs: embed page first (designed to be embedded, less blocked), then original
-  const targetUrls=[];
-  if(sc){
-    targetUrls.push(`https://www.instagram.com/p/${sc}/embed/captioned/`);
-    targetUrls.push(`https://www.instagram.com/p/${sc}/embed/`);
-  }
-  targetUrls.push(rawUrl);
-
-  // 4 CORS proxy configs — mix of raw and JSON-response proxies
-  const proxyFor=t=>[
-    {p:`https://corsproxy.io/?${encodeURIComponent(t)}`,json:false},
-    {p:`https://api.allorigins.win/get?url=${encodeURIComponent(t)}`,json:true},
-    {p:`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(t)}`,json:false},
-    {p:`https://thingproxy.freeboard.io/fetch/${encodeURIComponent(t)}`,json:false},
-  ];
-
-  // Fire all combinations in parallel — first success wins (race)
-  const tryOne=async({p,json})=>{
-    const ctrl=new AbortController();
-    const tid=setTimeout(()=>ctrl.abort(),8000);
-    try{
-      const r=await fetch(p,{signal:ctrl.signal});
-      clearTimeout(tid);
-      if(!r.ok)throw new Error("http "+r.status);
-      const html=json?(await r.json()).contents||"":await r.text();
-      const cap=extractCap(html);
-      if(!cap||cap.length<10)throw new Error("no cap");
-      return cap;
-    }finally{clearTimeout(tid);}
-  };
-
-  const attempts=targetUrls.flatMap(t=>proxyFor(t).map(cfg=>tryOne(cfg)));
-  const cap=await new Promise(resolve=>{
-    let done=false,fails=0;
-    attempts.forEach(p=>
-      p.then(c=>{if(!done){done=true;resolve(c);}})
-       .catch(()=>{if(++fails===attempts.length&&!done){done=true;resolve(null);}})
-    );
-  });
-
+  const cap=await igFetchCaption(rawUrl);
   if(!cap){
-    set({igFetchSt:"err",igErr:"Instagram blokkeert automatisch ophalen. Plak het bijschrift handmatig hieronder."});
+    set({igFetchSt:"err",igErr:"Het bijschrift kon niet worden opgehaald — Instagram blokkeert dit vaak. Open de post, tik op ··· → Kopieer bijschrift, en plak het hieronder."});
     return;
   }
   set({igCap:cap,igFetchSt:"ok"});
   const ta=document.getElementById("ig-cap");if(ta)ta.value=cap;
+}
+
+const igDecode=s=>s
+  .replace(/&#x([0-9a-fA-F]+);/g,(_,h)=>String.fromCodePoint(parseInt(h,16)))
+  .replace(/&#(\d+);/g,(_,d)=>String.fromCodePoint(parseInt(d,10)))
+  .replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">")
+  .replace(/&#39;/g,"'").replace(/&apos;/g,"'").replace(/&quot;/g,'"');
+
+// og:description ziet eruit als: `1.234 likes, 56 comments - naam on May 1, 2024: "bijschrift"`
+function igStripPrefix(s){
+  let t=s;
+  const m=t.match(/likes?,[^:]*comments?\s*[-–—]\s*[^:]*?:\s*([\s\S]*)$/i);
+  if(m&&m[1]&&m[1].trim().length>10)t=m[1];
+  return t.trim().replace(/^[“”‘’'"]+/,"").replace(/[“”‘’'"]+$/,"").trim();
+}
+
+// Meerdere extractiestrategieën, beste eerst
+function igExtractCap(body){
+  // 1. JSON-LD articleBody: schoonst, zonder likes/volgers-prefix
+  try{
+    const tags=[...body.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)];
+    for(const [,json] of tags){
+      const d=JSON.parse(json);
+      const b=d.articleBody||(Array.isArray(d)?d.find(x=>x.articleBody)?.articleBody:null);
+      if(b&&b.length>5)return b;
+    }
+  }catch(e){}
+  // 2. __additionalDataLoaded GraphQL blob (embed-pagina)
+  try{
+    const m=body.match(/window\.__additionalDataLoaded\(['"][^'"]*['"]\s*,\s*(\{[\s\S]+?\})\)/);
+    if(m){const d=JSON.parse(m[1]);const t=d?.graphql?.shortcode_media?.edge_media_to_caption?.edges?.[0]?.node?.text;if(t&&t.length>5)return t;}
+  }catch(e){}
+  // 3. _sharedData GraphQL (oudere pagina's)
+  try{
+    const m=body.match(/window\._sharedData\s*=\s*(\{[\s\S]+?\});\s*<\/script>/);
+    if(m){const d=JSON.parse(m[1]);const t=d?.entry_data?.PostPage?.[0]?.graphql?.shortcode_media?.edge_media_to_caption?.edges?.[0]?.node?.text;if(t&&t.length>5)return t;}
+  }catch(e){}
+  // 4. Caption in de embed-HTML zelf
+  try{
+    const m=body.match(/class="[^"]*Caption[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
+    if(m){const t=igStripPrefix(igDecode(m[1].replace(/<[^>]+>/g," ").replace(/\s+/g," ")));if(t.length>20)return t;}
+  }catch(e){}
+  // 5. og:description met prefix-strip
+  const om=body.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i)
+          ||body.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:description["']/i);
+  if(om){const c=igStripPrefix(igDecode(om[1]));if(c.length>5)return c;}
+  // 6. Platte tekst (r.jina.ai levert markdown, geen HTML)
+  if(!/<html|<meta|<script/i.test(body)){
+    let t=body;
+    const mc=t.indexOf("Markdown Content:");
+    if(mc>=0)t=t.slice(mc+17);
+    t=t.replace(/^\s*(Title|URL Source|Published Time|Warning):.*$/gim,"")
+       .replace(/!?\[[^\]]*\]\([^)]*\)/g,"")   // markdown links/afbeeldingen
+       .replace(/\n{3,}/g,"\n\n").trim();
+    if(t.length>40&&t.length<8000)return igStripPrefix(t);
+  }
+  return null;
+}
+
+// Haalt het bijschrift op via publieke CORS-proxy's. Instagram staat geen directe
+// browser-requests toe, dus dit blijft afhankelijk van externe diensten.
+async function igFetchCaption(rawUrl){
+  // Shortcode werkt voor /p/, /reel/ en /tv/
+  const scm=rawUrl.match(/\/(p|reel|reels|tv)\/([A-Za-z0-9_-]+)/);
+  const sc=scm?scm[2]:null;
+
+  // Embed-pagina eerst: die is bedoeld om ingesloten te worden en wordt minder geblokkeerd
+  const targets=[];
+  if(sc){
+    targets.push(`https://www.instagram.com/p/${sc}/embed/captioned/`);
+    targets.push(`https://www.instagram.com/p/${sc}/embed/`);
+  }
+  targets.push(rawUrl.split("?")[0]);
+
+  const proxyFor=t=>[
+    {p:`https://r.jina.ai/${t}`,json:false,ms:20000},           // rendert de pagina, levert tekst
+    {p:`https://api.allorigins.win/get?url=${encodeURIComponent(t)}`,json:true,ms:15000},
+    {p:`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(t)}`,json:false,ms:15000},
+    {p:`https://corsproxy.io/?url=${encodeURIComponent(t)}`,json:false,ms:15000},
+    {p:`https://api.cors.lol/?url=${encodeURIComponent(t)}`,json:false,ms:15000},
+  ];
+
+  const tryOne=async({p,json,ms})=>{
+    const ctrl=new AbortController();
+    const tid=setTimeout(()=>ctrl.abort(),ms);
+    try{
+      const r=await fetch(p,{signal:ctrl.signal});
+      if(!r.ok)throw new Error("http "+r.status);
+      const body=json?((await r.json()).contents||""):await r.text();
+      const cap=igExtractCap(body);
+      if(!cap||cap.length<20)throw new Error("geen bijschrift");
+      return cap;
+    }finally{clearTimeout(tid);}
+  };
+
+  // Alles parallel — eerste bruikbare bijschrift wint
+  const attempts=targets.flatMap(t=>proxyFor(t).map(cfg=>tryOne(cfg)));
+  return await new Promise(resolve=>{
+    let done=false,fails=0;
+    attempts.forEach(pr=>
+      pr.then(c=>{if(!done){done=true;resolve(c);}})
+        .catch(()=>{if(++fails===attempts.length&&!done){done=true;resolve(null);}})
+    );
+  });
 }
 async function importFromUrl(){
   const url=(S.igUrl||(document.getElementById("ig-url")||{value:""}).value).trim();
@@ -957,6 +978,94 @@ async function importFromUrl(){
     await doImport();
   }
 }
+const igPrompt=cap=>
+`Je krijgt het bijschrift van een Instagram-post. Haal daar het recept uit.
+
+Geef UITSLUITEND geldige JSON terug, exact in dit formaat:
+{"name":"","category":"","time":"","servings":2,"ingredients":[{"n":"","a":""}],"steps":[""]}
+
+Regels:
+- Alles in het Nederlands. Vertaal een anderstalig recept volledig.
+- name: korte gerechtnaam, zonder emoji, hashtags of merknamen.
+- category: exact een van deze vier: ontbijt, lunch, diner, tussendoortje.
+- time: totale bereidingstijd, bijvoorbeeld "25 min". Staat die er niet? Schat realistisch.
+- servings: geheel getal, aantal personen. Staat dat er niet? Gebruik 2.
+- ingredients: splits elk ingredient apart. "n" is alleen de naam, enkelvoud en zonder hoeveelheid. "a" is de hoeveelheid met eenheid, bijvoorbeeld {"n":"bloem","a":"200 g"}. Geen hoeveelheid genoemd? Gebruik "a":"".
+- steps: losse, volledige zinnen in de juiste volgorde. Laat stapnummers weg. Verzin geen stappen die er niet staan.
+- Negeer hashtags, emoji, oproepen om te volgen/liken/taggen, links en reclame.
+- Staat er geen recept in? Geef dan exact {"error":true}
+
+Bijschrift:
+${cap}`;
+
+// Gedeeld door de hoofdimport en de wizard-import.
+async function igExtractRecipe(cap,apiKey,onWait){
+  const base="https://generativelanguage.googleapis.com/v1beta";
+  const keyParam="?key="+encodeURIComponent(apiKey);
+  const pref=["gemini-2.0-flash","gemini-2.5-flash","gemini-1.5-flash","gemini-2.0-flash-lite"];
+  let models=[...pref];
+  try{
+    const lr=await fetch(`${base}/models${keyParam}`);
+    if(lr.ok){
+      const ld=await lr.json();
+      const supported=(ld.models||[])
+        .filter(m=>(m.supportedGenerationMethods||[]).includes("generateContent"))
+        .map(m=>m.name.replace("models/",""));
+      const sorted=pref.flatMap(p=>supported.filter(s=>s.startsWith(p)))
+        .concat(supported.filter(s=>!pref.some(p=>s.startsWith(p))));
+      if(sorted.length)models=sorted;
+    }
+  }catch(e){}
+
+  const msg=igPrompt(cap);
+  let lastErr="";
+  for(const model of models){
+    // JSON-modus voorkomt markdown-fences; valt terug als het model dat niet kent
+    const callModel=json=>fetch(`${base}/models/${model}:generateContent${keyParam}`,
+      {method:"POST",headers:{"Content-Type":"application/json"},
+       body:JSON.stringify({contents:[{parts:[{text:msg}]}],
+         generationConfig:json?{temperature:0,responseMimeType:"application/json"}:{temperature:0}})});
+    let res=await callModel(true);
+    if(res.status===400)res=await callModel(false);
+    if(res.status===429){
+      let errBody="";
+      try{errBody=JSON.stringify(await res.json());}catch(e){}
+      // "limit: 0" betekent gratis quota op — direct door naar het volgende model
+      if(/,"limit":\s*0[,}]/.test(errBody)){lastErr=`${model}: quota op`;continue;}
+      let wait=20;
+      const m2=errBody.match(/retry in ([\d.]+)s/i);if(m2)wait=Math.ceil(parseFloat(m2[1]))+1;
+      if(onWait)onWait(`Even wachten… (rate limit, opnieuw over ${wait}s met ${model})`);
+      await new Promise(r=>setTimeout(r,wait*1000));
+      res=await callModel(true);
+    }
+    if(!res.ok){
+      let errMsg=`Model ${model}: fout ${res.status}`;
+      try{const ed=await res.json();errMsg=ed?.error?.message||errMsg;}catch(e){}
+      lastErr=errMsg;continue;
+    }
+    const data=await res.json();
+    const txt=((data.candidates||[])[0]?.content?.parts||[])[0]?.text||"";
+    const fi=txt.indexOf("{"),li=txt.lastIndexOf("}");
+    if(fi<0||li<=fi){lastErr="Geen recept gevonden in de tekst";continue;}
+    let p;
+    try{p=JSON.parse(txt.slice(fi,li+1));}catch(e){lastErr="Antwoord was geen geldige JSON";continue;}
+    if(p.error)throw new Error("Geen recept in dit bijschrift gevonden");
+    const cats=["ontbijt","lunch","diner","tussendoortje"];
+    return {
+      name:(p.name||"").trim()||"Naamloos recept",
+      category:cats.includes(p.category)?p.category:"diner",
+      time:(p.time||"?").trim(),
+      servings:Number(p.servings)>0?Math.round(Number(p.servings)):2,
+      ingredients:(Array.isArray(p.ingredients)?p.ingredients:[])
+        .map(g=>({n:(g&&g.n||"").trim(),a:(g&&g.a||"").trim()})).filter(g=>g.n),
+      steps:(Array.isArray(p.steps)?p.steps:[]).map(s=>String(s).trim()).filter(Boolean),
+    };
+  }
+  throw new Error(/quota op/.test(lastErr)
+    ?"Je gratis Gemini quota is op. Voeg betaling toe op ai.google.dev (ca. €0,001 per recept)."
+    :lastErr||"Mislukt");
+}
+
 async function doImport(){
   const cap=S.igCap||(document.getElementById("ig-cap")||{value:""}).value.trim();
   const url=S.igUrl||(document.getElementById("ig-url")||{value:""}).value.trim();
@@ -965,63 +1074,8 @@ async function doImport(){
   if(!apiKey){toast("Vul je Google Gemini API key in");return;}
   set({igSt:"loading",igErr:"",igPrev:null});
   try{
-    const base="https://generativelanguage.googleapis.com/v1beta";
-    const keyParam="?key="+encodeURIComponent(apiKey);
-    // Build ordered list of models to try
-    const pref=["gemini-2.0-flash","gemini-2.5-flash","gemini-1.5-flash","gemini-2.0-flash-lite"];
-    let models=[...pref];
-    try{
-      const lr=await fetch(`${base}/models${keyParam}`);
-      if(lr.ok){
-        const ld=await lr.json();
-        const supported=(ld.models||[])
-          .filter(m=>(m.supportedGenerationMethods||[]).includes("generateContent"))
-          .map(m=>m.name.replace("models/",""));
-        const sorted=pref.flatMap(p=>supported.filter(s=>s.startsWith(p)))
-          .concat(supported.filter(s=>!pref.some(p=>s.startsWith(p))));
-        if(sorted.length)models=sorted;
-      }
-    }catch(e){}
-    const msg="Extraheer het recept uit deze Instagram caption. Geef ALLEEN geldige JSON, geen markdown. "+
-      "Formaat: {name, category, time, servings, ingredients:[{n,a}], steps:[]}. "+
-      "category is: ontbijt, lunch, diner of tussendoortje. servings is een getal. "+
-      "Geen recept gevonden: {error:true}. Caption: "+cap;
-    let lastErr="";
-    for(const model of models){
-      const callModel=()=>fetch(`${base}/models/${model}:generateContent${keyParam}`,
-        {method:"POST",headers:{"Content-Type":"application/json"},
-         body:JSON.stringify({contents:[{parts:[{text:msg}]}]})});
-      let res=await callModel();
-      if(res.status===429){
-        let errBody="";
-        try{const ed=await res.json();errBody=JSON.stringify(ed);}catch(e){}
-        // "limit: 0" means free quota exhausted — skip to next model immediately
-        if(/,"limit":\s*0[,}]/.test(errBody)){lastErr=`${model}: quota op`;continue;}
-        // temporary rate limit — wait and retry this model once
-        let wait=20;
-        const m2=errBody.match(/retry in ([\d.]+)s/i);if(m2)wait=Math.ceil(parseFloat(m2[1]))+1;
-        set({igSt:"loading",igErr:`Even wachten... (rate limit, retry over ${wait}s met ${model})`});
-        await new Promise(r=>setTimeout(r,wait*1000));
-        res=await callModel();
-      }
-      if(!res.ok){
-        let errMsg=`Model ${model}: fout ${res.status}`;
-        try{const ed=await res.json();errMsg=ed?.error?.message||errMsg;}catch(e){}
-        lastErr=errMsg;continue;
-      }
-      const data=await res.json();
-      const txt=((data.candidates||[])[0]?.content?.parts||[])[0]?.text||"";
-      const fi=txt.indexOf("{"),li=txt.lastIndexOf("}");
-      if(fi<0||li<=fi){lastErr="Geen recept gevonden in de tekst";continue;}
-      const p=JSON.parse(txt.slice(fi,li+1));
-      if(p.error)throw new Error("Geen recept in dit bijschrift gevonden");
-      set({igSt:"ok",igPrev:{id:Date.now(),ebook:0,custom:true,voor:"beiden",name:p.name||"",category:p.category||"ontbijt",time:p.time||"?",servings:p.servings||2,ingredients:p.ingredients||[],steps:p.steps||[],link:url||null}});
-      return;
-    }
-    // All models failed
-    throw new Error(/quota op/.test(lastErr)
-      ?"Je gratis Gemini quota is op. Voeg betaling toe op ai.google.dev (ca. €0,001 per recept)."
-      :lastErr||"Mislukt");
+    const p=await igExtractRecipe(cap,apiKey,m=>set({igSt:"loading",igErr:m}));
+    set({igSt:"ok",igErr:"",igPrev:{id:Date.now(),ebook:0,custom:true,voor:"beiden",...p,link:url||null}});
   }catch(e){set({igSt:"err",igErr:e.message||"Mislukt"});}
 }
 function saveIgRecipe(){
@@ -1722,32 +1776,37 @@ function wizClearSlot(wo,day,rowId){
   S.wiz.preview[wo][day][rowId] = null;
   set({});
 }
-function wizStartIg(wo,day,rowId){ set({wizSlotIg:{wo,day,rowId},wizIgCap:"",wizIgSt:null,wizIgPrev:null}); }
+function wizStartIg(wo,day,rowId){ set({wizSlotIg:{wo,day,rowId},wizIgCap:"",wizIgUrl:"",wizIgSt:null,wizIgErr:"",wizIgPrev:null}); }
+// Haalt eerst het bijschrift op via de link, en analyseert dan.
+async function wizFetchAndImport(){
+  const url=(document.getElementById("wiz-ig-url")||{value:""}).value.trim();
+  if(!url){toast("Plak eerst een Instagram link");return;}
+  if(!S.geminiKey){toast("Vul je Gemini API key in bij Recepten → Instagram");return;}
+  set({wizIgSt:"fetching",wizIgErr:"",wizIgUrl:url});
+  const cap=await igFetchCaption(url);
+  if(!cap){
+    set({wizIgSt:"err",wizIgErr:"Het bijschrift kon niet worden opgehaald. Open de post, tik op ··· → Kopieer bijschrift, en plak het hieronder."});
+    return;
+  }
+  set({wizIgCap:cap,wizIgSt:null});
+  const ta=document.getElementById("wiz-ig-cap");if(ta)ta.value=cap;
+  await wizDoImport();
+}
 async function wizDoImport(){
-  const cap = document.getElementById("wiz-ig-cap").value.trim();
+  const cap=((document.getElementById("wiz-ig-cap")||{value:""}).value||S.wizIgCap||"").trim();
+  const url=((document.getElementById("wiz-ig-url")||{value:""}).value||S.wizIgUrl||"").trim();
   if(cap.length<20){toast("Plak eerst een caption");return;}
+  if(!S.geminiKey){set({wizIgSt:"err",wizIgErr:"Vul eerst je Gemini API key in bij Recepten → + Eigen recept of Instagram import → Instagram."});return;}
   set({wizIgSt:"loading",wizIgErr:"",wizIgPrev:null,wizIgCap:cap});
   try{
-    const msg="Extraheer het recept uit deze Instagram caption. Geef ALLEEN geldige JSON, geen markdown. "+
-      "Formaat: {name,category,time,servings,ingredients:[{n,a}],steps:[]}. "+
-      "category is: ontbijt, lunch, diner of tussendoortje. Geen recept: {error:true}. Caption: "+cap;
-    const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:1500,messages:[{role:"user",content:msg}]})});
-    if(!res.ok) throw new Error("API fout "+res.status);
-    const data=await res.json();
-    const txt=((data.content||[]).find(b=>b.type==="text")||{}).text||"";
-    const fi=txt.indexOf("{"),li=txt.lastIndexOf("}");
-    if(fi<0) throw new Error("Geen recept gevonden");
-    const p=JSON.parse(txt.slice(fi,li+1));
-    if(p.error) throw new Error("Geen recept in deze tekst");
-    const rc={id:Date.now(),ebook:0,custom:true,voor:"beiden",...p,servings:p.servings||2};
-    // Save to custom recipes
+    const p=await igExtractRecipe(cap,S.geminiKey,m=>set({wizIgSt:"loading",wizIgErr:m}));
+    const rc={id:Date.now(),ebook:0,custom:true,voor:"beiden",...p,link:url||null};
     S.custom=[...S.custom,rc]; lsSet(CK,S.custom);
-    // Assign to slot
     const {wo,day,rowId}=S.wizSlotIg;
     S.wiz.preview[wo][day][rowId]=rc;
-    set({wizIgSt:null,wizSlotIg:null,wizIgPrev:null});
+    set({wizIgSt:null,wizIgErr:"",wizSlotIg:null,wizIgPrev:null,wizIgCap:"",wizIgUrl:""});
     toast("Recept geïmporteerd en ingepland! ✨");
-  }catch(e){ set({wizIgSt:"err",wizIgErr:e.message}); }
+  }catch(e){ set({wizIgSt:"err",wizIgErr:e.message||"Mislukt"}); }
 }
 
 function wizToggleTag(arr, val){
@@ -1805,14 +1864,17 @@ function renderWizard(){
         <div class="sheet-handle"></div>
         <div class="kicker" style="color:var(--terra)">Instagram import</div>
         <div class="sheet-title">Recept ophalen</div>
+        <div class="field"><label>Instagram link</label>
+          <input id="wiz-ig-url" value="${esc(S.wizIgUrl||"")}" placeholder="https://www.instagram.com/p/..." oninput="S.wizIgUrl=this.value"></div>
+        <button class="btn btn-terra" style="width:100%;margin-bottom:14px" onclick="wizFetchAndImport()" ${S.wizIgSt==="fetching"||S.wizIgSt==="loading"?"disabled":""}>${S.wizIgSt==="fetching"?'<span class="spin">⏳</span> Bijschrift ophalen…':S.wizIgSt==="loading"?'<span class="spin">⏳</span> Analyseren…':"✨ Ophalen en analyseren"}</button>
         <div style="background:var(--card);border:1px solid var(--cardline);border-radius:14px;padding:14px;font-size:13px;color:var(--ink2);line-height:1.6;margin-bottom:14px">
-          Open de post → tik op <b style="color:var(--ink)">···</b> → <b style="color:var(--ink)">Kopieer bijschrift</b> → plak hier
+          Lukt het ophalen niet? Open de post → tik op <b style="color:var(--ink)">···</b> → <b style="color:var(--ink)">Kopieer bijschrift</b> → plak hieronder
         </div>
-        <div class="field"><label>Caption</label><textarea id="wiz-ig-cap" rows="5" placeholder="Plak de Instagram caption...">${esc(S.wizIgCap)}</textarea></div>
+        <div class="field"><label>Caption</label><textarea id="wiz-ig-cap" rows="5" placeholder="Plak de Instagram caption..." oninput="S.wizIgCap=this.value">${esc(S.wizIgCap)}</textarea></div>
         ${S.wizIgSt==="err"?`<div style="background:#CD6A4522;border-radius:13px;padding:12px;font-size:13px;color:var(--rust);margin-bottom:12px">${esc(S.wizIgErr)}</div>`:""}
         <div class="btn-row">
           <button class="btn btn-line" onclick="set({wizSlotIg:null,wizSlotPicker:S.wizSlotIg})">← Terug</button>
-          <button class="btn btn-terra" onclick="wizDoImport()" ${S.wizIgSt==="loading"?"disabled":""}>${S.wizIgSt==="loading"?"⏳ Analyseren...":"🔍 Analyseer"}</button>
+          <button class="btn btn-terra" onclick="wizDoImport()" ${S.wizIgSt==="loading"||S.wizIgSt==="fetching"?"disabled":""}>${S.wizIgSt==="loading"?"⏳ Analyseren...":"🔍 Analyseer"}</button>
         </div>
       </div>
     </div>`;
@@ -2297,7 +2359,7 @@ window.wizCycleDayMode=wizCycleDayMode; window.wizTogglePlanDay=wizTogglePlanDay
 window.wizFinish=wizFinish; window.wizApplyPreview=wizApplyPreview;
 window.wizSwapSlot=wizSwapSlot; window.wizAssignSlot=wizAssignSlot;
 window.wizClearSlot=wizClearSlot; window.wizStartIg=wizStartIg;
-window.wizDoImport=wizDoImport; window.wizToggleTag=wizToggleTag;
+window.wizDoImport=wizDoImport; window.wizFetchAndImport=wizFetchAndImport; window.wizToggleTag=wizToggleTag;
 window.wizToggleMpDay=wizToggleMpDay; window.wizToggleInHuis=wizToggleInHuis;
 window.wizToggleVasteDay=wizToggleVasteDay; window.wizRemoveVaste=wizRemoveVaste;
 window.wizPickVasteRow=wizPickVasteRow; window.wizPickVasteRc=wizPickVasteRc;
