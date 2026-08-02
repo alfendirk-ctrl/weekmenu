@@ -512,6 +512,7 @@ let S={
   wizSlotIg:null,      // {day,rowId} slot doing IG import
   wizVastePicker:null, // null | {step:'row'|'rc', rowId:string}
   wizIgCap:"", wizIgUrl:"", wizIgSt:null, wizIgErr:"", wizIgPrev:null,
+  photos:[], photoSt:null,
   recFilter:"all", recVoor:"all", search:"",
   formVoor:"beiden",
   boodDetail: null,
@@ -560,8 +561,29 @@ async function syncPull(hid){
       S.notes=lsGet(notesStoreKey(S.weekOffset||0),{});
       S.syncSt="ok";
     }else{S.syncSt=error?"err":"ok";}
+    const n=await pullInbox(hid);
+    if(n)toast(`${n} recept${n===1?"":"en"} uit je inbox toegevoegd \u2728`);
   }catch(e){S.syncSt="err";}
   render();setTimeout(()=>{S.syncSt="idle";render();},3000);
+}
+// Recepten die via de Edge Function ig-import binnenkwamen ophalen en opnemen.
+async function pullInbox(hid){
+  try{
+    const {data,error}=await getSb().from('recipe_inbox')
+      .select('id,recipe,source_url').eq('household_id',hid).eq('consumed',false).order('id');
+    if(error||!data||!data.length)return 0;
+    const seen=new Set(S.custom.map(c=>(c.name||"").toLowerCase()));
+    const add=[];
+    data.forEach((r,i)=>{
+      const rc=r.recipe;
+      if(!rc||!rc.name||seen.has(rc.name.toLowerCase()))return;
+      seen.add(rc.name.toLowerCase());
+      add.push({id:Date.now()+i,ebook:0,custom:true,voor:"beiden",...rc,link:r.source_url||null});
+    });
+    if(add.length){S.custom=[...S.custom,...add];lsSet(CK,S.custom);}
+    await getSb().from('recipe_inbox').update({consumed:true}).in('id',data.map(r=>r.id));
+    return add.length;
+  }catch(e){return 0;}
 }
 function joinHousehold(id){
   if(!id||id.length<10){toast("Ongeldige code");return;}
@@ -978,10 +1000,8 @@ async function importFromUrl(){
     await doImport();
   }
 }
-const igPrompt=cap=>
-`Je krijgt het bijschrift van een Instagram-post. Haal daar het recept uit.
-
-Geef UITSLUITEND geldige JSON terug, exact in dit formaat:
+const IG_RULES=
+`Geef UITSLUITEND geldige JSON terug, exact in dit formaat:
 {"name":"","category":"","time":"","servings":2,"ingredients":[{"n":"","a":""}],"steps":[""]}
 
 Regels:
@@ -993,13 +1013,24 @@ Regels:
 - ingredients: splits elk ingredient apart. "n" is alleen de naam, enkelvoud en zonder hoeveelheid. "a" is de hoeveelheid met eenheid, bijvoorbeeld {"n":"bloem","a":"200 g"}. Geen hoeveelheid genoemd? Gebruik "a":"".
 - steps: losse, volledige zinnen in de juiste volgorde. Laat stapnummers weg. Verzin geen stappen die er niet staan.
 - Negeer hashtags, emoji, oproepen om te volgen/liken/taggen, links en reclame.
-- Staat er geen recept in? Geef dan exact {"error":true}
+- Staat er geen recept in? Geef dan exact {"error":true}`;
+
+const igPromptText=cap=>
+`Je krijgt het bijschrift van een Instagram-post. Haal daar het recept uit.
+
+${IG_RULES}
 
 Bijschrift:
 ${cap}`;
 
-// Gedeeld door de hoofdimport en de wizard-import.
-async function igExtractRecipe(cap,apiKey,onWait){
+const igPromptImg=n=>
+`Je krijgt ${n===1?"een afbeelding":n+" afbeeldingen"} van een recept — bijvoorbeeld een screenshot van een Instagram-reel, een kookboekpagina of een foto van een receptkaart. Lees alle tekst die je ziet, ook tekst die over de video heen staat, en haal daar het recept uit.${n>1?" De afbeeldingen horen bij hetzelfde recept en staan op volgorde; combineer ze tot één recept zonder dingen dubbel te noemen.":""}
+
+${IG_RULES}`;
+
+// Gedeeld door de hoofdimport, de wizard-import en de foto-import.
+// input is {text:"..."} of {images:[base64,...]}
+async function igExtractRecipe(input,apiKey,onWait){
   const base="https://generativelanguage.googleapis.com/v1beta";
   const keyParam="?key="+encodeURIComponent(apiKey);
   const pref=["gemini-2.0-flash","gemini-2.5-flash","gemini-1.5-flash","gemini-2.0-flash-lite"];
@@ -1017,13 +1048,16 @@ async function igExtractRecipe(cap,apiKey,onWait){
     }
   }catch(e){}
 
-  const msg=igPrompt(cap);
+  const imgs=(input&&input.images)||[];
+  const parts=imgs.length
+    ? [{text:igPromptImg(imgs.length)},...imgs.map(d=>({inline_data:{mime_type:"image/jpeg",data:d}}))]
+    : [{text:igPromptText((input&&input.text)||"")}];
   let lastErr="";
   for(const model of models){
     // JSON-modus voorkomt markdown-fences; valt terug als het model dat niet kent
     const callModel=json=>fetch(`${base}/models/${model}:generateContent${keyParam}`,
       {method:"POST",headers:{"Content-Type":"application/json"},
-       body:JSON.stringify({contents:[{parts:[{text:msg}]}],
+       body:JSON.stringify({contents:[{parts}],
          generationConfig:json?{temperature:0,responseMimeType:"application/json"}:{temperature:0}})});
     let res=await callModel(true);
     if(res.status===400)res=await callModel(false);
@@ -1074,10 +1108,67 @@ async function doImport(){
   if(!apiKey){toast("Vul je Google Gemini API key in");return;}
   set({igSt:"loading",igErr:"",igPrev:null});
   try{
-    const p=await igExtractRecipe(cap,apiKey,m=>set({igSt:"loading",igErr:m}));
+    const p=await igExtractRecipe({text:cap},apiKey,m=>set({igSt:"loading",igErr:m}));
     set({igSt:"ok",igErr:"",igPrev:{id:Date.now(),ebook:0,custom:true,voor:"beiden",...p,link:url||null}});
   }catch(e){set({igSt:"err",igErr:e.message||"Mislukt"});}
 }
+// ---------- FOTO / SCREENSHOT IMPORT ----------
+// Schaalt terug naar max 1280px en comprimeert, zodat de request klein blijft.
+function fileToB64(file){
+  return new Promise((resolve,reject)=>{
+    const fr=new FileReader();
+    fr.onerror=()=>reject(new Error("kon bestand niet lezen"));
+    fr.onload=()=>{
+      const img=new Image();
+      img.onerror=()=>reject(new Error("geen geldige afbeelding"));
+      img.onload=()=>{
+        const MAX=1280;
+        let w=img.naturalWidth,h=img.naturalHeight;
+        if(!w||!h)return reject(new Error("lege afbeelding"));
+        if(Math.max(w,h)>MAX){const sc=MAX/Math.max(w,h);w=Math.round(w*sc);h=Math.round(h*sc);}
+        const c=document.createElement("canvas");c.width=w;c.height=h;
+        c.getContext("2d").drawImage(img,0,0,w,h);
+        resolve(c.toDataURL("image/jpeg",0.85).split(",")[1]);
+      };
+      img.src=fr.result;
+    };
+    fr.readAsDataURL(file);
+  });
+}
+const PHOTO_MAX=6;
+async function addPhotos(files){
+  const list=[...(files||[])].filter(f=>f&&f.type&&f.type.startsWith("image/"));
+  if(!list.length){toast("Geen afbeelding gevonden");return;}
+  const cur=S.photos||[];
+  if(cur.length>=PHOTO_MAX){toast(`Maximaal ${PHOTO_MAX} foto's`);return;}
+  set({photoSt:"reading"});
+  const added=[];
+  for(const f of list){
+    if(cur.length+added.length>=PHOTO_MAX){toast(`Maximaal ${PHOTO_MAX} foto's`);break;}
+    try{added.push(await fileToB64(f));}catch(e){toast("Een foto kon niet worden gelezen");}
+  }
+  set({photos:[...cur,...added],photoSt:null,igSt:null,igErr:""});
+}
+function removePhoto(i){const p=[...(S.photos||[])];p.splice(i,1);set({photos:p,igSt:null,igErr:""});}
+async function doPhotoImport(){
+  const photos=S.photos||[];
+  if(!photos.length){toast("Kies eerst een of meer foto's");return;}
+  if(!S.geminiKey){toast("Vul je Google Gemini API key in");return;}
+  set({igSt:"loading",igErr:"",igPrev:null});
+  try{
+    const p=await igExtractRecipe({images:photos},S.geminiKey,m=>set({igSt:"loading",igErr:m}));
+    set({igSt:"ok",igErr:"",igPrev:{id:Date.now(),ebook:0,custom:true,voor:"beiden",...p,link:null}});
+  }catch(e){set({igSt:"err",igErr:e.message||"Mislukt"});}
+}
+// Plakken van een screenshot rechtstreeks in het foto-tabblad
+document.addEventListener("paste",e=>{
+  if(!S.addOpen||S.addTab!=="foto"||S.editRc)return;
+  const items=[...((e.clipboardData&&e.clipboardData.items)||[])].filter(i=>i.type&&i.type.startsWith("image/"));
+  if(!items.length)return;
+  e.preventDefault();
+  addPhotos(items.map(i=>i.getAsFile()).filter(Boolean));
+});
+
 function saveIgRecipe(){
   const p=S.igPrev;if(!p)return;
   const nl="\n";
@@ -1603,14 +1694,33 @@ function renderAddSheet(){
   const stepsStr=rc?(rc.steps||[]).join(nl):"";
   const cat=rc?rc.category:"ontbijt";const srv=rc?rc.servings||2:2;
   const p=S.igPrev;
+  const previewBlock=(S.igSt==="ok"&&p)?`
+        <div style="background:var(--card);border:1px solid var(--olive);border-radius:16px;padding:16px;margin-top:14px">
+          <div style="font-family:'Space Mono';font-size:11px;color:var(--olive);font-weight:700;margin-bottom:12px">✅ RECEPT GEVONDEN — CONTROLEER</div>
+          <div class="field"><label>Naam</label><input id="ig-name" value="${esc(p.name)}"></div>
+          <div class="row-fields">
+            <div class="field" style="flex:1"><label>Categorie</label><select id="ig-cat">${CATS.map(c=>`<option value="${c}" ${p.category===c?"selected":""}>${CL[c]}</option>`).join("")}</select></div>
+            <div class="field" style="flex:1"><label>Tijd</label><input id="ig-time" value="${esc(p.time)}"></div>
+            <div class="field" style="flex:0.6"><label>Pers.</label><select id="ig-srv">${[1,2,3,4,5,6].map(n=>`<option value="${n}" ${p.servings===n?"selected":""}>${n}</option>`).join("")}</select></div>
+          </div>
+          <div class="field"><label>Voor wie</label><div class="tag-pick">
+            <button class="tag-opt dirk ${S.formVoor==="dirk"?"on":""}" onclick="setFormVoor('dirk')">Dirk</button>
+            <button class="tag-opt shelley ${S.formVoor==="shelley"?"on":""}" onclick="setFormVoor('shelley')">Shelley</button>
+            <button class="tag-opt beiden ${S.formVoor==="beiden"?"on":""}" onclick="setFormVoor('beiden')">Beiden</button>
+          </div></div>
+          <div class="field"><label>Ingrediënten</label><textarea id="ig-ing" rows="4">${esc((p.ingredients||[]).map(g=>g.n+(g.a?" - "+g.a:"")).join(nl))}</textarea></div>
+          <div class="field"><label>Stappen</label><textarea id="ig-steps" rows="4">${esc((p.steps||[]).join(nl))}</textarea></div>
+          <button class="btn btn-terra" onclick="saveIgRecipe()">✓ Toevoegen</button>
+        </div>`:"";
   return `
-  <div class="overlay" onclick="set({addOpen:false,editRc:null,igSt:null,igFetchSt:null,igPrev:null,igCap:'',igUrl:''})">
+  <div class="overlay" onclick="set({addOpen:false,editRc:null,igSt:null,igFetchSt:null,igPrev:null,igCap:'',igUrl:'',photos:[]})">
     <div class="sheet" onclick="event.stopPropagation()">
       <div class="sheet-handle"></div>
       <div class="sheet-title">${isEdit?"Recept bewerken":"Nieuw recept"}</div>
       ${!isEdit?`<div class="tab-row">
-        <button class="tab-btn ${tab==="manual"?"active":""}" onclick="set({addTab:'manual',igSt:null,igFetchSt:null,igPrev:null})">✍️ Handmatig</button>
+        <button class="tab-btn ${tab==="manual"?"active":""}" onclick="set({addTab:'manual',igSt:null,igFetchSt:null,igPrev:null,photos:[]})">✍️ Handmatig</button>
         <button class="tab-btn ${tab==="ig"?"active":""}" onclick="set({addTab:'ig'})">📸 Instagram</button>
+        <button class="tab-btn ${tab==="foto"?"active":""}" onclick="set({addTab:'foto'})">📷 Foto</button>
       </div>`:""}
 
       ${tab==="ig"&&!isEdit?`
@@ -1633,24 +1743,29 @@ function renderAddSheet(){
           <button class="btn btn-line" onclick="doImport()" style="width:100%;margin-bottom:12px" ${S.igSt==="loading"?"disabled":""}>${S.igSt==="loading"?'<span class="spin">⏳</span> Analyseren...':"🔍 Analyseer handmatig"}</button>
         `:""}
         ${S.igSt==="err"?`<div style="background:#CD6A4522;border-radius:13px;padding:12px;font-size:13px;color:var(--rust);margin-bottom:12px">⚠️ ${esc(S.igErr)}</div>`:""}
-        ${S.igSt==="ok"&&p?`
-        <div style="background:var(--card);border:1px solid var(--olive);border-radius:16px;padding:16px;margin-top:14px">
-          <div style="font-family:'Space Mono';font-size:11px;color:var(--olive);font-weight:700;margin-bottom:12px">✅ RECEPT GEVONDEN — CONTROLEER</div>
-          <div class="field"><label>Naam</label><input id="ig-name" value="${esc(p.name)}"></div>
-          <div class="row-fields">
-            <div class="field" style="flex:1"><label>Categorie</label><select id="ig-cat">${CATS.map(c=>`<option value="${c}" ${p.category===c?"selected":""}>${CL[c]}</option>`).join("")}</select></div>
-            <div class="field" style="flex:1"><label>Tijd</label><input id="ig-time" value="${esc(p.time)}"></div>
-            <div class="field" style="flex:0.6"><label>Pers.</label><select id="ig-srv">${[1,2,3,4,5,6].map(n=>`<option value="${n}" ${p.servings===n?"selected":""}>${n}</option>`).join("")}</select></div>
-          </div>
-          <div class="field"><label>Voor wie</label><div class="tag-pick">
-            <button class="tag-opt dirk ${S.formVoor==="dirk"?"on":""}" onclick="setFormVoor('dirk')">Dirk</button>
-            <button class="tag-opt shelley ${S.formVoor==="shelley"?"on":""}" onclick="setFormVoor('shelley')">Shelley</button>
-            <button class="tag-opt beiden ${S.formVoor==="beiden"?"on":""}" onclick="setFormVoor('beiden')">Beiden</button>
-          </div></div>
-          <div class="field"><label>Ingrediënten</label><textarea id="ig-ing" rows="4">${esc((p.ingredients||[]).map(g=>g.n+(g.a?" - "+g.a:"")).join(nl))}</textarea></div>
-          <div class="field"><label>Stappen</label><textarea id="ig-steps" rows="4">${esc((p.steps||[]).join(nl))}</textarea></div>
-          <button class="btn btn-terra" onclick="saveIgRecipe()">✓ Toevoegen</button>
-        </div>`:""}
+        ${previewBlock}
+      `:""}
+
+      ${tab==="foto"&&!isEdit?`
+        <div class="field">
+          <label>Google Gemini API key ${S.geminiKey?'<span style="color:var(--olive)">✓ opgeslagen</span>':''} <a href="https://aistudio.google.com/apikey" target="_blank" style="color:var(--ink3);font-size:11px;font-family:\'Space Mono\',monospace">→ gratis ophalen</a></label>
+          <input id="foto-key" type="password" value="${esc(S.geminiKey)}" placeholder="AIzaSy..." oninput="S.geminiKey=this.value;lsSet(GK,this.value)">
+        </div>
+        <div style="background:var(--card);border:1px solid var(--cardline);border-radius:14px;padding:14px;font-size:13px;color:var(--ink2);line-height:1.6;margin-bottom:14px">
+          Maak een screenshot van de reel — ook als het recept alleen in beeld staat en niet in het bijschrift. Werkt net zo goed voor een kookboekpagina of een receptkaart. Meerdere foto's van hetzelfde recept mag.
+        </div>
+        <label for="foto-input" class="btn btn-ink" style="width:100%;display:block;text-align:center;margin-bottom:12px;cursor:pointer">${(S.photos||[]).length?"+ Meer foto's":"📷 Foto's kiezen"}</label>
+        <input id="foto-input" type="file" accept="image/*" multiple style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none" onchange="addPhotos(this.files);this.value=''">
+        ${S.photoSt==="reading"?`<div style="font-size:13px;color:var(--ink3);margin-bottom:12px"><span class="spin">⏳</span> Foto's inlezen…</div>`:""}
+        ${(S.photos||[]).length?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+          ${(S.photos||[]).map((d,i)=>`<div style="position:relative;width:72px;height:72px">
+            <img src="data:image/jpeg;base64,${d}" style="width:100%;height:100%;object-fit:cover;border-radius:12px;border:1px solid var(--cardline)">
+            <button onclick="removePhoto(${i})" aria-label="Foto verwijderen" style="position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:none;background:var(--rust);color:#fff;font-size:13px;line-height:1;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.3)">×</button>
+          </div>`).join("")}
+        </div>
+        <button class="btn btn-terra" onclick="doPhotoImport()" style="width:100%;margin-bottom:12px" ${S.igSt==="loading"?"disabled":""}>${S.igSt==="loading"?'<span class="spin">⏳</span> Recept uitlezen…':`🔍 Lees recept uit ${(S.photos||[]).length} foto${(S.photos||[]).length===1?"":"'s"}`}</button>`:""}
+        ${S.igSt==="err"?`<div style="background:#CD6A4522;border-radius:13px;padding:12px;font-size:13px;color:var(--rust);margin-bottom:12px">⚠️ ${esc(S.igErr)}</div>`:""}
+        ${previewBlock}
       `:""}
 
       ${tab==="manual"||isEdit?`
@@ -1799,7 +1914,7 @@ async function wizDoImport(){
   if(!S.geminiKey){set({wizIgSt:"err",wizIgErr:"Vul eerst je Gemini API key in bij Recepten → + Eigen recept of Instagram import → Instagram."});return;}
   set({wizIgSt:"loading",wizIgErr:"",wizIgPrev:null,wizIgCap:cap});
   try{
-    const p=await igExtractRecipe(cap,S.geminiKey,m=>set({wizIgSt:"loading",wizIgErr:m}));
+    const p=await igExtractRecipe({text:cap},S.geminiKey,m=>set({wizIgSt:"loading",wizIgErr:m}));
     const rc={id:Date.now(),ebook:0,custom:true,voor:"beiden",...p,link:url||null};
     S.custom=[...S.custom,rc]; lsSet(CK,S.custom);
     const {wo,day,rowId}=S.wizSlotIg;
@@ -2370,10 +2485,10 @@ window.onDayNote=onDayNote;
 window.toggleCheck=toggleCheck; window.toggleCookDay=toggleCookDay; window.runAutofill=runAutofill;
 window.openBoodDetail=openBoodDetail; window.closeBoodDetail=closeBoodDetail;
 window.saveBoodOverride=saveBoodOverride; window.deleteBoodOverride=deleteBoodOverride;
-window.fetchCaption=fetchCaption; window.importFromUrl=importFromUrl; window.doImport=doImport; window.saveIgRecipe=saveIgRecipe; window.saveForm=saveForm; window.setFormVoor=setFormVoor;
+window.fetchCaption=fetchCaption; window.importFromUrl=importFromUrl; window.doImport=doImport; window.addPhotos=addPhotos; window.removePhoto=removePhoto; window.doPhotoImport=doPhotoImport; window.saveIgRecipe=saveIgRecipe; window.saveForm=saveForm; window.setFormVoor=setFormVoor;
 window.deleteCustomRecipe=deleteCustomRecipe; window.openEdit=openEdit;
 window.exportImg=exportImg; window.exportWeekImg=exportWeekImg;
-window.syncPush=syncPush; window.syncPull=syncPull; window.joinHousehold=joinHousehold;
+window.pullInbox=pullInbox; window.syncPush=syncPush; window.syncPull=syncPull; window.joinHousehold=joinHousehold;
 
 // ===================== INIT =====================
 if(!lsGet(HHID_KEY,null)){lsSet(HHID_KEY,crypto.randomUUID());}
