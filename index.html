@@ -535,7 +535,9 @@ async function syncPush(){
     const state={};
     for(let i=0;i<localStorage.length;i++){
       const k=localStorage.key(i);
-      if(k&&k.startsWith('wm_')&&k!==HHID_KEY){try{state[k]=JSON.parse(localStorage.getItem(k));}catch(e){}}
+      // GK (de Gemini API key) blijft bewust lokaal: weekmenu_sync is leesbaar
+      // voor iedereen met de anon key, en die staat publiek in deze pagina.
+      if(k&&k.startsWith('wm_')&&k!==HHID_KEY&&k!==GK){try{state[k]=JSON.parse(localStorage.getItem(k));}catch(e){}}
     }
     const {error}=await getSb().from('weekmenu_sync').upsert({household_id:hid,state,updated_at:new Date().toISOString()});
     S.syncSt=error?"err":"ok";
@@ -548,7 +550,8 @@ async function syncPull(hid){
   try{
     const {data,error}=await getSb().from('weekmenu_sync').select('state').eq('household_id',hid).single();
     if(!error&&data?.state){
-      Object.entries(data.state).forEach(([k,v])=>localStorage.setItem(k,JSON.stringify(v)));
+      // Sla GK over, ook als een oudere rij hem nog bevat.
+      Object.entries(data.state).forEach(([k,v])=>{if(k!==GK)localStorage.setItem(k,JSON.stringify(v));});
       S.custom=lsGet(CK,[]);S.checked=lsGet(CHK,{});
       S.cfg=lsGet(CFG,{cookDays:{},store:"Albert Heijn"});
       S.boodOverride=lsGet(BOK,{});
