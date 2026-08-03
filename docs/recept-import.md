@@ -54,13 +54,19 @@ De functie geeft een leesbare melding terug:
 
 ### Gemini-key
 
-De Edge Function pakt eerst de secret `GEMINI_API_KEY`, en valt anders terug op de key die de app al meesynct. Zonder secret werkt het dus meteen, maar staat de key wel in de gesynchroniseerde state.
+De key wordt **bewust niet gesynchroniseerd**. `weekmenu_sync` heeft een `allow_all`-policy en de anon key staat publiek in `index.html`, dus alles in die tabel is leesbaar voor wie ernaar zoekt. Een API-key hoort daar niet in.
 
-Wil je hem daar weghalen, zet dan de secret:
+Gevolg: je vult de key per apparaat één keer in, bij Recepten → **+** → Instagram of Foto.
+
+Voor de Shortcut-route is de secret daarom **verplicht** — zonder secret heeft de Edge Function geen key meer:
 
 ```bash
 supabase secrets set GEMINI_API_KEY=AIza... --project-ref nejjocgplgbgmdornurw
 ```
+
+Of via het dashboard: Project Settings → Edge Functions → Secrets.
+
+De foto- en link-import in de app zelf werken gewoon zonder secret; die gebruiken de key uit je browser.
 
 ### Opnieuw deployen
 
