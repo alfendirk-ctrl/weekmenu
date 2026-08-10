@@ -1033,21 +1033,29 @@ ${IG_RULES}`;
 
 // Gedeeld door de hoofdimport, de wizard-import en de foto-import.
 // input is {text:"..."} of {images:[base64,...]}
+// Fetch die niet eeuwig kan blijven hangen.
+function fetchT(url,opts,ms){
+  const c=new AbortController();
+  const t=setTimeout(()=>c.abort(),ms);
+  return fetch(url,{...opts,signal:c.signal}).finally(()=>clearTimeout(t));
+}
+
 async function igExtractRecipe(input,apiKey,onWait){
   const base="https://generativelanguage.googleapis.com/v1beta";
   const keyParam="?key="+encodeURIComponent(apiKey);
   const pref=["gemini-2.0-flash","gemini-2.5-flash","gemini-1.5-flash","gemini-2.0-flash-lite"];
   let models=[...pref];
   try{
-    const lr=await fetch(`${base}/models${keyParam}`);
+    const lr=await fetchT(`${base}/models${keyParam}`,{},15000);
     if(lr.ok){
       const ld=await lr.json();
       const supported=(ld.models||[])
         .filter(m=>(m.supportedGenerationMethods||[]).includes("generateContent"))
         .map(m=>m.name.replace("models/",""));
-      const sorted=pref.flatMap(p=>supported.filter(s=>s.startsWith(p)))
-        .concat(supported.filter(s=>!pref.some(p=>s.startsWith(p))));
-      if(sorted.length)models=sorted;
+      // Alleen bekende modellen, hooguit vier: anders loopt hij bij een
+      // probleem tientallen modellen af en lijkt de app te hangen.
+      const sorted=pref.flatMap(p=>supported.filter(s=>s.startsWith(p)));
+      if(sorted.length)models=sorted.slice(0,4);
     }
   }catch(e){}
 
@@ -1056,24 +1064,40 @@ async function igExtractRecipe(input,apiKey,onWait){
     ? [{text:igPromptImg(imgs.length)},...imgs.map(d=>({inline_data:{mime_type:"image/jpeg",data:d}}))]
     : [{text:igPromptText((input&&input.text)||"")}];
   let lastErr="";
-  for(const model of models){
+  const say=m=>{if(onWait)onWait(m);};
+  for(let mi=0;mi<models.length;mi++){
+    const model=models[mi];
+    say(models.length>1
+      ? `Analyseren met ${model} (${mi+1}/${models.length})…`
+      : `Analyseren met ${model}…`);
     // JSON-modus voorkomt markdown-fences; valt terug als het model dat niet kent
-    const callModel=json=>fetch(`${base}/models/${model}:generateContent${keyParam}`,
+    const callModel=json=>fetchT(`${base}/models/${model}:generateContent${keyParam}`,
       {method:"POST",headers:{"Content-Type":"application/json"},
        body:JSON.stringify({contents:[{parts}],
-         generationConfig:json?{temperature:0,responseMimeType:"application/json"}:{temperature:0}})});
-    let res=await callModel(true);
-    if(res.status===400)res=await callModel(false);
+         generationConfig:json?{temperature:0,responseMimeType:"application/json"}:{temperature:0}})},
+      imgs.length?90000:45000);
+    let res;
+    try{
+      res=await callModel(true);
+      if(res.status===400)res=await callModel(false);
+    }catch(e){
+      throw new Error(e&&e.name==="AbortError"
+        ? "Google reageerde niet op tijd. Controleer je verbinding en probeer het opnieuw."
+        : "Geen verbinding met Google. Controleer je internet.");
+    }
     if(res.status===429){
       let errBody="";
       try{errBody=JSON.stringify(await res.json());}catch(e){}
       // "limit: 0" betekent gratis quota op — direct door naar het volgende model
       if(/,"limit":\s*0[,}]/.test(errBody)){lastErr=`${model}: quota op`;continue;}
-      let wait=20;
-      const m2=errBody.match(/retry in ([\d.]+)s/i);if(m2)wait=Math.ceil(parseFloat(m2[1]))+1;
-      if(onWait)onWait(`Even wachten… (rate limit, opnieuw over ${wait}s met ${model})`);
+      // Hooguit 25s wachten, en maar één keer — anders staat de app minuten stil.
+      let wait=15;
+      const m2=errBody.match(/retry in ([\d.]+)s/i);if(m2)wait=Math.min(25,Math.ceil(parseFloat(m2[1]))+1);
+      say(`Even wachten — ${model} zit aan zijn limiet. Opnieuw over ${wait}s…`);
       await new Promise(r=>setTimeout(r,wait*1000));
-      res=await callModel(true);
+      say(`Opnieuw proberen met ${model}…`);
+      try{res=await callModel(true);}
+      catch(e){throw new Error("Google reageerde niet op tijd. Probeer het zo nog eens.");}
     }
     if(!res.ok){
       let errMsg=`Model ${model}: fout ${res.status}`;
@@ -1756,7 +1780,7 @@ function renderAddSheet(){
           <div class="field"><label>Bijschrift handmatig plakken</label><textarea id="ig-cap" rows="4" placeholder="Kopieer het bijschrift van Instagram en plak het hier..." oninput="S.igCap=this.value">${esc(S.igCap)}</textarea></div>
           <button class="btn btn-line" onclick="doImport()" style="width:100%;margin-bottom:12px" ${S.igSt==="loading"?"disabled":""}>${S.igSt==="loading"?'<span class="spin">⏳</span> Analyseren...':"🔍 Analyseer handmatig"}</button>
         `:""}
-        ${S.igSt==="err"?`<div style="background:#CD6A4522;border-radius:13px;padding:12px;font-size:13px;color:var(--rust);margin-bottom:12px">⚠️ ${esc(S.igErr)}</div>`:""}
+        ${S.igSt==="loading"&&S.igErr?`<div style="background:var(--card);border:1px solid var(--cardline);border-radius:13px;padding:12px;font-size:13px;color:var(--ink2);margin-bottom:12px"><span class="spin">⏳</span> ${esc(S.igErr)}</div>`:""}${S.igSt==="err"?`<div style="background:#CD6A4522;border-radius:13px;padding:12px;font-size:13px;color:var(--rust);margin-bottom:12px">⚠️ ${esc(S.igErr)}</div>`:""}
         ${previewBlock}
       `:""}
 
@@ -1778,7 +1802,7 @@ function renderAddSheet(){
           </div>`).join("")}
         </div>
         <button class="btn btn-terra" onclick="doPhotoImport()" style="width:100%;margin-bottom:12px" ${S.igSt==="loading"?"disabled":""}>${S.igSt==="loading"?'<span class="spin">⏳</span> Recept uitlezen…':`🔍 Lees recept uit ${(S.photos||[]).length} foto${(S.photos||[]).length===1?"":"'s"}`}</button>`:""}
-        ${S.igSt==="err"?`<div style="background:#CD6A4522;border-radius:13px;padding:12px;font-size:13px;color:var(--rust);margin-bottom:12px">⚠️ ${esc(S.igErr)}</div>`:""}
+        ${S.igSt==="loading"&&S.igErr?`<div style="background:var(--card);border:1px solid var(--cardline);border-radius:13px;padding:12px;font-size:13px;color:var(--ink2);margin-bottom:12px"><span class="spin">⏳</span> ${esc(S.igErr)}</div>`:""}${S.igSt==="err"?`<div style="background:#CD6A4522;border-radius:13px;padding:12px;font-size:13px;color:var(--rust);margin-bottom:12px">⚠️ ${esc(S.igErr)}</div>`:""}
         ${previewBlock}
       `:""}
 
