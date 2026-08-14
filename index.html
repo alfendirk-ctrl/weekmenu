@@ -1043,22 +1043,31 @@ function fetchT(url,opts,ms){
 async function igExtractRecipe(input,apiKey,onWait){
   const base="https://generativelanguage.googleapis.com/v1beta";
   const keyParam="?key="+encodeURIComponent(apiKey);
-  const pref=["gemini-2.0-flash","gemini-2.5-flash","gemini-1.5-flash","gemini-2.0-flash-lite"];
-  let models=[...pref];
+  // Geen vaste modelnamen meer: Google zet ze periodiek uit voor nieuwe keys
+  // ("no longer available to new users"), waardoor elke hardgecodeerde lijst
+  // veroudert. We vragen op wat déze key mag en rangschikken dat zelf.
+  const fallback=["gemini-2.0-flash","gemini-2.5-flash","gemini-1.5-flash"];
+  // Hoger = eerder proberen: nieuwste generatie eerst, flash boven pro
+  // (sneller en goedkoper), preview/experimenteel achteraan.
+  const rank=m=>{
+    const v=parseFloat((m.match(/gemini-(\d+(?:\.\d+)?)/)||[0,0])[1])||0;
+    const kind=/flash-lite/.test(m)?2:/flash/.test(m)?3:/pro/.test(m)?1:0;
+    const risky=/preview|exp\b|experimental|thinking/.test(m)?-2:0;
+    return v*10+kind+risky;
+  };
+  let models=[...fallback], available=[];
   try{
     const lr=await fetchT(`${base}/models${keyParam}`,{},15000);
     if(lr.ok){
       const ld=await lr.json();
-      const supported=(ld.models||[])
+      available=(ld.models||[])
         .filter(m=>(m.supportedGenerationMethods||[]).includes("generateContent"))
-        .map(m=>m.name.replace("models/",""));
-      // Alleen bekende modellen, hooguit vier: anders loopt hij bij een
-      // probleem tientallen modellen af en lijkt de app te hangen.
-      // Exact matchen, geen prefix: "gemini-2.5-flash" matchte anders ook
-      // "gemini-2.5-flash-preview-image" (beeldgeneratie, altijd limit 0).
-      const usable=supported.filter(s=>!/image|imagen|tts|audio|embed|live/i.test(s));
-      const sorted=pref.filter(p=>usable.includes(p));
-      if(sorted.length)models=sorted.slice(0,4);
+        .map(m=>m.name.replace("models/",""))
+        // Beeldgeneratie, spraak en embeddings kunnen geen recept uitlezen.
+        .filter(s=>!/image|imagen|tts|audio|embed|live|veo/i.test(s));
+      if(available.length){
+        models=[...available].sort((a,b)=>rank(b)-rank(a)).slice(0,4);
+      }
     }
   }catch(e){}
 
@@ -1127,9 +1136,13 @@ async function igExtractRecipe(input,apiKey,onWait){
       steps:(Array.isArray(p.steps)?p.steps:[]).map(s=>String(s).trim()).filter(Boolean),
     };
   }
-  throw new Error(/quota op/i.test(lastErr)||/quota|rate limit/i.test(lastErr)
-    ?"Je gratis Gemini-quota is op. Die reset elke dag — probeer het morgen weer, of voeg betaling toe op ai.google.dev (ca. €0,001 per recept)."
-    :lastErr||"Mislukt");
+  if(/quota op/i.test(lastErr)||/quota|rate limit/i.test(lastErr))
+    throw new Error("Je gratis Gemini-quota is op. Die reset elke dag — probeer het morgen weer, of voeg betaling toe op ai.google.dev (ca. €0,001 per recept).");
+  if(/no longer available|not found|not supported/i.test(lastErr))
+    throw new Error(`Geen bruikbaar Gemini-model gevonden. Geprobeerd: ${models.join(", ")}.`
+      +(available.length?` Beschikbaar voor jouw key: ${available.slice(0,8).join(", ")}.`:"")
+      +` Melding: ${lastErr}`);
+  throw new Error(lastErr||"Mislukt");
 }
 
 async function doImport(){
