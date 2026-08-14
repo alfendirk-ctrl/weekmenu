@@ -447,25 +447,34 @@ function mondayStr(offsetWeeks){
 function weekStoreKey(offset){ return `wm_week_${mondayStr(offset)}`; }
 function notesStoreKey(offset){ return `wm_notes_${mondayStr(offset)}`; }
 function curWeek(){ return weekDates(S.weekOffset||0); }
-function _recipeCount(jsonStr){try{const w=JSON.parse(jsonStr);if(!w||typeof w!=='object')return 0;return Object.values(w).reduce((t,day)=>t+Object.values(day||{}).filter(v=>v!=null).length,0);}catch(e){return 0;}}
-// Migreer alle oude sleutels (wm_week_YYYY_WW) naar nieuw formaat (wm_week_YYYY-MM-DD).
-// Berekent de juiste maandag op basis van de weekstart, niet de huidige offset.
+const MIGK="wm_weekkeys_migrated_v2";
+// Eenmalige migratie van wm_week_YYYY_WW naar wm_week_YYYY-MM-DD.
+// De oude sleutel telde weken vanaf zóndag; startDate is die zondag. De
+// maandagweek die zes van die zeven dagen dekt begint een dag later — de
+// vorige versie stapte terug naar de maandag ervóór en zette daarmee alles
+// een week te vroeg, behalve wat op een zondag was opgeslagen.
 function migrateOldWeekKeys(){
+  if(lsGet(MIGK,false))return;
   const keys=[];
-  for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&/^wm_(week|notes)_\d{4}_\d+$/.test(k))keys.push(k);}
+  for(let i=0;i<localStorage.length;i++){
+    const k=localStorage.key(i);
+    if(k&&/^wm_(week|notes)_\d{4}_\d+$/.test(k))keys.push(k);
+  }
   keys.forEach(k=>{
     const m=k.match(/^(wm_(?:week|notes))_(\d{4})_(\d+)$/);if(!m)return;
     const prefix=m[1],year=parseInt(m[2]),wk=parseInt(m[3]);
     const jan1=new Date(year,0,1);
     const startDate=new Date(year,0,1+(wk-1)*7-jan1.getDay());
-    const sd=startDate.getDay();
-    const mon=new Date(startDate);mon.setDate(startDate.getDate()-((sd+6)%7));
+    const mon=new Date(startDate);mon.setDate(startDate.getDate()+1);
     const y=mon.getFullYear(),mo=String(mon.getMonth()+1).padStart(2,'0'),d=String(mon.getDate()).padStart(2,'0');
     const nk=`${prefix}_${y}-${mo}-${d}`;
-    const src=localStorage.getItem(k);if(!src)return;
-    const existing=localStorage.getItem(nk);
-    if(!existing||_recipeCount(src)>_recipeCount(existing)){localStorage.setItem(nk,src);}
+    const src=localStorage.getItem(k);
+    // Bestaande data is leidend: nooit overschrijven.
+    if(src&&!localStorage.getItem(nk))localStorage.setItem(nk,src);
+    // Bron weg, anders komt een verwijderde week bij elke herlading terug.
+    try{localStorage.removeItem(k);}catch(e){}
   });
+  lsSet(MIGK,true);
 }
 (function migrate(){
   const old=lsGet(SK,null);
@@ -538,7 +547,8 @@ async function syncPush(){
       const k=localStorage.key(i);
       // GK (de Gemini API key) blijft bewust lokaal: weekmenu_sync is leesbaar
       // voor iedereen met de anon key, en die staat publiek in deze pagina.
-      if(k&&k.startsWith('wm_')&&k!==HHID_KEY&&k!==GK){try{state[k]=JSON.parse(localStorage.getItem(k));}catch(e){}}
+      if(k&&k.startsWith('wm_')&&k!==HHID_KEY&&k!==GK&&k!==MIGK
+         &&!/^wm_(week|notes)_\d{4}_\d+$/.test(k)){try{state[k]=JSON.parse(localStorage.getItem(k));}catch(e){}}
     }
     const {error}=await getSb().from('weekmenu_sync').upsert({household_id:hid,state,updated_at:new Date().toISOString()});
     S.syncSt=error?"err":"ok";
@@ -681,14 +691,15 @@ function clearSlot(day,rowId){
   S.week[day]={...S.week[day],[rowId]:null};
   set({detail:null});
 }
-function saveCustomRecipe(rc){S.custom=[...S.custom,rc];set({addOpen:false});toast("Recept toegevoegd");}
-function updateCustomRecipe(rc){S.custom=S.custom.map(x=>x.id===rc.id?rc:x);set({editRc:null,addOpen:false});toast("Bijgewerkt");}
+function saveCustomRecipe(rc){S.custom=[...S.custom,rc];set({addOpen:false,addCat:null});toast("Recept toegevoegd");}
+function updateCustomRecipe(rc){S.custom=S.custom.map(x=>x.id===rc.id?rc:x);set({editRc:null,addOpen:false,addCat:null});toast("Bijgewerkt");}
 function deleteCustomRecipe(id){if(!confirm("Recept verwijderen?"))return;S.custom=S.custom.filter(x=>x.id!==id);set({});toast("Verwijderd");}
 
 // ===================== BOODSCHAPPEN =====================
 function boodschappen(){
   const m={};
   DAYS.forEach(d=>ROWS.forEach(row=>{
+    if(row.free)return;  // vrij tekstveld, geen recept met ingredienten
     const rc=S.week[d]&&S.week[d][row.id];if(!rc)return;
     (rc.ingredients||[]).forEach(g=>{
       const k=(g.n||"").toLowerCase();
@@ -1250,7 +1261,7 @@ function saveIgRecipe(){
     steps:document.getElementById("ig-steps").value.split(nl).filter(Boolean),
   };
   saveCustomRecipe(rc);
-  set({igSt:null,igFetchSt:null,igPrev:null,igCap:"",igUrl:""});
+  set({igSt:null,igFetchSt:null,igPrev:null,igCap:"",igUrl:"",addCat:null});
 }
 
 // ===================== FORM =====================
@@ -1374,7 +1385,7 @@ function renderPlanner(){
 
   <div class="weekstrip">
     ${DAYS.map(d=>{
-      const n=dayFillCount(d);const mx=ROWS.length;
+      const n=dayFillCount(d);const mx=ROWS.filter(r=>!r.free).length;
       return `<button class="day-pill ${d===day?"active":""}" onclick="set({activeDay:'${d}'})">
         <div class="dp-day">${d}</div>
         <div class="dp-num">${curWeek().nums[d]}</div>
@@ -2408,7 +2419,7 @@ function renderWizStep4(){
           <div style="font-family:'Space Mono',monospace;font-size:11px;font-weight:700;color:var(--ink)">${DAY_FULL[day].charAt(0).toUpperCase()+DAY_FULL[day].slice(1)} ${W.nums[day]}</div>
           <div style="font-family:'Space Mono',monospace;font-size:10px;color:${modeColors[mode]}">${DAY_MODES[mode]}</div>
         </div>
-        ${ROWS.filter(row=>row.id!=="lunch_dirk").map(row=>{
+        ${ROWS.filter(row=>row.id!=="lunch_dirk"&&!row.free).map(row=>{
           const rc=prev[wo]&&prev[wo][day]&&prev[wo][day][row.id];
           const personColor=row.who==="dirk"?"var(--dirk)":row.who==="shelley"?"var(--shelley)":"var(--olive2)";
           const dirkLunchRc=row.id==="lunch_shelley"?prev[wo]&&prev[wo][day]&&prev[wo][day]["lunch_dirk"]:null;
