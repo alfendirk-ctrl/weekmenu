@@ -1054,7 +1054,10 @@ async function igExtractRecipe(input,apiKey,onWait){
         .map(m=>m.name.replace("models/",""));
       // Alleen bekende modellen, hooguit vier: anders loopt hij bij een
       // probleem tientallen modellen af en lijkt de app te hangen.
-      const sorted=pref.flatMap(p=>supported.filter(s=>s.startsWith(p)));
+      // Exact matchen, geen prefix: "gemini-2.5-flash" matchte anders ook
+      // "gemini-2.5-flash-preview-image" (beeldgeneratie, altijd limit 0).
+      const usable=supported.filter(s=>!/image|imagen|tts|audio|embed|live/i.test(s));
+      const sorted=pref.filter(p=>usable.includes(p));
       if(sorted.length)models=sorted.slice(0,4);
     }
   }catch(e){}
@@ -1089,7 +1092,9 @@ async function igExtractRecipe(input,apiKey,onWait){
       let errBody="";
       try{errBody=JSON.stringify(await res.json());}catch(e){}
       // "limit: 0" betekent gratis quota op — direct door naar het volgende model
-      if(/,"limit":\s*0[,}]/.test(errBody)){lastErr=`${model}: quota op`;continue;}
+      if(/limit:\s*0[,\s}"]/.test(errBody)||/"limit":\s*0[,}]/.test(errBody)){
+        lastErr=`${model}: quota op`;continue;
+      }
       // Hooguit 25s wachten, en maar één keer — anders staat de app minuten stil.
       let wait=15;
       const m2=errBody.match(/retry in ([\d.]+)s/i);if(m2)wait=Math.min(25,Math.ceil(parseFloat(m2[1]))+1);
@@ -1122,8 +1127,8 @@ async function igExtractRecipe(input,apiKey,onWait){
       steps:(Array.isArray(p.steps)?p.steps:[]).map(s=>String(s).trim()).filter(Boolean),
     };
   }
-  throw new Error(/quota op/.test(lastErr)
-    ?"Je gratis Gemini quota is op. Voeg betaling toe op ai.google.dev (ca. €0,001 per recept)."
+  throw new Error(/quota op/i.test(lastErr)||/quota|rate limit/i.test(lastErr)
+    ?"Je gratis Gemini-quota is op. Die reset elke dag — probeer het morgen weer, of voeg betaling toe op ai.google.dev (ca. €0,001 per recept)."
     :lastErr||"Mislukt");
 }
 
