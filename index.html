@@ -207,8 +207,8 @@ const DAYS = ["ma","di","wo","do","vr","za","zo"];
 const WEEKEND = ["vr","za","zo"];  // avondsnack is een weekend-ding
 const DAY_FULL = {ma:"maandag",di:"dinsdag",wo:"woensdag",do:"donderdag",vr:"vrijdag",za:"zaterdag",zo:"zondag"};
 const DAY_NUM = {ma:9,di:10,wo:11,do:12,vr:13,za:14,zo:15}; // wordt dynamisch berekend
-const CATS = ["ontbijt","lunch","diner","tussendoortje"];
-const CL = {ontbijt:"Ontbijt",lunch:"Lunch",diner:"Diner",tussendoortje:"Snack"};
+const CATS = ["ontbijt","lunch","diner","tussendoortje","weekendsnack"];
+const CL = {ontbijt:"Ontbijt",lunch:"Lunch",diner:"Diner",tussendoortje:"Tussendoortje",weekendsnack:"Weekendsnack"};
 const HH = 3;
 
 // People
@@ -517,6 +517,7 @@ let S={
   formVoor:"beiden",
   boodDetail: null,
   boodOverride: lsGet(BOK,{}),
+  snackSearch:"", addCat:null,
   avondSnack: lsGet(SAK,{}),
 };
 
@@ -1312,6 +1313,7 @@ function render(){
     <div class="app">
       ${S.view==="planner"?renderPlanner():""}
       ${S.view==="recepten"?renderRecepten():""}
+      ${S.view==="snacks"?renderSnacks():""}
       ${S.view==="boodschappen"?renderBoodschappen():""}
     </div>
     ${renderBottomNav()}
@@ -1527,6 +1529,7 @@ function renderBottomNav(){
   const items=[
     {id:"planner",label:"Planner",svg:`<path d="M3 9h18M3 9v10a1.5 1.5 0 0 0 1.5 1.5h15A1.5 1.5 0 0 0 21 19V9M3 9V6a1.5 1.5 0 0 1 1.5-1.5h15A1.5 1.5 0 0 1 21 6v3M8 3v4M16 3v4"/>`},
     {id:"recepten",label:"Recepten",svg:`<path d="M3 4.5h6a3 3 0 0 1 3 3v12a2.5 2.5 0 0 0-2.5-2.5H3z"/><path d="M21 4.5h-6a3 3 0 0 0-3 3v12a2.5 2.5 0 0 1 2.5-2.5H21z"/>`},
+    {id:"snacks",label:"Snacks",svg:`<circle cx="12" cy="12" r="8.5"/><circle cx="9.5" cy="10" r="1"/><circle cx="14.5" cy="9.5" r="1"/><circle cx="12" cy="14.5" r="1"/>`},
     {id:"boodschappen",label:"Boodschap",svg:`<path d="M5.5 8h13l-1 11.5a1.5 1.5 0 0 1-1.5 1.4H8a1.5 1.5 0 0 1-1.5-1.4z"/><path d="M8.5 8a3.5 3.5 0 0 1 7 0"/>`},
   ];
   return `<div class="bottomnav">
@@ -1540,8 +1543,10 @@ function renderBottomNav(){
 
 // ---------- RECEPTEN ----------
 function renderRecepten(){
-  const favCount=S.custom.length;
+  const favCount=S.custom.filter(rc=>rc.category!=='weekendsnack').length;
   let list=ALL().filter(rc=>{
+    // Weekendsnacks hebben hun eigen tab en horen hier niet.
+    if(rc.category==="weekendsnack")return false;
     if(S.recFilter!=="all"&&S.recFilter!=="fav"&&rc.category!==S.recFilter)return false;
     if(S.recFilter==="fav"&&rc.ebook!==0)return false;
     if(S.recVoor!=="all"&&rc.voor!==S.recVoor&&rc.voor!=="beiden")return false;
@@ -1551,7 +1556,7 @@ function renderRecepten(){
   const feature=ALL().find(rc=>rc.category==="diner");
   return `
   <div class="topbar">
-    <div class="kicker">${ALL().length} recepten · ${favCount} eigen</div>
+    <div class="kicker">${ALL().filter(rc=>rc.category!=='weekendsnack').length} recepten · ${favCount} eigen</div>
     <div class="h-title">Recepten<br>kast</div>
   </div>
   <div class="scroll">
@@ -1564,11 +1569,33 @@ function renderRecepten(){
       <button class="chip ${S.recFilter==="ontbijt"?"active":""}" onclick="set({recFilter:'ontbijt'})">Ontbijt</button>
       <button class="chip ${S.recFilter==="lunch"?"active":""}" onclick="set({recFilter:'lunch'})">Lunch</button>
       <button class="chip ${S.recFilter==="diner"?"active":""}" onclick="set({recFilter:'diner'})">Diner</button>
-      <button class="chip ${S.recFilter==="tussendoortje"?"active":""}" onclick="set({recFilter:'tussendoortje'})">Snack</button>
+      <button class="chip ${S.recFilter==="tussendoortje"?"active":""}" onclick="set({recFilter:'tussendoortje'})">Tussendoortje</button>
     </div>
-    <button class="btn btn-ink" style="margin-bottom:16px" onclick="set({addOpen:true,editRc:null,addTab:'manual',formVoor:'beiden'})">+ Eigen recept of Instagram import</button>
+    <button class="btn btn-ink" style="margin-bottom:16px" onclick="set({addOpen:true,editRc:null,addTab:'manual',formVoor:'beiden',addCat:null})">+ Eigen recept of Instagram import</button>
     <div style="font-family:'Space Mono',monospace;font-size:11px;color:var(--ink3);margin-bottom:10px">${list.length} recepten</div>
     ${list.map(rc=>renderRecCard(rc)).join("")}
+  </div>`;
+}
+
+function renderSnacks(){
+  const all=ALL().filter(rc=>rc.category==="weekendsnack");
+  const q=(S.snackSearch||"").toLowerCase();
+  const list=q?all.filter(rc=>rc.name.toLowerCase().includes(q)):all;
+  return `
+  <div class="topbar">
+    <div class="kicker">${all.length} snack${all.length===1?"":"s"} · ${all.filter(rc=>rc.ebook===0).length} eigen</div>
+    <div class="h-title">Weekend<br>snacks</div>
+    <div class="prog-note">Om door te bladeren — deze lopen niet mee in het weekmenu of de boodschappenlijst.</div>
+  </div>
+  <div class="scroll">
+    <input class="search-box" placeholder="Zoek een snack…" value="${esc(S.snackSearch||"")}"
+      oninput="S.snackSearch=this.value;clearTimeout(window._sst);window._sst=setTimeout(render,200)">
+    <button class="btn btn-ink" style="margin-bottom:16px"
+      onclick="set({addOpen:true,editRc:null,addTab:'manual',formVoor:'beiden',addCat:'weekendsnack'})">+ Snack toevoegen</button>
+    ${list.length===0?`<div class="empty-state"><div class="empty-emoji">🍿</div>
+      <div class="empty-title">${all.length?"Niets gevonden":"Nog geen snacks"}</div>
+      <div>${all.length?"Probeer een andere zoekterm.":"Voeg er een toe met de knop hierboven — handmatig, via Instagram of met een foto."}</div></div>`
+      :list.map(rc=>renderRecCard(rc)).join("")}
   </div>`;
 }
 
@@ -1748,14 +1775,14 @@ function renderAddSheet(){
   const nl="\n";
   const ingStr=rc?(rc.ingredients||[]).map(g=>g.n+(g.a?" - "+g.a:"")).join(nl):"";
   const stepsStr=rc?(rc.steps||[]).join(nl):"";
-  const cat=rc?rc.category:"ontbijt";const srv=rc?rc.servings||2:2;
+  const cat=rc?rc.category:(S.addCat||"ontbijt");const srv=rc?rc.servings||2:2;
   const p=S.igPrev;
   const previewBlock=(S.igSt==="ok"&&p)?`
         <div style="background:var(--card);border:1px solid var(--olive);border-radius:16px;padding:16px;margin-top:14px">
           <div style="font-family:'Space Mono';font-size:11px;color:var(--olive);font-weight:700;margin-bottom:12px">✅ RECEPT GEVONDEN — CONTROLEER</div>
           <div class="field"><label>Naam</label><input id="ig-name" value="${esc(p.name)}"></div>
           <div class="row-fields">
-            <div class="field" style="flex:1"><label>Categorie</label><select id="ig-cat">${CATS.map(c=>`<option value="${c}" ${p.category===c?"selected":""}>${CL[c]}</option>`).join("")}</select></div>
+            <div class="field" style="flex:1"><label>Categorie</label><select id="ig-cat">${(()=>{const pc=S.addCat||p.category;return CATS.map(c=>`<option value="${c}" ${pc===c?"selected":""}>${CL[c]}</option>`).join("");})()}</select></div>
             <div class="field" style="flex:1"><label>Tijd</label><input id="ig-time" value="${esc(p.time)}"></div>
             <div class="field" style="flex:0.6"><label>Pers.</label><select id="ig-srv">${[1,2,3,4,5,6].map(n=>`<option value="${n}" ${p.servings===n?"selected":""}>${n}</option>`).join("")}</select></div>
           </div>
@@ -1769,7 +1796,7 @@ function renderAddSheet(){
           <button class="btn btn-terra" onclick="saveIgRecipe()">✓ Toevoegen</button>
         </div>`:"";
   return `
-  <div class="overlay" onclick="set({addOpen:false,editRc:null,igSt:null,igFetchSt:null,igPrev:null,igCap:'',igUrl:'',photos:[]})">
+  <div class="overlay" onclick="set({addOpen:false,editRc:null,igSt:null,igFetchSt:null,igPrev:null,igCap:'',igUrl:'',photos:[],addCat:null})">
     <div class="sheet" onclick="event.stopPropagation()">
       <div class="sheet-handle"></div>
       <div class="sheet-title">${isEdit?"Recept bewerken":"Nieuw recept"}</div>
