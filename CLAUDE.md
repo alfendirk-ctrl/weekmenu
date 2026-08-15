@@ -49,10 +49,10 @@ function render() { document.getElementById("app").innerHTML = `...`; }
 
 ### Data model
 
-- `S.week` — object keyed by day (`ma`–`zo`), then by row id (e.g. `diner`, `lunch_dirk`). Each value is a recipe object or `null`.
+- `S.week` — object keyed by day (`ma`–`zo`), then by row id (e.g. `diner`, `lunch_shelley`). Each value is a recipe object or `null`.
 - `S.custom` — user-added recipes (persisted to `localStorage` key `wm_custom_v2`)
 - `S.cfg.cookDays` — per-day cooking mode: `"cook"` | `"rest"` | `"none"`
-- `ROWS` — defines the 8 meal slots per day; each has `id`, `cat` (ontbijt/lunch/diner/tussendoortje), `who` (dirk/shelley/samen), `split`. A row with `free:true` (`snack_avond`) is a free-text field, not a recipe slot: it is excluded from stats, the shopping list and the generator, so only 7 slots are fillable.
+- `ROWS` — defines the 7 meal slots per day; each has `id`, `cat` (ontbijt/lunch/diner/tussendoortje), `who` (dirk/shelley/samen), `split`. A row with `free:true` (`snack_avond`) is a free-text field, not a recipe slot: it is excluded from stats, the shopping list and the generator, so only 6 slots are fillable. Breakfast is split per person; lunch and dinner are shared (the lunch row keeps the legacy id `lunch_shelley` so stored weeks keep working). There is no mealprep slot — it was removed.
 - `S.ratings` — `{[rcId]: {shelley:1|-1, dirk:…, maeve:…}}`, persisted to `wm_ratings_v1`. Two thumbs down and the generator skips the recipe.
 - **Leftovers** — a leftover slot is a reference, not a copy: `{id:"lo_<srcId>", leftoverOf:<srcId>, ingredients:[]}`. `boodschappen()` therefore skips it and instead multiplies the source recipe's amounts by `1 + aantal restjesdagen`.
 
@@ -66,9 +66,9 @@ function render() { document.getElementById("app").innerHTML = `...`; }
 - `−100` for anything already used this week, so a week never repeats itself
 - the winner is drawn at random from the top 3, otherwise every week would be identical
 
-Slots can be pinned (`S.wiz.locks`, keyed `"<wo>_<day>_<rowId>"`); pinned slots survive regeneration and count as context for the rest of the week. The wizard opens **on the generated proposal** (`wizStart()` → step 4); steps 1–3 are refinements you reach from there, step 5 is the in-huis check.
+Slots can be pinned (`S.wiz.locks`, keyed `"<wo>_<day>_<rowId>"`); pinned slots survive regeneration and count as context for the rest of the week. The wizard opens **on the generated proposal** (`wizStart()` → step 4); steps 1–2 are refinements you reach from there (days & generator options, then fixed meals), step 5 is the in-huis check. Step 3 no longer exists.
 
-Measured over 8 consecutive weeks: ~93 unique ingredients per week with reuse on vs ~111 off, 36 unique dinners across those weeks, 4/49 dinners repeated from the week before, 0 repeats within a week.
+Measured over 8 consecutive weeks (before the mealprep slot was dropped): ~93 unique ingredients per week with reuse on vs ~111 off, 36 unique dinners across those weeks, 4/49 dinners repeated from the week before, 0 repeats within a week.
 
 ### Key constants
 

@@ -246,8 +246,9 @@ const ROWS = [
   {id:"ontbijt_dirk", label:"Ontbijt", who:"dirk", cat:"ontbijt", split:true},
   {id:"ontbijt_shelley", label:"Ontbijt", who:"shelley", cat:"ontbijt", split:true},
   {id:"tussen_ochtend", label:"Tussendoor", who:"samen", cat:"tussendoortje", split:false, sub:"ochtend"},
-  {id:"lunch_dirk", label:"Lunch", who:"dirk", cat:"lunch", split:true},
-  {id:"lunch_shelley", label:"Lunch", who:"shelley", cat:"lunch", split:true},
+  // Lunch is één gedeeld slot. De id blijft "lunch_shelley" zodat bestaande
+  // weken blijven werken; er is geen aparte lunch voor Dirk meer.
+  {id:"lunch_shelley", label:"Lunch", who:"samen", cat:"lunch", split:false},
   {id:"tussen_middag", label:"Tussendoor", who:"samen", cat:"tussendoortje", split:false, sub:"middag"},
   {id:"diner", label:"Diner", who:"samen", cat:"diner", split:false},
   {id:"snack_avond", label:"Avondsnack", who:"samen", cat:"tussendoortje", split:false, sub:"avond", free:true},
@@ -524,10 +525,7 @@ let S={
       {wo:0,day:"vr"},{wo:0,day:"za"},{wo:0,day:"zo"}
     ],
     shelley:{vermijd:[],voorkeur:[]},
-    doMealprep: null,
-    mealprep:{days:[],rowId:"lunch_dirk",rc:null},  // days: [{wo,day}]
     baksel:"Nee", bakselNote:"",
-    wizMpPicker:false,
     vasteRc:[],    // [{rowId, rc, days:[{wo,day}]}]
     preview:{},      // day->rowId->rc
     inHuis:{},       // ingredient key -> true
@@ -896,7 +894,7 @@ async function exportWeekImg(type){
   const rows=DAYS.map(day=>{
     const w=S.week[day]||{};
     const od=w.ontbijt_dirk, os=w.ontbijt_shelley;
-    const lu=w.lunch_shelley||w.lunch_dirk, luD=w.lunch_dirk, luS=w.lunch_shelley;
+    const lu=w.lunch_shelley;
     const to=w.tussen_ochtend, tm=w.tussen_middag;
     const di=w.diner;
     const note=(S.notes[day]&&S.notes[day].algemeen)||"";
@@ -910,14 +908,7 @@ async function exportWeekImg(type){
       ? `${to?nameCell(to,"#B0A898","Ochtend"):""}${to&&tm?`<div style="height:6px"></div>`:""}${tm?nameCell(tm,"#B0A898","Middag"):""}`
       : `<div style="font-size:12px;color:${C.line};font-style:italic">—</div>`;
 
-    const lunch=luD&&luS&&luD.id!==luS.id
-      ? `${nameCell(luS,C.olive,"")} <div style="height:4px"></div>
-         <div style="border-left:3px solid ${C.dirk};padding-left:8px">
-           <div style="display:inline-block;font-size:8px;background:${C.dirk};color:#fff;border-radius:3px;padding:1px 5px;font-family:'Space Mono',monospace;margin-bottom:2px">MEALPREP</div>
-           <div style="font-size:12px;font-weight:600;color:${C.ink};line-height:1.35">${esc(luD.name)}</div>
-           <div style="font-size:9px;color:${C.ink3};font-family:'Space Mono',monospace">${luD.time}</div>
-         </div>`
-      : nameCell(lu,C.olive,"");
+    const lunch=nameCell(lu,C.olive,"");
 
     const noteCell=note
       ? `<div style="font-size:11px;color:${C.ink2};line-height:1.5;font-family:'Hanken Grotesk',sans-serif;font-style:italic">${esc(note)}</div>`
@@ -1626,7 +1617,6 @@ function renderDaySlots(day){
   html+=renderMealGroup(day,"Ontbijt","ontbijt",["ontbijt_dirk","ontbijt_shelley"]);
   html+=renderSingleMeal(day,"tussen_ochtend");
   html+=renderLunchCard(day);
-  html+=renderMealprepCard(day);
   html+=renderSingleMeal(day,"tussen_middag");
   html+=renderSingleMeal(day,"diner");
   html+=renderSingleMeal(day,"snack_avond");
@@ -1660,9 +1650,7 @@ function renderMealGroup(day,label,cat,rowIds){
 }
 
 function renderLunchCard(day){
-  const shelleyRc=S.week[day]["lunch_shelley"];
-  const dirkRc=S.week[day]["lunch_dirk"];
-  const mainRc=shelleyRc||dirkRc;
+  const mainRc=S.week[day]["lunch_shelley"];
   return `
   <div class="meal-card" onclick="pickSlot('${day}','lunch_shelley')">
     <div class="meal-thumb" style="background:${THUMB.lunch}">${THUMB_EMOJI.lunch}</div>
@@ -1674,22 +1662,6 @@ function renderLunchCard(day){
     <div class="meal-right">
       ${mainRc?avatarStack(["shelley","dirk"],"mini"):`<div class="meal-add">+</div>`}
     </div>
-  </div>`;
-}
-
-function renderMealprepCard(day){
-  const shelleyRc=S.week[day]["lunch_shelley"];
-  const dirkRc=S.week[day]["lunch_dirk"];
-  if(!dirkRc||(shelleyRc&&dirkRc.id===shelleyRc.id)) return "";
-  return `
-  <div class="meal-card" onclick="pickSlot('${day}','lunch_dirk')" style="padding:10px 14px;">
-    <div class="meal-thumb" style="background:var(--dirk);width:38px;height:38px;font-size:18px;border-radius:10px">🥡</div>
-    <div class="meal-info">
-      <div class="meal-label">Mealprep · Dirk</div>
-      <div class="meal-name">${esc(dirkRc.name)}</div>
-      <div class="meal-meta">${dirkRc.time}</div>
-    </div>
-    <div class="meal-right">${avatarStack(["dirk"],"mini")}</div>
   </div>`;
 }
 
@@ -2262,7 +2234,7 @@ function wizStart(){
 }
 
 function wizGenPreview(force){
-  const {cookDays, mealprep} = S.wiz;
+  const {cookDays} = S.wiz;
   const planDays = S.wiz.planDays;
   const prev = {}; // {wo: {day: {rowId: rc}}}
   const old = S.wiz.preview || {};
@@ -2334,17 +2306,6 @@ function wizGenPreview(force){
     if(src&&prev[wo][day])prev[wo][day]["diner"]=makeLeftover(src);
   });
 
-  // Sync lunch_dirk = lunch_shelley for non-mealprep days
-  [0,1].forEach(wo=>{
-    DAYS.forEach(day=>{
-      if(!prev[wo]||!prev[wo][day])return;
-      const isMp=S.wiz.doMealprep&&mealprep.rc&&mealprep.days.some(m=>m.wo===wo&&m.day===day);
-      if(!isMp)prev[wo][day]["lunch_dirk"]=prev[wo][day]["lunch_shelley"];
-    });
-  });
-  if(S.wiz.doMealprep&&mealprep.rc&&mealprep.days.length>0){
-    mealprep.days.forEach(m=>{if(prev[m.wo]&&prev[m.wo][m.day])prev[m.wo][m.day]["lunch_dirk"]=mealprep.rc;});
-  }
   if(S.wiz.baksel&&S.wiz.baksel!=="Nee"){
     const bakseltxt=S.wiz.baksel+(S.wiz.bakselNote?" — "+S.wiz.bakselNote:"");
     S.notes["zo"]={...(S.notes["zo"]||{}),algemeen:"🎂 "+bakseltxt};
@@ -2491,7 +2452,7 @@ function renderWizard(){
   // Stap 4 is de voorstel-week: dat is het startpunt en het middelpunt.
   // 1–3 zijn verfijningen die je erbij pakt als je ze nodig hebt, 5 is de afronding.
   const isHub = step===4;
-  const refineNo = {1:1,2:2,3:3}[step];
+  const refineNo = {1:1,2:2}[step];
   return `
   <div class="overlay" onclick="set({wizOpen:false,wizStep:4,wizSlotPicker:null,wizSlotIg:null,wizVastePicker:null})">
     <div class="sheet" onclick="event.stopPropagation()" style="max-height:92vh">
@@ -2499,13 +2460,12 @@ function renderWizard(){
 
       ${refineNo?`
       <div style="display:flex;gap:6px;margin-bottom:16px">
-        ${[1,2,3].map(n=>`<div style="flex:1;height:3px;border-radius:2px;background:${n<=refineNo?"var(--terra)":"var(--cardline)"}"></div>`).join("")}
+        ${[1,2].map(n=>`<div style="flex:1;height:3px;border-radius:2px;background:${n<=refineNo?"var(--terra)":"var(--cardline)"}"></div>`).join("")}
       </div>`:""}
-      <div class="kicker" style="color:var(--terra)">${isHub?"Zondagritueel":refineNo?`Verfijnen · ${refineNo}/3`:"Zondagritueel · afronden"}</div>
+      <div class="kicker" style="color:var(--terra)">${isHub?"Zondagritueel":refineNo?`Verfijnen · ${refineNo}/2`:"Zondagritueel · afronden"}</div>
 
       ${step===1?renderWizStep1():""}
       ${step===2?renderWizStep2():""}
-      ${step===3?renderWizStep3():""}
       ${step===4?renderWizStep4():""}
       ${step===5?renderWizStep5():""}
     </div>
@@ -2566,131 +2526,16 @@ function renderWizStep1(){
   </div>`;
 }
 
-// STAP 2 — Shelley's wensen
-function renderWizStep2_shelley_UNUSED(){
-  const sh = S.wiz.shelley;
-  return `
-  <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-    <div class="avatar" style="background:var(--shelley);width:28px;height:28px;font-size:12px">S</div>
-    <div class="sheet-title" style="margin:0">Shelley's wensen</div>
-  </div>
-  <div class="sheet-sub" style="margin-bottom:16px">Wat wil Shelley deze week vermijden of juist graag eten?</div>
-
-  <div style="margin-bottom:16px">
-    <div style="font-family:'Space Mono',monospace;font-size:11px;letter-spacing:1px;color:var(--ink3);margin-bottom:8px">VERMIJDEN DEZE WEEK</div>
-    <div style="display:flex;flex-wrap:wrap;gap:6px">
-      ${SHELLEY_VERMIJD.map(v=>{
-        const on = sh.vermijd.includes(v);
-        return `<button onclick="wizToggleTag('vermijd','${v}')"
-          style="padding:7px 13px;border-radius:20px;border:1.5px solid ${on?"var(--rust)":"var(--cardline)"};background:${on?"#CD6A4522":"var(--card)"};color:${on?"var(--rust)":"var(--ink2)"};font-size:13px;cursor:pointer">${v}</button>`;
-      }).join("")}
-    </div>
-  </div>
-
-  <div style="margin-bottom:16px">
-    <div style="font-family:'Space Mono',monospace;font-size:11px;letter-spacing:1px;color:var(--ink3);margin-bottom:8px">VOORKEUR DEZE WEEK</div>
-    <div style="display:flex;flex-wrap:wrap;gap:6px">
-      ${SHELLEY_VOORKEUR.map(v=>{
-        const on = sh.voorkeur.includes(v);
-        return `<button onclick="wizToggleTag('voorkeur','${v}')"
-          style="padding:7px 13px;border-radius:20px;border:1.5px solid ${on?"var(--olive)":"var(--cardline)"};background:${on?"#8C9E6E22":"var(--card)"};color:${on?"var(--olive)":"var(--ink2)"};font-size:13px;cursor:pointer">${v}</button>`;
-      }).join("")}
-    </div>
-  </div>
-
-  <div class="btn-row">
-    <button class="btn btn-line" onclick="set({wizStep:1})">← Terug</button>
-    <button class="btn btn-ink" onclick="set({wizStep:2})">Volgende →</button>
-  </div>`;
-}
-
-// STAP 2 — Mealprep
+// STAP 2 — Vaste recepten
 function renderWizStep2(){
-  const mp = S.wiz.mealprep;
-  const doMp = S.wiz.doMealprep;
-  const mpRecipes = ALL().filter(rc => rc.category === "lunch");
-
-  // Sub-picker for mealprep recipe
-  if(S.wizMpPicker){
-    const filtered = mpRecipes.filter(rc => !S.search || rc.name.toLowerCase().includes(S.search.toLowerCase()));
-    return `<div style="height:100%">
-      <div class="kicker" style="color:var(--dirk)">Mealprep recept kiezen</div>
-      <div class="sheet-title" style="margin-bottom:8px">Lunch</div>
-      <input class="search-box" placeholder="Zoeken…" value="${esc(S.search)}"
-        oninput="S.search=this.value;clearTimeout(window._mt);window._mt=setTimeout(render,200)">
-      <div class="picker-grid" style="max-height:55vh">
-        ${filtered.map(rc=>`
-          <div class="picker-card" onclick="S.wiz.mealprep.rc=getRc(${rc.id});set({wizMpPicker:false,search:''})">
-            <div class="pc-name">${esc(rc.name)}</div>
-            <div class="pc-meta">${rc.time} · ${rc.servings||2}p</div>
-          </div>`).join("")}
-      </div>
-      <button class="btn btn-line" style="margin-top:12px" onclick="set({wizMpPicker:false,search:''})">&#8592; Terug</button>
-    </div>`;
-  }
-
-  return `
-  <div class="sheet-title">Ga je mealpreppen?</div>
-  <div class="sheet-sub" style="margin-bottom:16px">Kook je lunch in bulk voor meerdere dagen?</div>
-
-  <div style="display:flex;gap:10px;margin-bottom:20px">
-    <button onclick="S.wiz.doMealprep=true;S.wiz.mealprep.rowId='lunch_dirk';set({})"
-      style="flex:1;padding:14px;border-radius:14px;border:2px solid ${doMp===true?'var(--dirk)':'var(--cardline)'};background:${doMp===true?'#8C9E6E22':'var(--card)'};font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:16px;color:${doMp===true?'var(--dirk)':'var(--ink2)'};cursor:pointer">
-      ✓ Ja
-    </button>
-    <button onclick="S.wiz.doMealprep=false;S.wiz.mealprep.rc=null;S.wiz.mealprep.days=[];set({})"
-      style="flex:1;padding:14px;border-radius:14px;border:2px solid ${doMp===false?'var(--rust)':'var(--cardline)'};background:${doMp===false?'#CD6A4522':'var(--card)'};font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:16px;color:${doMp===false?'var(--rust)':'var(--ink2)'};cursor:pointer">
-      ✕ Nee
-    </button>
-  </div>
-
-  ${doMp===true ? `
-  <div style="margin-bottom:14px">
-    <div style="font-family:'Space Mono',monospace;font-size:11px;letter-spacing:1px;color:var(--ink3);margin-bottom:8px">WELK RECEPT?</div>
-    <div onclick="set({wizMpPicker:true,search:''})"
-      style="display:flex;align-items:center;gap:12px;padding:13px 14px;border-radius:14px;border:1.5px solid ${mp.rc?'var(--dirk)':'var(--cardline)'};background:${mp.rc?'#8C9E6E22':'var(--card)'};cursor:pointer">
-      <div style="flex:1">
-        ${mp.rc
-          ? `<div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:600;font-size:15px;color:var(--ink)">${esc(mp.rc.name)}</div>
-             <div style="font-family:'Space Mono',monospace;font-size:11px;color:var(--ink3);margin-top:2px">${mp.rc.time} · ${mp.rc.servings||2}p</div>`
-          : `<div style="font-size:14px;color:var(--ink3);font-style:italic">Tik om een recept te kiezen…</div>`
-        }
-      </div>
-      <div style="font-size:13px;color:var(--ink3)">→</div>
-    </div>
-  </div>
-
-  <div style="margin-bottom:20px">
-    <div style="font-family:'Space Mono',monospace;font-size:11px;letter-spacing:1px;color:var(--ink3);margin-bottom:8px">VOOR WELKE DAGEN?</div>
-    <div style="display:flex;flex-wrap:wrap;gap:6px">
-      ${S.wiz.planDays.map(pd=>{
-        const W=weekDates(pd.wo);
-        const on=mp.days.some(m=>m.wo===pd.wo&&m.day===pd.day);
-        return `<button onclick="wizToggleMpDay(${pd.wo},'${pd.day}')"
-          style="padding:9px 14px;border-radius:13px;border:1.5px solid ${on?'var(--dirk)':'var(--cardline)'};background:${on?'#8C9E6E22':'var(--card)'};color:${on?'var(--dirk)':'var(--ink2)'};font-family:'Space Mono',monospace;font-size:12px;font-weight:700;cursor:pointer">${pd.day} ${W.nums[pd.day]}</button>`;
-      }).join("")}
-    </div>
-    ${mp.days.length>0&&mp.rc?`<div style="font-size:12px;color:var(--olive);margin-top:8px">✓ ${esc(mp.rc.name)} ingepland op ${mp.days.map(m=>m.day).join(", ")}</div>`:""}
-  </div>
-  ` : ""}
-
-  <div class="btn-row">
-    <button class="btn btn-line" onclick="set({wizStep:1})">&#8592; Terug</button>
-    <button class="btn btn-ink" onclick="set({wizStep:3})">Volgende →</button>
-  </div>`;
-}
-
-
-// STAP 3 — Vaste recepten
-function renderWizStep3(){
   const vasteRc=S.wiz.vasteRc||[];
 
   // Sub-picker: choose which meal slot
   if(S.wizVastePicker&&S.wizVastePicker.step==='row'){
     return `
-    <div class="kicker" style="color:var(--terra)">Vaste maaltijd · stap 3/5</div>
+    <div class="kicker" style="color:var(--terra)">Vaste maaltijd</div>
     <div class="sheet-title" style="margin-bottom:10px">Welk moment?</div>
-    ${ROWS.map(row=>{
+    ${ROWS.filter(row=>!row.free).map(row=>{
       const pc=row.who==="dirk"?"var(--dirk)":row.who==="shelley"?"var(--shelley)":"var(--olive2)";
       const person=row.who==="dirk"?" · Dirk":row.who==="shelley"?" · Shelley":"";
       const sub=row.sub?" "+row.sub[0].toUpperCase()+row.sub.slice(1):"";
@@ -2790,7 +2635,7 @@ function renderWizStep3(){
   <button class="btn btn-line" onclick="set({wizVastePicker:{step:'row'}})" style="width:100%;margin-bottom:16px">＋ Vaste maaltijd toevoegen</button>
 
   <div class="btn-row">
-    <button class="btn btn-line" onclick="set({wizStep:2})">← Terug</button>
+    <button class="btn btn-line" onclick="set({wizStep:1})">← Terug</button>
     <button class="btn btn-terra" onclick="wizGenPreview(true)">🪄 Nieuw voorstel →</button>
   </div>`;
 }
@@ -2832,14 +2677,14 @@ function renderWizStep4(){
   }));
   const modeColors={cook:"var(--olive)",quick:"var(--honey)",rest:"var(--terra2)",off:"var(--ink3)"};
 
-  const slotRow=(wo,day,row,rc,labelOverride)=>{
-    const rowId=labelOverride?"lunch_dirk":row.id;
+  const slotRow=(wo,day,row,rc)=>{
+    const rowId=row.id;
     const locked=wizIsLocked(wo,day,rowId);
-    const personColor=labelOverride?"var(--dirk)":row.who==="dirk"?"var(--dirk)":row.who==="shelley"?"var(--shelley)":"var(--olive2)";
+    const personColor=row.who==="dirk"?"var(--dirk)":row.who==="shelley"?"var(--shelley)":"var(--olive2)";
     const lo=isLeftover(rc);
     return `
     <div style="display:flex;align-items:center;gap:8px;padding:9px 10px;border-radius:12px;border:1px solid ${locked?"var(--terra)":"var(--cardline)"};background:var(--card);margin-bottom:4px;border-left:3px solid ${personColor}">
-      <div style="font-size:9px;font-family:'Space Mono',monospace;color:var(--ink3);min-width:38px">${labelOverride||row.label.split(" ")[0]}</div>
+      <div style="font-size:9px;font-family:'Space Mono',monospace;color:var(--ink3);min-width:38px">${row.label.split(" ")[0]}</div>
       <div onclick="wizSwapSlot(${wo},'${day}','${rowId}')" style="flex:1;min-width:0;cursor:pointer">
         <div style="font-size:13px;font-weight:${rc?600:400};color:${rc?"var(--ink)":"var(--ink3)"};font-style:${rc?"normal":"italic"};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${lo?"🥡 ":""}${rc?esc(rc.name):"leeg laten"}</div>
         ${rc?`<div style="font-family:'Space Mono',monospace;font-size:10px;color:var(--ink3)">${esc(rc.time)}${rateBadge(rc.id)?" · "+rateBadge(rc.id):""}</div>`:""}
@@ -2875,12 +2720,9 @@ function renderWizStep4(){
           <div style="font-family:'Space Mono',monospace;font-size:11px;font-weight:700;color:var(--ink)">${DAY_FULL[day].charAt(0).toUpperCase()+DAY_FULL[day].slice(1)} ${W.nums[day]}</div>
           <div style="font-family:'Space Mono',monospace;font-size:10px;color:${modeColors[mode]}">${DAY_MODES[mode]}</div>
         </div>
-        ${ROWS.filter(row=>row.id!=="lunch_dirk"&&!row.free).map(row=>{
-          const rc=prev[wo]&&prev[wo][day]&&prev[wo][day][row.id];
-          const dirkLunchRc=row.id==="lunch_shelley"?prev[wo]&&prev[wo][day]&&prev[wo][day]["lunch_dirk"]:null;
-          const showMealprep=dirkLunchRc&&(!rc||dirkLunchRc.id!==rc.id);
-          return slotRow(wo,day,row,rc)+(showMealprep?slotRow(wo,day,row,dirkLunchRc,"Meal&shy;prep"):"");
-        }).join("")}
+        ${ROWS.filter(row=>!row.free).map(row=>
+          slotRow(wo,day,row,prev[wo]&&prev[wo][day]&&prev[wo][day][row.id])
+        ).join("")}
       </div>`;
     }).join("")}`;
   }).join("")}
@@ -2947,13 +2789,6 @@ function wizTogglePlanDay(wo, day){
   S.wiz.planDays=isIn?pd.filter(p=>!(p.wo===wo&&p.day===day)):[...pd,{wo,day}];
   set({});
 }
-function wizToggleMpDay(wo, day){
-  const days=S.wiz.mealprep.days;
-  const isIn=days.some(m=>m.wo===wo&&m.day===day);
-  S.wiz.mealprep.days=isIn?days.filter(m=>!(m.wo===wo&&m.day===day)):[...days,{wo,day}];
-  set({});
-}
-
 function wizFinish(){
   // Apply preview to correct week(s) in localStorage
   [0,1].forEach(wo=>{
@@ -2990,7 +2825,7 @@ window.wizFinish=wizFinish; window.wizApplyPreview=wizApplyPreview;
 window.wizSwapSlot=wizSwapSlot; window.wizAssignSlot=wizAssignSlot;
 window.wizClearSlot=wizClearSlot; window.wizStartIg=wizStartIg;
 window.wizDoImport=wizDoImport; window.wizFetchAndImport=wizFetchAndImport; window.wizToggleTag=wizToggleTag;
-window.wizToggleMpDay=wizToggleMpDay; window.wizToggleInHuis=wizToggleInHuis;
+window.wizToggleInHuis=wizToggleInHuis;
 window.wizStart=wizStart; window.wizToggleLock=wizToggleLock; window.wizRerollSlot=wizRerollSlot; window.wizToggleGenOpt=wizToggleGenOpt;
 window.openCook=openCook; window.closeCook=closeCook; window.cookGo=cookGo;
 window.cookStartTimer=cookStartTimer; window.cookStopTimer=cookStopTimer;
