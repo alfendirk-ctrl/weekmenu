@@ -9,8 +9,8 @@
 //   Authorization: Bearer <anon key>
 //   {"url":"https://www.instagram.com/p/...","household_id":"..."}
 //
-// De Gemini-key komt uit de secret GEMINI_API_KEY, en valt anders terug op de
-// key die de app al meesynct in weekmenu_sync.state.wm_geminikey_v1.
+// De Gemini-key komt uit de secret GEMINI_API_KEY. De app synct zijn eigen key
+// bewust niet mee, dus zonder die secret werkt deze route niet.
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
@@ -142,15 +142,38 @@ Regels:
 
 const CATS = ["ontbijt", "lunch", "diner", "tussendoortje"];
 
+// Welke modellen er bestaan verandert; een vaste lijst veroudert en levert dan
+// "model is no longer available". Daarom vragen we het aan Google zelf en
+// rangschikken we wat er terugkomt.
+function rank(m: string): number {
+  const v = parseFloat((m.match(/gemini-(\d+(?:\.\d+)?)/) ?? ["", "0"])[1]) || 0;
+  const soort = /flash-lite/.test(m) ? 2 : /flash/.test(m) ? 3 : /pro/.test(m) ? 1 : 0;
+  const risico = /preview|exp\b|experimental|thinking/.test(m) ? -2 : 0;
+  return v * 10 + soort + risico;
+}
+
+async function pickModels(base: string, keyParam: string): Promise<string[]> {
+  const terugval = ["gemini-2.0-flash", "gemini-2.5-flash", "gemini-1.5-flash"];
+  try {
+    const r = await fetch(`${base}/models${keyParam}`, { signal: AbortSignal.timeout(15000) });
+    if (!r.ok) return terugval;
+    const d = await r.json();
+    const namen: string[] = (d?.models ?? [])
+      .filter((m: any) => (m?.supportedGenerationMethods ?? []).includes("generateContent"))
+      .map((m: any) => String(m.name ?? "").replace(/^models\//, ""))
+      // beeldgeneratie, spraak en embeddings kunnen dit niet en hebben vaak quota 0
+      .filter((n: string) => n && !/image|imagen|tts|audio|embed|live|veo/i.test(n));
+    if (!namen.length) return terugval;
+    return namen.sort((a, b) => rank(b) - rank(a)).slice(0, 4);
+  } catch {
+    return terugval;
+  }
+}
+
 async function extractRecipe(cap: string, apiKey: string) {
   const base = "https://generativelanguage.googleapis.com/v1beta";
   const keyParam = "?key=" + encodeURIComponent(apiKey);
-  const models = [
-    "gemini-2.0-flash",
-    "gemini-2.5-flash",
-    "gemini-1.5-flash",
-    "gemini-2.0-flash-lite",
-  ];
+  const models = await pickModels(base, keyParam);
   const prompt =
     `Je krijgt het bijschrift van een Instagram-post. Haal daar het recept uit.\n\n${RULES}\n\nBijschrift:\n${cap}`;
 
@@ -171,7 +194,18 @@ async function extractRecipe(cap: string, apiKey: string) {
 
     let res = await call(true);
     if (res.status === 400) res = await call(false);
-    if (!res.ok) { lastErr = `${model}: ${res.status}`; continue; }
+    if (!res.ok) {
+      const tekst = await res.text().catch(() => "");
+      // Quota 0 betekent: dit model mag deze key helemaal niet gebruiken.
+      if (/limit:\s*0[,\s}"]/.test(tekst) || /"limit":\s*0[,}]/.test(tekst)) {
+        lastErr = "quota van deze key staat op 0 voor " + model;
+      } else if (res.status === 429) {
+        lastErr = "Gemini-quota is op. Die reset elke dag.";
+      } else {
+        lastErr = `${model}: ${res.status}`;
+      }
+      continue;
+    }
 
     const data = await res.json();
     const txt = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
@@ -224,11 +258,10 @@ Deno.serve(async (req) => {
     .from("weekmenu_sync").select("state").eq("household_id", hid).single();
   if (hhErr || !hh) return json({ error: "Onbekend huishouden" }, 403);
 
-  const apiKey = Deno.env.get("GEMINI_API_KEY") ??
-    (hh.state as any)?.wm_geminikey_v1 ?? "";
+  const apiKey = Deno.env.get("GEMINI_API_KEY") ?? "";
   if (!apiKey) {
     return json({
-      error: "Geen Gemini API key. Vul hem in de app in bij Recepten → Instagram, of zet de secret GEMINI_API_KEY.",
+      error: "Geen Gemini API key op de server. Zet de secret GEMINI_API_KEY in Supabase.",
     }, 400);
   }
 
