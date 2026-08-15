@@ -102,6 +102,14 @@ Rules this stylesheet holds itself to (from the `impeccable` craft floor):
 - browser surfaces are themed: `::selection`, `caret-color`, `:focus-visible`, scrollbars
 - every interactive element has hover / focus / active / disabled
 
+### Themes
+
+Three states, per the token pattern: bare `:root` carries the complete light palette, `@media (prefers-color-scheme:dark)` guarded as `:root:not([data-theme="light"])` redefines **only the tokens**, and `:root[data-theme="dark"]` redefines them again so an explicit choice wins in both directions. Never declare a color solely inside a media or `[data-theme]` block — it would not apply in the un-stamped "system" state.
+
+`S` does not hold the theme; `wm_theme_v1` does (`auto` | `light` | `dark`), applied by `applyTheme()` before the first render. The dark palette is composed, not inverted: accents move *up* in lightness so they still read on a dark ground, and `--on-person` flips from white to near-black because the person hues get lighter.
+
+Measured with a canvas-based sRGB conversion (`scratchpad/dark.js`) across eleven foreground/background pairs: both themes pass WCAG AA on all of them.
+
 ### Responsive
 
 One breakpoint that matters: **900px**. Below it, bottom nav and one day at a time. Above it, the nav becomes a left sidebar and `.planner` becomes a two-column grid — week rail plus summary on the left (`.railcol`, sticky), the selected day on the right. `.railcol{display:contents}` on mobile so the single "Plan de week" button can be reordered instead of duplicated. A second breakpoint at 1280px widens the content and the rail. `.meal` switches to a stacked grid under 560px so the slot label sits above the recipe name.

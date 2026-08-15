@@ -28,7 +28,7 @@
 
   --ink:oklch(0.235 0.014 60);
   --ink-2:oklch(0.475 0.013 60);
-  --ink-3:oklch(0.618 0.011 60);
+  --ink-3:oklch(0.532 0.012 60);
 
   --accent:oklch(0.575 0.163 42);
   --accent-hover:oklch(0.525 0.163 42);
@@ -42,9 +42,11 @@
   --err:oklch(0.548 0.170 27);
   --err-soft:oklch(0.958 0.028 27);
 
-  --p-shelley:oklch(0.605 0.145 22);
-  --p-dirk:oklch(0.545 0.098 168);
-  --p-maeve:oklch(0.660 0.118 78);
+  --p-shelley:oklch(0.545 0.155 22);
+  --p-dirk:oklch(0.508 0.100 168);
+  --p-maeve:oklch(0.552 0.115 78);
+  --on-person:oklch(1 0 0);
+  --scrim:oklch(0.235 0.014 60/.40);
 
   --sans:'Hanken Grotesk',system-ui,-apple-system,sans-serif;
   --display:'Bricolage Grotesque',var(--sans);
@@ -59,8 +61,76 @@
 
   --shadow-1:0 1px 2px oklch(0.235 0.014 60/.05), 0 2px 8px oklch(0.235 0.014 60/.05);
   --shadow-2:0 2px 6px oklch(0.235 0.014 60/.07), 0 12px 32px oklch(0.235 0.014 60/.09);
+  color-scheme:light;
   --ease:cubic-bezier(.2,.8,.3,1);
   --rail-w:19rem;
+}
+
+/* ============================================================
+   DONKER — 's ochtends vroeg en 's avonds laat staat deze app open.
+   Niet de lichte versie omgekeerd: de accenten gaan omhoog in lichtheid
+   zodat ze op een donkere grond nog steeds werken, en de tekst op een
+   persoonskleur wordt juist donker.
+   ============================================================ */
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --canvas:oklch(0.185 0.008 70);
+    --surface:oklch(0.232 0.010 70);
+    --surface-2:oklch(0.212 0.009 70);
+    --surface-3:oklch(0.278 0.012 70);
+    --line:oklch(0.318 0.012 70);
+    --line-2:oklch(0.408 0.014 70);
+    --ink:oklch(0.945 0.008 70);
+    --ink-2:oklch(0.762 0.011 70);
+    --ink-3:oklch(0.618 0.011 70);
+    --accent:oklch(0.705 0.150 45);
+    --accent-hover:oklch(0.765 0.145 45);
+    --accent-on:oklch(0.205 0.020 45);
+    --accent-soft:oklch(0.302 0.048 45);
+    --accent-line:oklch(0.452 0.090 45);
+    --ok:oklch(0.720 0.128 152);
+    --ok-soft:oklch(0.288 0.042 152);
+    --warn:oklch(0.790 0.128 80);
+    --err:oklch(0.700 0.155 27);
+    --err-soft:oklch(0.295 0.052 27);
+    --p-shelley:oklch(0.672 0.152 22);
+    --p-dirk:oklch(0.665 0.108 168);
+    --p-maeve:oklch(0.762 0.122 78);
+    --on-person:oklch(0.205 0.012 60);
+    --scrim:oklch(0.120 0.008 70/.62);
+    --shadow-1:0 1px 2px oklch(0 0 0/.30), 0 2px 8px oklch(0 0 0/.26);
+    --shadow-2:0 2px 6px oklch(0 0 0/.36), 0 12px 32px oklch(0 0 0/.44);
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --canvas:oklch(0.185 0.008 70);
+  --surface:oklch(0.232 0.010 70);
+  --surface-2:oklch(0.212 0.009 70);
+  --surface-3:oklch(0.278 0.012 70);
+  --line:oklch(0.318 0.012 70);
+  --line-2:oklch(0.408 0.014 70);
+  --ink:oklch(0.945 0.008 70);
+  --ink-2:oklch(0.762 0.011 70);
+  --ink-3:oklch(0.618 0.011 70);
+  --accent:oklch(0.705 0.150 45);
+  --accent-hover:oklch(0.765 0.145 45);
+  --accent-on:oklch(0.205 0.020 45);
+  --accent-soft:oklch(0.302 0.048 45);
+  --accent-line:oklch(0.452 0.090 45);
+  --ok:oklch(0.720 0.128 152);
+  --ok-soft:oklch(0.288 0.042 152);
+  --warn:oklch(0.790 0.128 80);
+  --err:oklch(0.700 0.155 27);
+  --err-soft:oklch(0.295 0.052 27);
+  --p-shelley:oklch(0.672 0.152 22);
+  --p-dirk:oklch(0.665 0.108 168);
+  --p-maeve:oklch(0.762 0.122 78);
+  --on-person:oklch(0.205 0.012 60);
+  --scrim:oklch(0.120 0.008 70/.62);
+  --shadow-1:0 1px 2px oklch(0 0 0/.30), 0 2px 8px oklch(0 0 0/.26);
+  --shadow-2:0 2px 6px oklch(0 0 0/.36), 0 12px 32px oklch(0 0 0/.44);
+  color-scheme:dark;
 }
 
 *{margin:0;padding:0;box-sizing:border-box}
@@ -187,7 +257,7 @@ svg{display:block;flex:0 0 auto}
 .dc-bar{display:flex;gap:2px;width:100%;justify-content:center}
 .dc-tick{width:5px;height:5px;border-radius:99px;background:var(--line)}
 .dc-tick.on{background:var(--ok)}
-.daycard.active .dc-tick{background:oklch(1 0 0/.3)}
+.daycard.active .dc-tick{background:color-mix(in oklch,var(--accent-on) 45%,transparent)}
 .daycard.active .dc-tick.on{background:var(--accent-on)}
 
 @media (min-width:900px){
@@ -262,9 +332,10 @@ svg{display:block;flex:0 0 auto}
 }
 
 .who{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:99px;
-  font-family:var(--num);font-size:10px;font-weight:700;color:oklch(1 0 0);flex:0 0 auto}
+  font-family:var(--num);font-size:10px;font-weight:700;color:var(--on-person);flex:0 0 auto}
 .who-stack{display:flex}
 .who-stack .who+.who{margin-left:-6px;box-shadow:0 0 0 1.5px var(--surface)}
+.meal:hover .who-stack .who+.who{box-shadow:0 0 0 1.5px var(--surface-2)}
 
 .notefield{width:100%;border:1px solid var(--line);border-radius:var(--r-lg);
   background:var(--surface);padding:var(--s-4);font-size:var(--t-md);line-height:1.5;
@@ -298,7 +369,7 @@ svg{display:block;flex:0 0 auto}
 
 .plan-cta{margin:var(--s-5) 0 var(--s-6)}
 .badge{font-family:var(--num);font-variant-numeric:tabular-nums;font-size:var(--t-2xs);
-  padding:2px 7px;border-radius:99px;background:oklch(1 0 0/.22)}
+  padding:2px 7px;border-radius:99px;background:color-mix(in oklch,currentColor 20%,transparent)}
 
 /* ============================================================
    RECEPTEN / SNACKS
@@ -362,7 +433,7 @@ svg{display:block;flex:0 0 auto}
 /* ============================================================
    MODALEN — alleen waar de taak echt onderbreking verdient
    ============================================================ */
-.overlay{position:fixed;inset:0;background:oklch(0.235 0.014 60/.4);
+.overlay{position:fixed;inset:0;background:var(--scrim);
   backdrop-filter:blur(3px);display:flex;align-items:flex-end;justify-content:center;z-index:100}
 @media (min-width:640px){.overlay{align-items:center;padding:var(--s-6)}}
 .sheet{background:var(--surface);width:100%;max-width:34rem;max-height:90dvh;overflow-y:auto;
@@ -681,7 +752,7 @@ r(85,3,"Bananenbrood","tussendoortje","60 min",[i("Banaan","2"),i("Ei","2"),i("B
 ];
 
 // ===================== STATE & STORAGE =====================
-const SK="wm_week_v2", CK="wm_custom_v2", NK="wm_notes_v2", CHK="wm_check_v2", CFG="wm_cfg_v2", BOK="wm_boodOver_v1", AK="wm_apikey_v1", GK="wm_geminikey_v1", SAK="wm_snackavond_v1", RTK="wm_ratings_v1";
+const SK="wm_week_v2", CK="wm_custom_v2", NK="wm_notes_v2", CHK="wm_check_v2", CFG="wm_cfg_v2", BOK="wm_boodOver_v1", AK="wm_apikey_v1", GK="wm_geminikey_v1", SAK="wm_snackavond_v1", RTK="wm_ratings_v1", THK="wm_theme_v1";
 const SB_URL="https://nejjocgplgbgmdornurw.supabase.co";
 const SB_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5lampvY2dwbGdiZ21kb3JudXJ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM2MTk4MzEsImV4cCI6MjA5OTE5NTgzMX0.dJ_xMqV4Qp-1gZKifYJ-qTW6p9GhoMdfxlr_zIJx7Ko";
 const HHID_KEY="wm_household_v1";
@@ -885,6 +956,12 @@ function renderSyncModal(){
   <div class="overlay" onclick="set({syncOpen:false})">
     <div class="sheet" onclick="event.stopPropagation()">
             <h2 class="sheet-title">Synchronisatie</h2>
+      <div class="field" style="margin-top:var(--s-4)">
+        <label>Thema</label>
+        <div class="pick-row">
+          ${THEMES.map(([k,l])=>`<button class="pick-opt ${curTheme()===k?"on":""}" onclick="setTheme('${k}')">${l}</button>`).join("")}
+        </div>
+      </div>
       <div class="sheet-sub">Voer dezelfde code in op elk apparaat om te synchroniseren</div>
       <div style="font-family:var(--num);font-size:11px;word-break:break-all;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;color:var(--ink);margin-bottom:10px;line-height:1.8">${esc(hid)}</div>
       <button class="btn btn-line" style="margin-bottom:20px" onclick="navigator.clipboard.writeText('${esc(hid)}').then(()=>toast('Code gekopieerd'))">Kopieer sync code</button>
@@ -915,6 +992,22 @@ function scaleAmt(amt,srv,mult){if(!amt)return amt;const f=(HH/(srv||2))*(mult||
 function esc(s){return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
 function toast(msg){const h=document.getElementById("toast-host");const t=document.createElement("div");t.className="toast";t.textContent=msg;h.appendChild(t);setTimeout(()=>t.remove(),2000);}
 
+
+// ===================== THEMA =====================
+// Drie standen: volg het systeem (niets op de root), of dwing licht of
+// donker af. Zonder attribuut beslist prefers-color-scheme.
+const THEMES=[["auto","Systeem"],["light","Licht"],["dark","Donker"]];
+function applyTheme(){
+  const t=lsGet(THK,"auto");
+  const r=document.documentElement;
+  if(t==="auto")r.removeAttribute("data-theme");else r.setAttribute("data-theme",t);
+}
+function setTheme(t){ lsSet(THK,t); applyTheme(); render(); }
+function curTheme(){ return lsGet(THK,"auto"); }
+// De achtergrond die html2canvas moet gebruiken, uit het thema zelf.
+function canvasColor(){
+  return getComputedStyle(document.documentElement).getPropertyValue("--canvas").trim()||"#ffffff";
+}
 
 // ===================== ICONEN =====================
 // Eén set, één lijndikte, allemaal getekend. Emoji zijn geen icoonsysteem:
@@ -956,6 +1049,8 @@ const ICONS={
   toveren:'<path d="M12 3.2 13.5 7.6 18 9.1l-4.5 1.5L12 15l-1.5-4.4L6 9.1l4.5-1.5Z"/><path d="M18.4 15.4l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7Z"/>',
   link:'<path d="M10.2 13.6a4.2 4.2 0 0 0 6 0l2.8-2.9a4.2 4.2 0 0 0-6-6l-1.2 1.2"/><path d="M13.8 10.4a4.2 4.2 0 0 0-6 0L5 13.3a4.2 4.2 0 0 0 6 6l1.2-1.2"/>',
   info:'<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.8v.4"/>',
+  thema:'<circle cx="12" cy="12" r="4.6"/><path d="M12 2.6v2.2M12 19.2v2.2M4.6 12H2.4M21.6 12h-2.2M6.8 6.8 5.2 5.2M18.8 18.8l-1.6-1.6M6.8 17.2l-1.6 1.6M18.8 5.2l-1.6 1.6"/>',
+  maan:'<path d="M20.5 14.6A8.6 8.6 0 0 1 9.4 3.5a8.6 8.6 0 1 0 11.1 11.1Z"/>',
 };
 function ic(name,size,extra){
   const p=ICONS[name]; if(!p)return"";
@@ -1188,7 +1283,7 @@ async function exportImg(type){
   if(!el){toast("Ga naar de planner");return;}
   toast("Bezig met exporteren...");
   try{
-    const canvas=await html2canvas(el,{backgroundColor:"#F3EAD8",scale:2,useCORS:true});
+    const canvas=await html2canvas(el,{backgroundColor:canvasColor(),scale:2,useCORS:true});
     if(type==="pdf"){
       const {jsPDF}=window.jspdf;
       const pdf=new jsPDF({orientation:"portrait",unit:"mm",format:"a4"});
@@ -1748,7 +1843,7 @@ function cookTick(){
   let el=document.getElementById("cook-timer");
   if(!el){ el=document.createElement("div"); el.id="cook-timer"; host.appendChild(el); }
   el.className="cook-timer";
-  const stopBtn=`<button onclick="cookStopTimer()" style="background:oklch(1 0 0/.22);border-radius:var(--r-sm);padding:5px 10px;font-size:var(--t-xs);color:inherit">stop</button>`;
+  const stopBtn=`<button onclick="cookStopTimer()" style="background:color-mix(in oklch,currentColor 20%,transparent);border-radius:var(--r-sm);padding:5px 10px;font-size:var(--t-xs);color:inherit">stop</button>`;
   el.innerHTML=`<span class="cook-timer-num">${fmtTime(left)}</span>
     <span style="flex:1;font-size:var(--t-xs);opacity:.85">${esc(_cookLabel)}</span>${stopBtn}`;
   if(left<=0){ clearInterval(_cookInt); _cookInt=null; cookAlarm();
@@ -1901,6 +1996,11 @@ function renderPlanner(){
         <button class="iconbtn" onclick="switchWeek(${off-1})" aria-label="Vorige week">${ic("vorige",18)}</button>
         <span class="weeknav-label">week ${W.wk} · ${W.range}${off===0?" · nu":off===1?" · volgende":off===-1?" · vorige":""}</span>
         <button class="iconbtn" onclick="switchWeek(${off+1})" aria-label="Volgende week">${ic("volgende",18)}</button>
+        <span style="flex:1"></span>
+        <button class="iconbtn" onclick="cycleTheme()" title="Thema: ${THEMES.find(t=>t[0]===curTheme())[1]}" aria-label="Thema wisselen">${ic(curTheme()==="dark"?"maan":"thema",18)}</button>
+        <button class="iconbtn" onclick="set({syncOpen:true})" title="Synchronisatie"
+          aria-label="Synchronisatie" style="${S.syncSt==='ok'?'color:var(--ok)':S.syncSt==='err'?'color:var(--err)':''}">
+          ${S.syncSt==='syncing'?`<span class="spin">${ic("opnieuw",18)}</span>`:ic("wolk",18)}</button>
       </div>
       <h1 class="page-title">Ons weekmenu</h1>
       <p class="page-sub">${st.total===0?"Geen dag staat aan deze week.":st.empty===0?"De week staat compleet.":`Nog ${st.empty} van de ${st.total} maaltijden te kiezen.`}</p>
@@ -1922,6 +2022,12 @@ function renderPlanner(){
       </div>
     </div>
   </div>`;
+}
+
+function cycleTheme(){
+  const i=THEMES.findIndex(t=>t[0]===curTheme());
+  setTheme(THEMES[(i+1)%THEMES.length][0]);
+  toast("Thema: "+THEMES[(i+1)%THEMES.length][1].toLowerCase());
 }
 
 function renderDayCard(day){
@@ -3128,7 +3234,7 @@ window.wizStart=wizStart; window.wizToggleWeek=wizToggleWeek; window.wizAllDays=
 window.openCook=openCook; window.closeCook=closeCook; window.cookGo=cookGo;
 window.cookStartTimer=cookStartTimer; window.cookStopTimer=cookStopTimer;
 window.setRating=setRating; window.assignLeftover=assignLeftover;
-window.setDayCfg=setDayCfg; window.setDayCfgAt=setDayCfgAt; window.toggleApart=toggleApart; window.clearDay=clearDay;
+window.setTheme=setTheme; window.cycleTheme=cycleTheme; window.setDayCfg=setDayCfg; window.setDayCfgAt=setDayCfgAt; window.toggleApart=toggleApart; window.clearDay=clearDay;
 window.setAvondSnack=setAvondSnack; window.whoStack=whoStack; window.ic=ic;
 window.wizToggleVasteDay=wizToggleVasteDay; window.wizRemoveVaste=wizRemoveVaste;
 window.wizPickVasteRow=wizPickVasteRow; window.wizPickVasteRc=wizPickVasteRc;
@@ -3145,6 +3251,7 @@ window.pullInbox=pullInbox; window.syncPush=syncPush; window.syncPull=syncPull; 
 
 // ===================== INIT =====================
 if(!lsGet(HHID_KEY,null)){lsSet(HHID_KEY,crypto.randomUUID());}
+applyTheme();
 render();
 syncPull().catch(()=>{});
 </script>
