@@ -53,6 +53,7 @@ function render() { document.getElementById("app").innerHTML = `...`; }
 
 - `S.week` — object keyed by day (`ma`–`zo`), then by row id (e.g. `diner`, `lunch_shelley`). Each value is a recipe object or `null`.
 - `S.custom` — user-added recipes (persisted to `localStorage` key `wm_custom_v2`)
+- `S.cfg.apartEten` — the household default for eating separately, toggled in the planner's week column. `dayCfgAt` falls back to it for any day that has no explicit `apart` value, so a per-day choice always wins. A one-time migration (`wm_apart_migrated_v1`) turns it on for anyone whose stored weeks contain a genuinely split breakfast or lunch, so upgrading does not silently hide Dirk's meal.
 - `S.dayCfg` — per-day settings for the week being viewed, persisted to `wm_daycfg_YYYY-MM-DD`: `{plan, apart, maxTijd}`. `plan` defaults to true, `apart` falls back to `S.cfg.apartEten`, `maxTijd` is `0|15|30|45` (0 = no limit). Read it through `dayCfgAt(wo,day)`, never directly — it resolves the defaults and reads other weeks from localStorage. There are no cooking modes any more.
 - `ROWS` — 8 rows; each has `id`, `cat`, `who`, and optionally `sub`, `free`, `apart`. **Which rows a day actually has is `rowsFor(day, wo)`, not `ROWS`** — rows with `apart:true` (`ontbijt_dirk`, `lunch_dirk`) only exist on days where separate eating is on, and `free:true` (`snack_avond`) is a text field, not a slot. So a day has 5 fillable slots normally and 7 when eating separately. Everything that counts slots — stats, dots, shopping list, generator — must go through `rowsFor`.
 - `S.ratings` — `{[rcId]: {shelley:1|-1, dirk:…, maeve:…}}`, persisted to `wm_ratings_v1`. Two thumbs down and the generator skips the recipe.
@@ -79,7 +80,7 @@ Measured over 8 consecutive weeks (before the mealprep slot was dropped): ~93 un
 - `HH = 3` — household size used to scale recipe ingredient amounts via `scaleAmt()`
 - `DAYS = ["ma","di","wo","do","vr","za","zo"]`
 - `PEOPLE = { shelley, dirk, maeve }` each with `label`, `sub`, `color` (CSS var), `initial`
-- localStorage keys: `wm_week_YYYY-MM-DD`, `wm_notes_YYYY-MM-DD` and `wm_daycfg_YYYY-MM-DD` (keyed by that week's Monday), `wm_custom_v2`, `wm_check_v2`, `wm_cfg_v2`, `wm_ratings_v1`, `wm_snackavond_v1`, `wm_boodOver_v1`, `wm_geminikey_v1` (never synced)
+- localStorage keys: `wm_week_YYYY-MM-DD`, `wm_notes_YYYY-MM-DD` and `wm_daycfg_YYYY-MM-DD` (keyed by that week's Monday), `wm_custom_v2`, `wm_check_v2`, `wm_cfg_v2`, `wm_ratings_v1`, `wm_snackavond_v1`, `wm_boodOver_v1`, `wm_geminikey_v1` and `wm_theme_v1` (both device-local, never synced)
 
 ### External dependencies (CDN, no npm)
 

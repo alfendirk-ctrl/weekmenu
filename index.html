@@ -819,12 +819,35 @@ function migrateOldWeekKeys(){
   });
   lsSet(MIGK,true);
 }
+// Vóór deze versie was het ontbijt altijd per persoon. Wie daar echt
+// verschillende dingen had staan, wil apart eten niet ineens uit hebben.
+const APARTMIGK="wm_apart_migrated_v1";
+function migrateApartDefault(){
+  if(lsGet(APARTMIGK,false))return;
+  let split=false;
+  for(let i=0;i<localStorage.length&&!split;i++){
+    const k=localStorage.key(i);
+    if(!k||!/^wm_week_\d{4}-\d{2}-\d{2}$/.test(k))continue;
+    let wk;try{wk=JSON.parse(localStorage.getItem(k));}catch(e){continue;}
+    if(!wk)continue;
+    Object.values(wk).forEach(dag=>{
+      if(!dag)return;
+      const paren=[["ontbijt_dirk","ontbijt_shelley"],["lunch_dirk","lunch_shelley"]];
+      paren.forEach(([a,b])=>{ if(dag[a]&&dag[b]&&dag[a].id!==dag[b].id)split=true; });
+    });
+  }
+  if(split){
+    const cfg=lsGet(CFG,{});cfg.apartEten=true;lsSet(CFG,cfg);
+  }
+  lsSet(APARTMIGK,true);
+}
 (function migrate(){
   const old=lsGet(SK,null);
   if(old){const k=weekStoreKey(0);if(!lsGet(k,null)){lsSet(k,old);}try{localStorage.removeItem(SK);}catch(e){}}
   const oldN=lsGet(NK,null);
   if(oldN){const k=notesStoreKey(0);if(!lsGet(k,null)){lsSet(k,oldN);}try{localStorage.removeItem(NK);}catch(e){}}
   migrateOldWeekKeys();
+  migrateApartDefault();
 })();
 
 let S={
@@ -848,7 +871,6 @@ let S={
   // wizard config
   wiz:{
     weeks:[0],
-    shelley:{vermijd:[],voorkeur:[]},
     vasteRc:[],    // [{rowId, rc, days:[{wo,day}]}]
     preview:{},      // day->rowId->rc
     inHuis:{},       // ingredient key -> true
@@ -891,7 +913,7 @@ async function syncPush(){
       const k=localStorage.key(i);
       // GK (de Gemini API key) blijft bewust lokaal: weekmenu_sync is leesbaar
       // voor iedereen met de anon key, en die staat publiek in deze pagina.
-      if(k&&k.startsWith('wm_')&&k!==HHID_KEY&&k!==GK&&k!==MIGK
+      if(k&&k.startsWith('wm_')&&k!==HHID_KEY&&k!==GK&&k!==MIGK&&k!==THK
          &&!/^wm_(week|notes)_\d{4}_\d+$/.test(k)){try{state[k]=JSON.parse(localStorage.getItem(k));}catch(e){}}
     }
     const {error}=await getSb().from('weekmenu_sync').upsert({household_id:hid,state,updated_at:new Date().toISOString()});
@@ -987,7 +1009,6 @@ function set(patch){Object.assign(S,patch);save();render();}
 function ALL(){return [...RECIPES,...S.custom];}
 
 // ===================== HELPERS =====================
-function shuf(a){const b=[...a];for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]];}return b;}
 function scaleAmt(amt,srv,mult){if(!amt)return amt;const f=(HH/(srv||2))*(mult||1);if(Math.abs(f-1)<0.01)return amt;const n=parseFloat(amt);if(isNaN(n))return amt;return amt.replace(String(n),String(Math.round(n*f*10)/10));}
 function esc(s){return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
 function toast(msg){const h=document.getElementById("toast-host");const t=document.createElement("div");t.className="toast";t.textContent=msg;h.appendChild(t);setTimeout(()=>t.remove(),2000);}
@@ -1134,7 +1155,6 @@ function leftoverSources(day){
 // Per dag: plannen ja/nee, apart eten ja/nee, en hoeveel tijd je hebt.
 // De planner en de wizard schrijven allebei hierin — één bron.
 const TIJD_OPTIES=[0,15,30,45];
-function tijdLabel(m){ return m?`${m} min`:"geen limiet"; }
 function rawDayCfg(wo){
   return (wo===(S.weekOffset||0)) ? S.dayCfg : lsGet(dayCfgStoreKey(wo),{});
 }
@@ -1790,7 +1810,12 @@ function saveForm(isEdit){
   };
   if(isEdit)updateCustomRecipe(rc);else saveCustomRecipe(rc);
 }
-function setFormVoor(v){S.formVoor=v;document.querySelectorAll(".pick-opt").forEach(b=>b.classList.remove("on"));const el=document.querySelector(".pick-opt."+v);if(el)el.classList.add("on");}
+// Niet via render(): dat zou het half ingevulde formulier weggooien.
+// Daarom hier de klasse zelf zetten, gericht op de knoppen met data-voor.
+function setFormVoor(v){
+  S.formVoor=v;
+  document.querySelectorAll("[data-voor]").forEach(b=>b.classList.toggle("on",b.dataset.voor===v));
+}
 
 
 // ===================== KOOKMODUS =====================
@@ -1978,6 +2003,8 @@ function render(){
 
   syncBodyLock();
 
+  if(S.addOpen)document.querySelectorAll("[data-voor]").forEach(b=>b.classList.toggle("on",b.dataset.voor===S.formVoor));
+
   if(hadSearch){
     const el=document.querySelector('.search');
     if(el){el.focus();if(selStart!==null)el.setSelectionRange(selStart,selEnd);}
@@ -2013,6 +2040,11 @@ function renderPlanner(){
           <div class="weekstat"><span>Maaltijden gepland</span><span class="num">${st.filled} / ${st.total}</span></div>
           <div class="weekstat"><span>Dagen aan</span><span class="num">${DAYS.filter(d=>dayCfg(d).plan).length} / 7</span></div>
           <div class="weekstat"><span>Ingrediënten</span><span class="num">${weekIngCount()}</span></div>
+          <div style="margin-top:var(--s-4)">
+            ${switchBtn(!!S.cfg.apartEten,"toggleApartDefault()","Meestal apart eten")}
+            <p style="font-size:var(--t-xs);color:var(--ink-3);line-height:1.5;margin-top:var(--s-2)">
+              Vertrekpunt voor dagen waar je het niet apart hebt gezet.</p>
+          </div>
           <button class="btn btn-primary" style="margin-top:var(--s-4)" onclick="wizStart()">
             ${ic("toveren",18)} Plan de week</button>
         </div>
@@ -2083,6 +2115,11 @@ function switchBtn(on,onclick,label){
 }
 // Apart aanzetten kopieert de gedeelde maaltijd naar Dirk, zodat je alleen
 // hoeft te wijzigen wat écht anders is.
+// De algemene stand geldt voor elke dag waar je niets hebt gekozen.
+function toggleApartDefault(){
+  S.cfg={...S.cfg,apartEten:!S.cfg.apartEten};
+  set({});
+}
 function toggleApart(day){
   const nu=dayCfg(day).apart;
   if(!nu){
@@ -2484,9 +2521,9 @@ function renderAddSheet(){
             <div class="field" style="flex:0.6"><label>Pers.</label><select id="ig-srv">${[1,2,3,4,5,6].map(n=>`<option value="${n}" ${p.servings===n?"selected":""}>${n}</option>`).join("")}</select></div>
           </div>
           <div class="field"><label>Voor wie</label><div class="pick-row">
-            <button class="pick-opt ${S.formVoor==="dirk"?"on":""}" onclick="setFormVoor('dirk')">Dirk</button>
-            <button class="pick-opt ${S.formVoor==="shelley"?"on":""}" onclick="setFormVoor('shelley')">Shelley</button>
-            <button class="pick-opt ${S.formVoor==="beiden"?"on":""}" onclick="setFormVoor('beiden')">Beiden</button>
+            <button class="pick-opt" data-voor="dirk" onclick="setFormVoor('dirk')">Dirk</button>
+            <button class="pick-opt" data-voor="shelley" onclick="setFormVoor('shelley')">Shelley</button>
+            <button class="pick-opt" data-voor="beiden" onclick="setFormVoor('beiden')">Beiden</button>
           </div></div>
           <div class="field"><label>Ingrediënten</label><textarea id="ig-ing" rows="4">${esc((p.ingredients||[]).map(g=>g.n+(g.a?" - "+g.a:"")).join(nl))}</textarea></div>
           <div class="field"><label>Stappen</label><textarea id="ig-steps" rows="4">${esc((p.steps||[]).join(nl))}</textarea></div>
@@ -2555,9 +2592,9 @@ function renderAddSheet(){
           <div class="field" style="flex:0.6"><label>Pers.</label><select id="rc-srv">${[1,2,3,4,5,6].map(n=>`<option value="${n}" ${srv===n?"selected":""}>${n}</option>`).join("")}</select></div>
         </div>
         <div class="field"><label>Voor wie</label><div class="pick-row">
-          <button class="pick-opt ${S.formVoor==="dirk"?"on":""}" onclick="setFormVoor('dirk')">Dirk</button>
-          <button class="pick-opt ${S.formVoor==="shelley"?"on":""}" onclick="setFormVoor('shelley')">Shelley</button>
-          <button class="pick-opt ${S.formVoor==="beiden"?"on":""}" onclick="setFormVoor('beiden')">Beiden</button>
+          <button class="pick-opt" data-voor="dirk" onclick="setFormVoor('dirk')">Dirk</button>
+          <button class="pick-opt" data-voor="shelley" onclick="setFormVoor('shelley')">Shelley</button>
+          <button class="pick-opt" data-voor="beiden" onclick="setFormVoor('beiden')">Beiden</button>
         </div></div>
         <div class="field"><label>Ingrediënten (1 per regel: naam - hoeveelheid)</label><textarea id="rc-ing" rows="5" placeholder="Kipfilet - 300g">${esc(ingStr)}</textarea></div>
         <div class="field"><label>Stappen (1 per regel)</label><textarea id="rc-steps" rows="4">${esc(stepsStr)}</textarea></div>
@@ -2572,8 +2609,6 @@ function renderAddSheet(){
 }
 
 // ---------- WIZARD HELPERS ----------
-const SHELLEY_VERMIJD = ["rauwe vis","alcohol","lever","rauw vlees","rauwe eieren","schimmelkaas","cafeïne","veel suiker","processed food"];
-const SHELLEY_VOORKEUR = ["ijzerrijk","calciumrijk","eiwitrijk","foliumzuur","omega-3","licht verteerbaar","warm","koud","snel klaar"];
 
 // Kandidaten wegen in plaats van blind uit een geschudde stapel trekken.
 // Drie krachten: hergebruik van ingrediënten (kortere boodschappenlijst),
@@ -2621,16 +2656,11 @@ function genTake(pool, ctx){
 }
 // Pool voor één slot: juiste categorie, juiste persoon, en wat Shelley mijdt eruit.
 function genPool(cat, who){
-  const vermijd=(S.wiz.shelley&&S.wiz.shelley.vermijd)||[];
   return ALL().filter(rc=>{
     if(rc.category!==cat)return false;
     if(rc.category==="weekendsnack")return false;
     if(who==="dirk"&&rc.voor==="shelley")return false;
     if(who==="shelley"&&rc.voor==="dirk")return false;
-    if(who==="shelley"&&vermijd.length){
-      const nm=rc.name.toLowerCase(), st=(rc.steps||[]).join(" ").toLowerCase();
-      if(vermijd.some(v=>nm.includes(v.toLowerCase())||st.includes(v.toLowerCase())))return false;
-    }
     return true;
   });
 }
@@ -2750,9 +2780,6 @@ function wizGenPreview(force){
   set({wizStep:4});
 }
 
-function wizApplyPreview(){
-  wizFinish();
-}
 
 function wizSwapSlot(wo, day, rowId){
   set({wizSlotPicker:{wo,day,rowId}, search:""});
@@ -2768,7 +2795,6 @@ function wizClearSlot(wo,day,rowId){
   S.wiz.preview[wo][day][rowId] = null;
   set({});
 }
-function wizStartIg(wo,day,rowId){ set({wizSlotIg:{wo,day,rowId},wizIgCap:"",wizIgUrl:"",wizIgSt:null,wizIgErr:"",wizIgPrev:null}); }
 // Haalt eerst het bijschrift op via de link, en analyseert dan.
 async function wizFetchAndImport(){
   const url=(document.getElementById("wiz-ig-url")||{value:""}).value.trim();
@@ -2801,12 +2827,6 @@ async function wizDoImport(){
   }catch(e){ set({wizIgSt:"err",wizIgErr:e.message||"Mislukt"}); }
 }
 
-function wizToggleTag(arr, val){
-  const list = S.wiz.shelley[arr];
-  const idx2 = list.indexOf(val);
-  if(idx2>=0) list.splice(idx2,1); else list.push(val);
-  set({});
-}
 function wizToggleInHuis(k){
   S.wiz.inHuis[k] = !S.wiz.inHuis[k];
   set({});
@@ -3225,16 +3245,16 @@ function assignRcById(id){const rc=getRc(id);if(rc)assignRecipe(rc);}
 window.getRc=getRc; window.openDetail=openDetail; window.assignRcById=assignRcById;
 window.set=set; window.switchWeek=switchWeek;
 window.wizGenPreview=wizGenPreview;
-window.wizFinish=wizFinish; window.wizApplyPreview=wizApplyPreview;
+window.wizFinish=wizFinish; 
 window.wizSwapSlot=wizSwapSlot; window.wizAssignSlot=wizAssignSlot;
-window.wizClearSlot=wizClearSlot; window.wizStartIg=wizStartIg;
-window.wizDoImport=wizDoImport; window.wizFetchAndImport=wizFetchAndImport; window.wizToggleTag=wizToggleTag;
+window.wizClearSlot=wizClearSlot; 
+window.wizDoImport=wizDoImport; window.wizFetchAndImport=wizFetchAndImport;
 window.wizToggleInHuis=wizToggleInHuis;
 window.wizStart=wizStart; window.wizToggleWeek=wizToggleWeek; window.wizAllDays=wizAllDays; window.wizCycleTijd=wizCycleTijd; window.wizToggleLock=wizToggleLock; window.wizRerollSlot=wizRerollSlot; window.wizToggleGenOpt=wizToggleGenOpt;
 window.openCook=openCook; window.closeCook=closeCook; window.cookGo=cookGo;
 window.cookStartTimer=cookStartTimer; window.cookStopTimer=cookStopTimer;
 window.setRating=setRating; window.assignLeftover=assignLeftover;
-window.setTheme=setTheme; window.cycleTheme=cycleTheme; window.setDayCfg=setDayCfg; window.setDayCfgAt=setDayCfgAt; window.toggleApart=toggleApart; window.clearDay=clearDay;
+window.setTheme=setTheme; window.cycleTheme=cycleTheme; window.setDayCfg=setDayCfg; window.setDayCfgAt=setDayCfgAt; window.toggleApart=toggleApart; window.toggleApartDefault=toggleApartDefault; window.clearDay=clearDay;
 window.setAvondSnack=setAvondSnack; window.whoStack=whoStack; window.ic=ic;
 window.wizToggleVasteDay=wizToggleVasteDay; window.wizRemoveVaste=wizRemoveVaste;
 window.wizPickVasteRow=wizPickVasteRow; window.wizPickVasteRc=wizPickVasteRc;
