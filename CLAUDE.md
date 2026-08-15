@@ -23,10 +23,12 @@ Everything lives in `index.html`. The structure within the `<script>` block:
 
 | Section | What it does |
 |---|---|
-| `CONFIG` | Constants: `DAYS`, `PEOPLE`, `ROWS`, `BOOD_CATS`, `THUMB`, `EC`/`EL` |
+| `CONFIG` | Constants: `DAYS`, `PEOPLE`, `ROWS`, `BOOD_CATS`, `EC`/`EL`, `TIJD_OPTIES` |
 | `RECIPES` | ~142 built-in recipes defined with factory functions `r(id,ebook,name,cat,time,ing,steps,srv,voor)` and `i(name,amount)` |
 | `STATE & STORAGE` | Global state `S`, `lsGet`/`lsSet` wrappers, `save()`, `set(patch)` |
 | `HELPERS` | `shuf`, `scaleAmt`, `esc`, `toast`, `avatarStack` |
+| `ICONEN` | `ICONS` map of drawn 24×24 SVG paths + `ic(name,size)`. No emoji anywhere in the UI — they are not an icon system |
+| `DAGINSTELLINGEN` | `dayCfgAt`/`dayCfg`/`setDayCfg`, `rowsFor`, `clearDay` — per-day plan / apart / maxTijd |
 | `INGREDIËNTEN` | `ingKey` (normaliseert een naam), `ingKeys` (per recept) — basis voor het hergebruik in de generator |
 | `WAARDERINGEN` | `rateOf`, `setRating`, `rateScore`, `rateBadge` |
 | `RESTJES` | `makeLeftover`, `isLeftover`, `leftoverCounts`, `leftoverSources` |
@@ -51,8 +53,8 @@ function render() { document.getElementById("app").innerHTML = `...`; }
 
 - `S.week` — object keyed by day (`ma`–`zo`), then by row id (e.g. `diner`, `lunch_shelley`). Each value is a recipe object or `null`.
 - `S.custom` — user-added recipes (persisted to `localStorage` key `wm_custom_v2`)
-- `S.cfg.cookDays` — per-day cooking mode: `"cook"` | `"rest"` | `"none"`
-- `ROWS` — defines the 7 meal slots per day; each has `id`, `cat` (ontbijt/lunch/diner/tussendoortje), `who` (dirk/shelley/samen), `split`. A row with `free:true` (`snack_avond`) is a free-text field, not a recipe slot: it is excluded from stats, the shopping list and the generator, so only 6 slots are fillable. Breakfast is split per person; lunch and dinner are shared (the lunch row keeps the legacy id `lunch_shelley` so stored weeks keep working). There is no mealprep slot — it was removed.
+- `S.dayCfg` — per-day settings for the week being viewed, persisted to `wm_daycfg_YYYY-MM-DD`: `{plan, apart, maxTijd}`. `plan` defaults to true, `apart` falls back to `S.cfg.apartEten`, `maxTijd` is `0|15|30|45` (0 = no limit). Read it through `dayCfgAt(wo,day)`, never directly — it resolves the defaults and reads other weeks from localStorage. There are no cooking modes any more.
+- `ROWS` — 8 rows; each has `id`, `cat`, `who`, and optionally `sub`, `free`, `apart`. **Which rows a day actually has is `rowsFor(day, wo)`, not `ROWS`** — rows with `apart:true` (`ontbijt_dirk`, `lunch_dirk`) only exist on days where separate eating is on, and `free:true` (`snack_avond`) is a text field, not a slot. So a day has 5 fillable slots normally and 7 when eating separately. Everything that counts slots — stats, dots, shopping list, generator — must go through `rowsFor`.
 - `S.ratings` — `{[rcId]: {shelley:1|-1, dirk:…, maeve:…}}`, persisted to `wm_ratings_v1`. Two thumbs down and the generator skips the recipe.
 - **Leftovers** — a leftover slot is a reference, not a copy: `{id:"lo_<srcId>", leftoverOf:<srcId>, ingredients:[]}`. `boodschappen()` therefore skips it and instead multiplies the source recipe's amounts by `1 + aantal restjesdagen`.
 
@@ -66,6 +68,8 @@ function render() { document.getElementById("app").innerHTML = `...`; }
 - `−100` for anything already used this week, so a week never repeats itself
 - the winner is drawn at random from the top 3, otherwise every week would be identical
 
+Days that are off (`plan:false`) are skipped entirely; `maxTijd` filters the candidate pool by `parseInt(rc.time)` but falls back to the full pool rather than leaving a slot empty.
+
 Slots can be pinned (`S.wiz.locks`, keyed `"<wo>_<day>_<rowId>"`); pinned slots survive regeneration and count as context for the rest of the week. The wizard opens **on the generated proposal** (`wizStart()` → step 4); steps 1–2 are refinements you reach from there (days & generator options, then fixed meals), step 5 is the in-huis check. Step 3 no longer exists.
 
 Measured over 8 consecutive weeks (before the mealprep slot was dropped): ~93 unique ingredients per week with reuse on vs ~111 off, 36 unique dinners across those weeks, 4/49 dinners repeated from the week before, 0 repeats within a week.
@@ -75,7 +79,7 @@ Measured over 8 consecutive weeks (before the mealprep slot was dropped): ~93 un
 - `HH = 3` — household size used to scale recipe ingredient amounts via `scaleAmt()`
 - `DAYS = ["ma","di","wo","do","vr","za","zo"]`
 - `PEOPLE = { shelley, dirk, maeve }` each with `label`, `sub`, `color` (CSS var), `initial`
-- localStorage keys: `wm_week_YYYY-MM-DD` and `wm_notes_YYYY-MM-DD` (keyed by that week's Monday), `wm_custom_v2`, `wm_check_v2`, `wm_cfg_v2`, `wm_ratings_v1`, `wm_snackavond_v1`, `wm_boodOver_v1`, `wm_geminikey_v1` (never synced)
+- localStorage keys: `wm_week_YYYY-MM-DD`, `wm_notes_YYYY-MM-DD` and `wm_daycfg_YYYY-MM-DD` (keyed by that week's Monday), `wm_custom_v2`, `wm_check_v2`, `wm_cfg_v2`, `wm_ratings_v1`, `wm_snackavond_v1`, `wm_boodOver_v1`, `wm_geminikey_v1` (never synced)
 
 ### External dependencies (CDN, no npm)
 
@@ -86,7 +90,21 @@ Measured over 8 consecutive weeks (before the mealprep slot was dropped): ~93 un
 
 ### CSS design tokens
 
-Defined as CSS custom properties on `:root`. Color names like `--terra`, `--olive`, `--honey`, `--amber` map to the three people's brand colors (`--shelley`, `--dirk`, `--maeve`). Always use these vars rather than hardcoded hex.
+All colors are OKLCH custom properties on `:root`. Roles, not names: `--canvas`/`--surface`/`--surface-2`/`--surface-3`, `--line`/`--line-2`, `--ink`/`--ink-2`/`--ink-3`, one `--accent` (+`-hover`/`-on`/`-soft`/`-line`), semantics `--ok`/`--warn`/`--err`, and the three people as *data* hues `--p-shelley`/`--p-dirk`/`--p-maeve`. Type scale `--t-2xs … --t-3xl` (fixed rem, ratio ~1.2), spacing `--s-1 … --s-10`, radii `--r-*`. Never hardcode a hex.
+
+Rules this stylesheet holds itself to (from the `impeccable` craft floor):
+
+- **no emoji as icons** — use `ic("name")`
+- **no eyebrow/kicker above a heading** — the heading carries itself
+- **no colored `border-left` over 1px** on cards or rows
+- **no stack of identical icon+heading+text cards** as page structure — the day view is a list with hairlines
+- monospace (`--num`) only for measurement: times, dates, counts, quantities — with `tabular-nums`
+- browser surfaces are themed: `::selection`, `caret-color`, `:focus-visible`, scrollbars
+- every interactive element has hover / focus / active / disabled
+
+### Responsive
+
+One breakpoint that matters: **900px**. Below it, bottom nav and one day at a time. Above it, the nav becomes a left sidebar and `.planner` becomes a two-column grid — week rail plus summary on the left (`.railcol`, sticky), the selected day on the right. `.railcol{display:contents}` on mobile so the single "Plan de week" button can be reordered instead of duplicated. A second breakpoint at 1280px widens the content and the rail. `.meal` switches to a stacked grid under 560px so the slot label sits above the recipe name.
 
 ## Adding or editing recipes
 
