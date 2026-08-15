@@ -2554,10 +2554,9 @@ function renderAddSheet(){
           return `<button class="btn btn-ink" onclick="importFromUrl()" style="width:100%;margin-bottom:12px" ${busy?"disabled":""}>${busy?`<span class="spin">${ic('opnieuw',15)}</span> ${esc(label)}`:label}</button>`;
         })()}
         ${S.igFetchSt==="err"?`
-          <div style="background:var(--err-soft);border-radius:13px;padding:12px;font-size:13px;color:var(--err);margin-bottom:12px">${esc(S.igErr)}</div>
-          <div class="field"><label>Bijschrift handmatig plakken</label><textarea id="ig-cap" rows="4" placeholder="Kopieer het bijschrift van Instagram en plak het hier..." oninput="S.igCap=this.value">${esc(S.igCap)}</textarea></div>
-          <button class="btn btn-line" onclick="doImport()" style="width:100%;margin-bottom:12px" ${S.igSt==="loading"?"disabled":""}>${S.igSt==="loading"?`<span class="spin">${ic("opnieuw",17)}</span> Analyseren…`:`${ic("zoeken",17)} Analyseer handmatig`}</button>
-        `:""}
+          <div class="note warn" style="margin-bottom:var(--s-3)">${esc(S.igErr)}</div>`:""}
+        <div class="field"><label>Of plak het bijschrift zelf</label><textarea id="ig-cap" rows="4" placeholder="Open de post, tik op ··· → Kopieer bijschrift, en plak het hier." oninput="S.igCap=this.value">${esc(S.igCap)}</textarea></div>
+        <button class="btn btn-line" onclick="doImport()" style="width:100%;margin-bottom:12px" ${S.igSt==="loading"?"disabled":""}>${S.igSt==="loading"?`<span class="spin">${ic("opnieuw",17)}</span> Analyseren…`:`${ic("zoeken",17)} Analyseer dit bijschrift`}</button>
         ${S.igSt==="loading"&&S.igErr?`<div style="background:var(--surface);border:1px solid var(--line);border-radius:13px;padding:12px;font-size:13px;color:var(--ink-2);margin-bottom:12px"><span class="spin">${ic('opnieuw',15)}</span> ${esc(S.igErr)}</div>`:""}${S.igSt==="err"?`<div style="background:var(--err-soft);border-radius:13px;padding:12px;font-size:13px;color:var(--err);margin-bottom:12px">${esc(S.igErr)}</div>`:""}
         ${previewBlock}
       `:""}
