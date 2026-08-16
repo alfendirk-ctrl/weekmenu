@@ -553,7 +553,6 @@ const DAY_FULL = {ma:"maandag",di:"dinsdag",wo:"woensdag",do:"donderdag",vr:"vri
 const DAY_NUM = {ma:9,di:10,wo:11,do:12,vr:13,za:14,zo:15}; // wordt dynamisch berekend
 const CATS = ["ontbijt","lunch","diner","tussendoortje","weekendsnack"];
 const CL = {ontbijt:"Ontbijt",lunch:"Lunch",diner:"Diner",tussendoortje:"Tussendoortje",weekendsnack:"Weekendsnack"};
-const HH = 3;
 
 // People
 const PEOPLE = {
@@ -752,7 +751,7 @@ r(85,3,"Bananenbrood","tussendoortje","60 min",[i("Banaan","2"),i("Ei","2"),i("B
 ];
 
 // ===================== STATE & STORAGE =====================
-const SK="wm_week_v2", CK="wm_custom_v2", NK="wm_notes_v2", CHK="wm_check_v2", CFG="wm_cfg_v2", BOK="wm_boodOver_v1", AK="wm_apikey_v1", GK="wm_geminikey_v1", SAK="wm_snackavond_v1", RTK="wm_ratings_v1", THK="wm_theme_v1";
+const SK="wm_week_v2", CK="wm_custom_v2", NK="wm_notes_v2", CHK="wm_check_v2", CFG="wm_cfg_v2", BOK="wm_boodOver_v1", AK="wm_apikey_v1", GK="wm_geminikey_v1", SAK="wm_snackavond_v1", RTK="wm_ratings_v1", THK="wm_theme_v1", SRV="wm_servings_v1";
 const SB_URL="https://nejjocgplgbgmdornurw.supabase.co";
 const SB_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5lampvY2dwbGdiZ21kb3JudXJ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM2MTk4MzEsImV4cCI6MjA5OTE5NTgzMX0.dJ_xMqV4Qp-1gZKifYJ-qTW6p9GhoMdfxlr_zIJx7Ko";
 const HHID_KEY="wm_household_v1";
@@ -890,6 +889,7 @@ let S={
   snackSearch:"", addCat:null,
   avondSnack: lsGet(SAK,{}),
   ratings: lsGet(RTK,{}),   // rcId -> {shelley:1|-1, dirk:1|-1, maeve:1|-1}
+  rcServings: lsGet(SRV,{}), // rcId -> voor hoeveel personen het recept écht is
   cook:null,                // {rc, day, rowId} — kookmodus
   cookStep:0, cookIng:false,
   leftoverPick:null,        // {day,rowId} — restjes kiezen
@@ -899,14 +899,24 @@ function save(){
   lsSet(weekStoreKey(S.weekOffset||0),S.week);
   lsSet(notesStoreKey(S.weekOffset||0),S.notes);
   lsSet(dayCfgStoreKey(S.weekOffset||0),S.dayCfg);
-  lsSet(CK,S.custom);lsSet(CHK,S.checked);lsSet(CFG,S.cfg);lsSet(BOK,S.boodOverride);lsSet(SAK,S.avondSnack);lsSet(RTK,S.ratings);
+  lsSet(CK,S.custom);lsSet(CHK,S.checked);lsSet(CFG,S.cfg);lsSet(BOK,S.boodOverride);lsSet(SAK,S.avondSnack);lsSet(RTK,S.ratings);lsSet(SRV,S.rcServings);
   clearTimeout(window._syncT);window._syncT=setTimeout(syncPush,3000);
 }
 
 // ===================== SYNC =====================
+// De sync draait op de achtergrond terwijl je typt. Alleen het wolkje
+// bijwerken in plaats van de hele pagina hertekenen.
+function syncStatus(st){
+  S.syncSt=st;
+  const b=document.querySelector('button[title="Synchronisatie"]');
+  if(!b)return;
+  b.style.color = st==="ok" ? "var(--ok)" : st==="err" ? "var(--err)" : "";
+  b.innerHTML = st==="syncing" ? `<span class="spin">${ic("opnieuw",18)}</span>` : ic("wolk",18);
+}
+
 async function syncPush(){
   const hid=lsGet(HHID_KEY,null);if(!hid)return;
-  S.syncSt="syncing";render();
+  syncStatus("syncing");
   try{
     const state={};
     for(let i=0;i<localStorage.length;i++){
@@ -917,13 +927,14 @@ async function syncPush(){
          &&!/^wm_(week|notes)_\d{4}_\d+$/.test(k)){try{state[k]=JSON.parse(localStorage.getItem(k));}catch(e){}}
     }
     const {error}=await getSb().from('weekmenu_sync').upsert({household_id:hid,state,updated_at:new Date().toISOString()});
-    S.syncSt=error?"err":"ok";
-  }catch(e){S.syncSt="err";}
-  render();setTimeout(()=>{S.syncSt="idle";render();},3000);
+    syncStatus(error?"err":"ok");
+  }catch(e){syncStatus("err");}
+  // Bewust géén render: er is niets veranderd behalve het wolkje zelf.
+  setTimeout(()=>syncStatus("idle"),3000);
 }
 async function syncPull(hid){
   hid=hid||lsGet(HHID_KEY,null);if(!hid)return;
-  S.syncSt="syncing";render();
+  syncStatus("syncing");
   try{
     const {data,error}=await getSb().from('weekmenu_sync').select('state').eq('household_id',hid).single();
     if(!error&&data?.state){
@@ -936,15 +947,20 @@ async function syncPull(hid){
       S.notes=lsGet(notesStoreKey(S.weekOffset||0),{});
       S.geminiKey=lsGet(GK,"");
       S.avondSnack=lsGet(SAK,{});
+      S.ratings=lsGet(RTK,{});
+      S.rcServings=lsGet(SRV,{});
       migrateOldWeekKeys(); // herstel foute sleutels na sync
       S.week=lsGet(weekStoreKey(S.weekOffset||0),emptyWeek());
       S.notes=lsGet(notesStoreKey(S.weekOffset||0),{});
-      S.syncSt="ok";
-    }else{S.syncSt=error?"err":"ok";}
+      // Daginstellingen horen hier ook bij: zonder deze regel blijven de
+      // schakelaars van de andere telefoon in het geheugen hangen.
+      S.dayCfg=lsGet(dayCfgStoreKey(S.weekOffset||0),{});
+      syncStatus("ok");
+    }else{syncStatus(error?"err":"ok");}
     const n=await pullInbox(hid);
-    if(n)toast(`${n} recept${n===1?"":"en"} uit je inbox toegevoegd \u2728`);
-  }catch(e){S.syncSt="err";}
-  render();setTimeout(()=>{S.syncSt="idle";render();},3000);
+    if(n)toast(`${n} recept${n===1?"":"en"} uit je inbox toegevoegd`);
+  }catch(e){syncStatus("err");}
+  render();setTimeout(()=>syncStatus("idle"),3000);
 }
 // Recepten die via de Edge Function ig-import binnenkwamen ophalen en opnemen.
 async function pullInbox(hid){
@@ -1009,7 +1025,20 @@ function set(patch){Object.assign(S,patch);save();render();}
 function ALL(){return [...RECIPES,...S.custom];}
 
 // ===================== HELPERS =====================
-function scaleAmt(amt,srv,mult){if(!amt)return amt;const f=(HH/(srv||2))*(mult||1);if(Math.abs(f-1)<0.01)return amt;const n=parseFloat(amt);if(isNaN(n))return amt;return amt.replace(String(n),String(Math.round(n*f*10)/10));}
+// Schaalt een hoeveelheid van "waar het recept voor is" naar "voor hoeveel
+// je nu kookt". Werkt ook op "2 el" of "1½ blik" — alleen het eerste getal
+// gaat mee, de rest van de tekst blijft staan.
+function scaleAmt(amt,van,naar){
+  if(!amt)return amt;
+  const f=(naar||basisPorties())/(van||2);
+  if(Math.abs(f-1)<0.01)return amt;
+  const m=String(amt).match(/(\d+[.,]?\d*)/);
+  if(!m)return amt;
+  const n=parseFloat(m[1].replace(",","."));
+  if(isNaN(n))return amt;
+  const uit=Math.round(n*f*10)/10;
+  return String(amt).replace(m[1],String(uit).replace(".",","));
+}
 function esc(s){return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
 function toast(msg){const h=document.getElementById("toast-host");const t=document.createElement("div");t.className="toast";t.textContent=msg;h.appendChild(t);setTimeout(()=>t.remove(),2000);}
 
@@ -1047,6 +1076,7 @@ const ICONS={
   sluiten:'<path d="M6 6 18 18M18 6 6 18"/>',
   vink:'<path d="M5 12.5 9.5 17 19 7"/>',
   plus:'<path d="M12 5v14M5 12h14"/>',
+  minder:'<path d="M5 12h14"/>',
   prullenbak:'<path d="M4 7h16"/><path d="M9.5 7V5.6A1.6 1.6 0 0 1 11.1 4h1.8a1.6 1.6 0 0 1 1.6 1.6V7"/><path d="M6.2 7 7.2 19.2A2 2 0 0 0 9.2 21h5.6a2 2 0 0 0 2-1.8L17.8 7"/><path d="M10.2 11v6M13.8 11v6"/>',
   wissen:'<path d="M8.5 21H21"/><path d="M15.4 3.6 20.9 9.1 10.4 19.6H6L2.9 16.5Z"/><path d="M9 9.9 14.5 15.4"/>',
   timer:'<circle cx="12" cy="13.5" r="7.5"/><path d="M12 9.8v3.7l2.4 1.9"/><path d="M9.4 2.5h5.2"/>',
@@ -1149,6 +1179,51 @@ function leftoverSources(day){
     out.push({day:d,rc});
   });
   return out;
+}
+
+// ===================== PORTIES =====================
+// Twee getallen, en dat onderscheid is het hele punt:
+//   1. voor hoeveel personen een recept geschreven is (rcPorties)
+//   2. voor hoeveel personen jij het die dag kookt (slotPorties)
+// De hoeveelheden schalen van het eerste naar het tweede.
+const HH_DEFAULT = 3;
+function basisPorties(){ return Number(S.cfg.huishouden)>0 ? Number(S.cfg.huishouden) : HH_DEFAULT; }
+
+// Wat het recept zelf zegt, tenzij jij het hebt gecorrigeerd.
+function rcPorties(rc){
+  if(!rc)return 2;
+  const eigen=S.rcServings[rc.id];
+  if(Number(eigen)>0)return Number(eigen);
+  return Number(rc.servings)>0?Number(rc.servings):2;
+}
+function setRcPorties(rcId,n){
+  const alle={...S.rcServings};
+  if(Number(n)>0)alle[rcId]=Number(n);else delete alle[rcId];
+  set({rcServings:alle});
+}
+
+// Hoeveel monden een slot standaard voedt: precies de mensen die daar eten.
+function slotEters(day,rowId){
+  if(rowId==="diner")return Object.keys(PEOPLE).length;
+  const row=ROWS.find(r=>r.id===rowId);
+  if(row&&row.apart)return 1;                      // alleen Dirk
+  if(row&&dayCfg(day).apart&&row.who==="shelley")return 1;  // alleen Shelley
+  return Math.max(1,Object.keys(PEOPLE).length-1); // Maeve eet alleen mee met het diner
+}
+// Wat er voor dit slot gekookt wordt: jouw keuze, anders het aantal eters.
+function slotPorties(day,rowId){
+  const rc=S.week[day]&&S.week[day][rowId];
+  if(rc&&Number(rc.porties)>0)return Number(rc.porties);
+  return slotEters(day,rowId);
+}
+function setSlotPorties(day,rowId,n){
+  const rc=S.week[day]&&S.week[day][rowId];
+  if(!rc)return;
+  const bij={...rc};
+  if(Number(n)>0)bij.porties=Number(n);else delete bij.porties;
+  S.week={...S.week,[day]:{...S.week[day],[rowId]:bij}};
+  if(S.detail&&S.detail.day===day&&S.detail.rowId===rowId)S.detail={...S.detail,rc:bij};
+  set({});
 }
 
 // ===================== DAGINSTELLINGEN =====================
@@ -1268,13 +1343,14 @@ function boodschappen(){
     // zijn al op het hele huishouden geschaald.
     const dedup=`${row.cat}:${rc.id}`;
     if(gezien.has(dedup))return; gezien.add(dedup);
-    const mult=1+(lo[rc.id]||0);  // extra porties voor de restjesdagen
+    const extra=1+(lo[rc.id]||0);              // restjesdagen tellen als extra porties
+    const naar=slotPorties(d,row.id)*extra;
     (rc.ingredients||[]).forEach(g=>{
       const k=(g.n||"").toLowerCase();
       if(!m[k])m[k]={name:g.n,amounts:[],cat:getBoodCat(g.n),sources:[]};
-      const sc=scaleAmt(g.a,rc.servings,mult);
+      const sc=scaleAmt(g.a,rcPorties(rc),naar);
       if(sc&&!m[k].amounts.includes(sc))m[k].amounts.push(sc);
-      m[k].sources.push({day:d,rcName:rc.name+(mult>1?` (×${mult}, incl. restjes)`:""),amount:sc||g.a||""});
+      m[k].sources.push({day:d,rcName:rc.name+(extra>1?` (incl. restjes)`:"")+` · ${naar}p`,amount:sc||g.a||""});
     });
   });
   });
@@ -1894,7 +1970,8 @@ function cookAlarm(){
 }
 
 function renderCookMode(){
-  const {rc}=S.cook;
+  const {rc,day,rowId}=S.cook;
+  const kookPorties=(day&&rowId)?slotPorties(day,rowId):rcPorties(rc);
   const steps=rc.steps&&rc.steps.length?rc.steps:["Geen bereidingsstappen bij dit recept."];
   const i=Math.min(S.cookStep,steps.length-1);
   const txt=steps[i];
@@ -1916,8 +1993,8 @@ function renderCookMode(){
 
     <div class="cook-body">
       ${S.cookIng?`
-        <p style="font-size:var(--t-xs);color:var(--ink-3);margin-bottom:var(--s-3)">Geschaald naar ${HH} personen</p>
-        ${(rc.ingredients||[]).map(g=>`<div class="ing-line" style="font-size:var(--t-lg)"><span>${esc(g.n)}</span>${g.a?`<span class="num" style="color:var(--ink-3);font-size:var(--t-md)">${esc(scaleAmt(g.a,rc.servings))}</span>`:""}</div>`).join("")||`<p style="color:var(--ink-3)">Geen ingrediënten bekend.</p>`}
+        <p style="font-size:var(--t-xs);color:var(--ink-3);margin-bottom:var(--s-3)">Voor ${kookPorties} ${kookPorties===1?"persoon":"personen"}</p>
+        ${(rc.ingredients||[]).map(g=>`<div class="ing-line" style="font-size:var(--t-lg)"><span>${esc(g.n)}</span>${g.a?`<span class="num" style="color:var(--ink-3);font-size:var(--t-md)">${esc(scaleAmt(g.a,rcPorties(rc),kookPorties))}</span>`:""}</div>`).join("")||`<p style="color:var(--ink-3)">Geen ingrediënten bekend.</p>`}
       `:`
         <div id="cook-timer-host"></div>
         <div class="cook-stepno">Stap ${i+1} van ${steps.length}</div>
@@ -1954,11 +2031,27 @@ function syncBodyLock(){
     window.scrollTo(0,_lockY);
   }
 }
+// Waar een veld na het hertekenen terug te vinden is. Een id is het meest
+// betrouwbaar; anders vallen we terug op de eerste klasse.
+function veldSelector(el){
+  if(!el)return null;
+  if(el.id)return "#"+CSS.escape(el.id);
+  const cls=(typeof el.className==="string"?el.className:"").trim().split(/\s+/)[0];
+  return cls?"."+CSS.escape(cls):null;
+}
+
 function render(){
+  // Een hertekening mag nooit wegvagen wat iemand op dat moment intypt.
+  // De achtergrondsync kan er middenin vallen, dus bewaren we waarde,
+  // focus én cursorpositie van het veld waar de cursor staat.
   const active=document.activeElement;
-  const hadSearch=active&&active.classList.contains('search');
-  const selStart=hadSearch?active.selectionStart:null;
-  const selEnd=hadSearch?active.selectionEnd:null;
+  const isVeld=!!active&&(active.tagName==="INPUT"||active.tagName==="TEXTAREA");
+  const veld=isVeld?{
+    sel:veldSelector(active),
+    waarde:active.value,
+    start:active.selectionStart,
+    eind:active.selectionEnd,
+  }:null;
 
   // Save scroll positions before re-render (beide assen: de weekstrip scrollt horizontaal)
   const scrollMap={};
@@ -2005,9 +2098,13 @@ function render(){
 
   if(S.addOpen)document.querySelectorAll("[data-voor]").forEach(b=>b.classList.toggle("on",b.dataset.voor===S.formVoor));
 
-  if(hadSearch){
-    const el=document.querySelector('.search');
-    if(el){el.focus();if(selStart!==null)el.setSelectionRange(selStart,selEnd);}
+  if(veld&&veld.sel){
+    const el=document.querySelector(veld.sel);
+    if(el&&(el.tagName==="INPUT"||el.tagName==="TEXTAREA")){
+      if(el.value!==veld.waarde)el.value=veld.waarde;
+      el.focus({preventScroll:true});
+      try{ if(veld.start!==null)el.setSelectionRange(veld.start,veld.eind); }catch(e){}
+    }
   }
 }
 
@@ -2101,7 +2198,7 @@ function renderDayPane(day){
   ${cfg.plan?`
     <div class="meals">${renderDaySlots(day)}</div>
     ${renderAvondSnack(day)}
-    <textarea class="notefield" rows="2" placeholder="Opmerking bij ${DAY_FULL[day]} — etentje buiten, Maeve eet apart, late avond…"
+    <textarea id="dagnotitie" class="notefield" rows="2" placeholder="Opmerking bij ${DAY_FULL[day]} — etentje buiten, Maeve eet apart, late avond…"
       onchange="onDayNote('${day}',this.value)">${esc((S.notes[day]&&S.notes[day].algemeen)||"")}</textarea>
   `:`
     <div class="dayoff">Deze dag plannen we niet. Zet ‘Plannen’ aan om maaltijden te kiezen.</div>
@@ -2173,7 +2270,7 @@ function renderAvondSnack(day){
   return `
   <div style="margin-top:var(--s-4)">
     <label style="display:block;font-size:var(--t-xs);font-weight:600;color:var(--ink-2);margin-bottom:var(--s-2)">Avondsnack · hele weekend</label>
-    <input class="search" style="margin-bottom:0" type="text" placeholder="chips, popcorn, nootjes…"
+    <input id="snack-weekend" class="search" style="margin-bottom:0" type="text" placeholder="chips, popcorn, nootjes…"
       value="${esc(S.avondSnack.weekend||"")}" onchange="setAvondSnack('weekend',this.value)">
   </div>`;
 }
@@ -2227,7 +2324,7 @@ function renderRecepten(){
       <h1 class="page-title">Receptenkast</h1>
       <p class="page-sub">${alle.length} recepten, waarvan ${favCount} van jullie zelf.</p>
     </div>
-    <input class="search" placeholder="Zoek op gerecht…" value="${esc(S.search)}"
+    <input id="zoek-recepten" class="search" placeholder="Zoek op gerecht…" value="${esc(S.search)}"
       oninput="S.search=this.value;clearTimeout(window._st);window._st=setTimeout(render,200)">
     <div class="chips">
       ${filters.map(([k,l])=>`<button class="chip ${S.recFilter===k?"active":""}" onclick="set({recFilter:'${k}'})">${l}</button>`).join("")}
@@ -2251,7 +2348,7 @@ function renderSnacks(){
       <h1 class="page-title">Weekendsnacks</h1>
       <p class="page-sub">Om door te bladeren. Deze lopen niet mee in het weekmenu of de boodschappenlijst.</p>
     </div>
-    <input class="search" placeholder="Zoek een snack…" value="${esc(S.snackSearch||"")}"
+    <input id="zoek-snacks" class="search" placeholder="Zoek een snack…" value="${esc(S.snackSearch||"")}"
       oninput="S.snackSearch=this.value;clearTimeout(window._sst);window._sst=setTimeout(render,200)">
     <button class="btn btn-line" style="margin-bottom:var(--s-4)"
       onclick="set({addOpen:true,editRc:null,addTab:'manual',formVoor:'beiden',addCat:'weekendsnack'})">${ic("plus",17)} Snack toevoegen</button>
@@ -2394,7 +2491,7 @@ function renderPicker(){
         </div>
         <button class="iconbtn" onclick="set({picker:null})" aria-label="Sluiten">${ic("sluiten",18)}</button>
       </div>
-      <input class="search" placeholder="Zoeken…" value="${esc(S.search)}"
+      <input id="zoek-slot" class="search" placeholder="Zoeken…" value="${esc(S.search)}"
         oninput="S.search=this.value;clearTimeout(window._pt);window._pt=setTimeout(render,200)">
       <div style="display:flex;gap:var(--s-2);margin-bottom:var(--s-4)">
         ${rest.length?`<button class="btn btn-line" onclick="set({leftoverPick:{day:'${day}',rowId:'${rowId}'},picker:null})">${ic("restjes",17)} Restjes</button>`:""}
@@ -2444,11 +2541,44 @@ function assignLeftover(day,rowId,rcId){
   toast("Restjes ingepland");
 }
 
+// Twee tellers naast elkaar: waar het recept voor geschreven is, en voor
+// hoeveel monden je het nu maakt. Het verschil is de schaalfactor.
+function stepper(waarde,minus,plus,label,hint){
+  return `
+  <div style="flex:1;min-width:0">
+    <div style="font-size:var(--t-xs);font-weight:600;color:var(--ink-2);margin-bottom:var(--s-2)">${label}</div>
+    <div style="display:flex;align-items:center;gap:var(--s-2)">
+      <button class="iconbtn bordered" onclick="${minus}" aria-label="Minder" ${waarde<=1?"disabled":""}>${ic("minder",16)}</button>
+      <span class="num" style="font-size:var(--t-lg);font-weight:700;min-width:1.6rem;text-align:center">${waarde}</span>
+      <button class="iconbtn bordered" onclick="${plus}" aria-label="Meer" ${waarde>=24?"disabled":""}>${ic("plus",16)}</button>
+    </div>
+    ${hint?`<div style="font-size:var(--t-2xs);color:var(--ink-3);margin-top:var(--s-1);line-height:1.4">${hint}</div>`:""}
+  </div>`;
+}
+
+function renderPorties(rc,day,rowId){
+  const basis=rcPorties(rc);
+  const rcArg=typeof rc.id==='number'?rc.id:`'${rc.id}'`;
+  const nu=(day&&rowId)?slotPorties(day,rowId):basis;
+  const eigen=(day&&rowId)&&Number((S.week[day]||{})[rowId]?.porties)>0;
+  return `
+  <div style="display:flex;gap:var(--s-5);padding:var(--s-3) 0 var(--s-4);border-bottom:1px solid var(--line);margin-bottom:var(--s-3)">
+    ${stepper(basis,`setRcPorties(${rcArg},${basis-1})`,`setRcPorties(${rcArg},${basis+1})`,
+      "Recept is voor","Klopt het recept niet? Zet hier het echte aantal.")}
+    ${(day&&rowId)?stepper(nu,`setSlotPorties('${day}','${rowId}',${nu-1})`,`setSlotPorties('${day}','${rowId}',${nu+1})`,
+      "Je kookt voor", eigen?`<button class="btn-quiet" style="padding:0;font-size:var(--t-2xs);text-decoration:underline" onclick="setSlotPorties('${day}','${rowId}',0)">terug naar ${slotEters(day,rowId)}</button>`
+        :"Standaard: iedereen die mee-eet."):""}
+  </div>
+  ${nu!==basis?`<p style="font-size:var(--t-xs);color:var(--ink-3);margin-bottom:var(--s-2)">
+    Hoeveelheden hieronder zijn omgerekend van ${basis} naar ${nu} ${nu===1?"persoon":"personen"}.</p>`:""}`;
+}
+
 // ---------- DETAIL MODAL ----------
 function renderDetail(){
   const {rc,day,rowId}=S.detail;
   const tab=S.detailTab;
   const rcArg=typeof rc.id==='number'?rc.id:`'${rc.id}'`;
+  const detailPorties=(day&&rowId)?slotPorties(day,rowId):rcPorties(rc);
   return `
   <div class="overlay" onclick="set({detail:null})">
     <div class="sheet" onclick="event.stopPropagation()">
@@ -2456,7 +2586,7 @@ function renderDetail(){
         <div style="flex:1">
           <span class="rec-cat">${CL[rc.category]}</span>
           <h2 class="sheet-title">${esc(rc.name)}</h2>
-          <p class="sheet-sub"><span class="num">${esc(rc.time)}</span> · ${rc.servings||2} personen · ${EL[rc.ebook]}</p>
+          <p class="sheet-sub"><span class="num">${esc(rc.time)}</span> · ${EL[rc.ebook]}</p>
         </div>
         <button class="iconbtn" onclick="set({detail:null})" aria-label="Sluiten">${ic("sluiten",18)}</button>
       </div>
@@ -2469,8 +2599,8 @@ function renderDetail(){
         <button class="tab ${tab==="ber"?"active":""}" onclick="set({detailTab:'ber'})">Bereiding</button>
       </div>
       ${tab==="ing"?`<div>
-        <p style="font-size:var(--t-xs);color:var(--ink-3);margin-bottom:var(--s-2)">Geschaald naar ${HH} personen</p>
-        ${(rc.ingredients||[]).map(g=>`<div class="ing-line"><span>${esc(g.n)}</span>${g.a?`<span class="num" style="color:var(--ink-3);font-size:var(--t-sm)">${esc(scaleAmt(g.a,rc.servings))}</span>`:""}</div>`).join("")}
+        ${renderPorties(rc,day,rowId)}
+        ${(rc.ingredients||[]).map(g=>`<div class="ing-line"><span>${esc(g.n)}</span>${g.a?`<span class="num" style="color:var(--ink-3);font-size:var(--t-sm)">${esc(scaleAmt(g.a,rcPorties(rc),detailPorties))}</span>`:""}</div>`).join("")}
       </div>`:`<div>
         ${(rc.steps||[]).map((x,i)=>`<div class="step-line"><span class="step-num">${i+1}</span><span class="step-txt">${esc(x)}</span></div>`).join("")}
         ${rc.link?`<a href="${esc(rc.link)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:var(--s-2);margin-top:var(--s-2);font-size:var(--t-sm);color:var(--accent)">${ic("link",15)} Origineel recept</a>`:""}
@@ -2849,7 +2979,7 @@ function renderWizard(){
     <div class="overlay" onclick="set({wizSlotPicker:null})">
       <div class="sheet" onclick="event.stopPropagation()">
         <div class="sheet-title">${row.label}</div>
-        <input class="search" placeholder="Zoeken…" value="${esc(S.search)}" oninput="S.search=this.value;clearTimeout(window._wt);window._wt=setTimeout(render,200)">
+        <input id="zoek-wissel" class="search" placeholder="Zoeken…" value="${esc(S.search)}" oninput="S.search=this.value;clearTimeout(window._wt);window._wt=setTimeout(render,200)">
         <div style="display:flex;gap:8px;margin-bottom:14px">
           <button class="btn btn-line" style="flex:1" onclick="set({wizSlotPicker:null,wizSlotIg:{wo:${wo},day:'${day}',rowId:'${rowId}'},wizIgCap:'',wizIgSt:null,wizIgPrev:null})">${ic("camera",17)} Instagram importeren</button>
           <button class="btn btn-line" style="flex:1" onclick="wizClearSlot(${wo},'${day}','${rowId}');set({wizSlotPicker:null})">${ic("sluiten",17)} Leeg laten</button>
@@ -3024,7 +3154,7 @@ function renderWizStep2(){
     return `
     <h2 class="sheet-title">Welk recept?</h2>
     <p class="sheet-sub">${CL[row.cat]}${row.sub?" · "+row.sub:""}</p>
-    <input class="search" placeholder="Zoeken…" value="${esc(S.search)}"
+    <input id="zoek-vaste" class="search" placeholder="Zoeken…" value="${esc(S.search)}"
       oninput="S.search=this.value;clearTimeout(window._vt);window._vt=setTimeout(render,200)">
     <div class="picker-grid">
       ${list.map(rc=>`
@@ -3171,18 +3301,19 @@ function renderWizStep4(){
 function renderWizStep5(){
   // Collect all ingredients from preview
   const allIng = {};
-  Object.values(S.wiz.preview).forEach(weekData=>{
-    Object.values(weekData||{}).forEach(day=>{
-    ROWS.forEach(row=>{
-      const rc = day&&day[row.id];
-      if(!rc)return;
-      (rc.ingredients||[]).forEach(g=>{
-        const k = (g.n||"").toLowerCase();
-        if(!allIng[k]) allIng[k] = {name:g.n, amounts:[]};
-        const sc = scaleAmt(g.a,rc.servings);
-        if(sc&&!allIng[k].amounts.includes(sc)) allIng[k].amounts.push(sc);
+  Object.entries(S.wiz.preview).forEach(([wo,weekData])=>{
+    Object.entries(weekData||{}).forEach(([dag,slots])=>{
+      if(!dayCfgAt(Number(wo),dag).plan)return;
+      rowsFor(dag,Number(wo)).forEach(row=>{
+        const rc = slots && slots[row.id];
+        if(!rc || isLeftover(rc))return;
+        (rc.ingredients||[]).forEach(g=>{
+          const k = (g.n||"").toLowerCase();
+          if(!allIng[k]) allIng[k] = {name:g.n, amounts:[]};
+          const sc = scaleAmt(g.a,rcPorties(rc),slotEters(dag,row.id));
+          if(sc&&!allIng[k].amounts.includes(sc)) allIng[k].amounts.push(sc);
+        });
       });
-    });
     });
   });
   const items = Object.entries(allIng);
@@ -3252,7 +3383,7 @@ window.wizToggleInHuis=wizToggleInHuis;
 window.wizStart=wizStart; window.wizToggleWeek=wizToggleWeek; window.wizAllDays=wizAllDays; window.wizCycleTijd=wizCycleTijd; window.wizToggleLock=wizToggleLock; window.wizRerollSlot=wizRerollSlot; window.wizToggleGenOpt=wizToggleGenOpt;
 window.openCook=openCook; window.closeCook=closeCook; window.cookGo=cookGo;
 window.cookStartTimer=cookStartTimer; window.cookStopTimer=cookStopTimer;
-window.setRating=setRating; window.assignLeftover=assignLeftover;
+window.setRating=setRating; window.setRcPorties=setRcPorties; window.setSlotPorties=setSlotPorties; window.assignLeftover=assignLeftover;
 window.setTheme=setTheme; window.cycleTheme=cycleTheme; window.setDayCfg=setDayCfg; window.setDayCfgAt=setDayCfgAt; window.toggleApart=toggleApart; window.toggleApartDefault=toggleApartDefault; window.clearDay=clearDay;
 window.setAvondSnack=setAvondSnack; window.whoStack=whoStack; window.ic=ic;
 window.wizToggleVasteDay=wizToggleVasteDay; window.wizRemoveVaste=wizRemoveVaste;
