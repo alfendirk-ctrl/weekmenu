@@ -48,7 +48,11 @@ Open de app → het **wolkje** rechtsboven in de weekbalk → **Kopieer sync cod
 
 Drie acties. Je telefoon haalt de pagina op, stuurt hem ruw door, en de server pluist hem uit — dat uitpakken staat daar toch al (vijf strategieën), dus de Shortcut hoeft geen regex te kennen.
 
-Open **Opdrachten** → **+** → tik op de naam bovenin → **Details**. Zet **Toon in deelblad** aan en zet **Deelbladtypen** op **URL's** en **Tekst**. Noem hem *Recept opslaan*.
+Open **Opdrachten** → **+**, tik op de naam bovenin → **Naam wijzig** en noem hem *Recept opslaan*.
+
+Tik dan onderin op **ⓘ** (het rondje met een i) en zet **Toon in deelblad** aan. Op iOS 16 en ouder zit datzelfde paneel achter het schuifjes-icoon rechtsboven, onder **Details**; vanaf iOS 17 is het naar de balk onderin verhuisd.
+
+Zodra die schakelaar aanstaat verschijnt er bovenaan je opdracht een blok *"Ontvang tekst en 17 andere invoer van deelblad"*. Tik op de blauwe tekst *tekst en 17 andere* en vink alles uit behalve **URL's** en **Tekst**.
 
 **Actie 1 — Vervang tekst.** Dit knipt de tracking-rommel (`?igsh=…`) van de gedeelde link.
 
