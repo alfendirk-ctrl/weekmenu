@@ -99,36 +99,68 @@ function extractCap(body: string): string | null {
     const c = stripPrefix(decode(om[1]));
     if (c.length > 5) return c;
   }
+  // 6. Platte tekst — r.jina.ai levert markdown terug, geen HTML
+  if (!/<html|<meta|<script/i.test(body)) {
+    let t = body;
+    const mc = t.indexOf("Markdown Content:");
+    if (mc >= 0) t = t.slice(mc + 17);
+    t = t.replace(/^\s*(Title|URL Source|Published Time|Warning):.*$/gim, "")
+      .replace(/!?\[[^\]]*\]\([^)]*\)/g, "")   // markdown links en afbeeldingen
+      .replace(/\n{3,}/g, "\n\n").trim();
+    if (t.length > 40 && t.length < 8000) return stripPrefix(t);
+  }
   return null;
 }
 
+// Instagram weigert datacenter-IP's, dus een directe fetch vanaf deze functie
+// loopt vrijwel altijd stuk. De proxy's halen de pagina vanaf hun eigen adressen
+// op. Dezelfde lijst die de app in de browser gebruikt, waar dit al werkt.
 async function fetchCaption(rawUrl: string): Promise<string | null> {
   if (!rawUrl) return null;
   const scm = rawUrl.match(/\/(p|reel|reels|tv)\/([A-Za-z0-9_-]+)/);
   const sc = scm ? scm[2] : null;
   const targets: string[] = [];
   if (sc) {
+    // De embed-pagina is bedoeld om ingesloten te worden en wordt minder geweerd
     targets.push(`https://www.instagram.com/p/${sc}/embed/captioned/`);
     targets.push(`https://www.instagram.com/p/${sc}/embed/`);
   }
   targets.push(rawUrl.split("?")[0]);
 
-  for (const t of targets) {
-    try {
-      const r = await fetch(t, {
-        headers: {
-          "User-Agent": UA,
-          "Accept": "text/html,application/xhtml+xml",
-          "Accept-Language": "nl-NL,nl;q=0.9,en;q=0.8",
-        },
-        signal: AbortSignal.timeout(12000),
-      });
-      if (!r.ok) continue;
-      const cap = extractCap(await r.text());
-      if (cap && cap.length >= 20) return cap;
-    } catch { /* volgende target */ }
-  }
-  return null;
+  const kandidaten = (t: string) => [
+    { p: t, json: false, ms: 12000 },                                             // direct, gratis poging
+    { p: `https://r.jina.ai/${t}`, json: false, ms: 20000 },                      // rendert de pagina, levert tekst
+    { p: `https://api.allorigins.win/get?url=${encodeURIComponent(t)}`, json: true, ms: 15000 },
+    { p: `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(t)}`, json: false, ms: 15000 },
+    { p: `https://corsproxy.io/?url=${encodeURIComponent(t)}`, json: false, ms: 15000 },
+    { p: `https://api.cors.lol/?url=${encodeURIComponent(t)}`, json: false, ms: 15000 },
+  ];
+
+  const probeer = async ({ p, json, ms }: { p: string; json: boolean; ms: number }) => {
+    const r = await fetch(p, {
+      headers: {
+        "User-Agent": UA,
+        "Accept": "text/html,application/xhtml+xml",
+        "Accept-Language": "nl-NL,nl;q=0.9,en;q=0.8",
+      },
+      signal: AbortSignal.timeout(ms),
+    });
+    if (!r.ok) throw new Error("http " + r.status);
+    const body = json ? ((await r.json())?.contents ?? "") : await r.text();
+    const cap = extractCap(body);
+    if (!cap || cap.length < 20) throw new Error("geen bijschrift");
+    return cap;
+  };
+
+  // Alles tegelijk; het eerste bruikbare bijschrift wint.
+  const pogingen = targets.flatMap((t) => kandidaten(t).map((c) => probeer(c)));
+  return await new Promise<string | null>((resolve) => {
+    let klaar = false, mis = 0;
+    for (const pr of pogingen) {
+      pr.then((c) => { if (!klaar) { klaar = true; resolve(c); } })
+        .catch(() => { if (++mis === pogingen.length && !klaar) { klaar = true; resolve(null); } });
+    }
+  });
 }
 
 // ---------- recept extraheren ----------
