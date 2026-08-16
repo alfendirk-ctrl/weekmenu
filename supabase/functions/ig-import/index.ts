@@ -282,8 +282,12 @@ Deno.serve(async (req) => {
         : stripPrefix(decode(meegestuurd)))
     : await fetchCaption(url);
   if (!cap) {
+    // ontvangen/begin maken zichtbaar of de Shortcut wél iets aanleverde: een
+    // lege caption en een onbruikbare pagina geven anders dezelfde melding.
     return json({
       error: "Bijschrift kon niet worden opgehaald. Instagram blokkeert deze post — laat de Shortcut het bijschrift meesturen, of importeer hem via een screenshot in de app.",
+      ontvangen: meegestuurd.length,
+      begin: meegestuurd.slice(0, 200),
     }, 422);
   }
 
