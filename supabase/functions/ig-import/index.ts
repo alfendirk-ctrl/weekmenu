@@ -7,7 +7,13 @@
 // Aanroepen:
 //   POST /functions/v1/ig-import
 //   Authorization: Bearer <anon key>
-//   {"url":"https://www.instagram.com/p/...","household_id":"..."}
+//   {"url":"https://www.instagram.com/p/...","household_id":"...","caption":"..."}
+//
+// caption is optioneel maar wel de betrouwbare weg: Instagram blokkeert de
+// datacenter-IP's waar Edge Functions op draaien, dus het bijschrift hier zelf
+// ophalen lukt zelden. Stuurt de Shortcut het bijschrift mee (opgehaald vanaf de
+// telefoon, of geplakt), dan slaan we die stap over. url mag dan weg, en dient
+// alleen nog als bronvermelding.
 //
 // De Gemini-key komt uit de secret GEMINI_API_KEY. De app synct zijn eigen key
 // bewust niet mee, dus zonder die secret werkt deze route niet.
@@ -97,6 +103,7 @@ function extractCap(body: string): string | null {
 }
 
 async function fetchCaption(rawUrl: string): Promise<string | null> {
+  if (!rawUrl) return null;
   const scm = rawUrl.match(/\/(p|reel|reels|tv)\/([A-Za-z0-9_-]+)/);
   const sc = scm ? scm[2] : null;
   const targets: string[] = [];
@@ -237,14 +244,15 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ error: "POST vereist" }, 405);
 
-  let body: { url?: string; household_id?: string };
+  let body: { url?: string; household_id?: string; caption?: string };
   try { body = await req.json(); } catch { return json({ error: "Ongeldige JSON" }, 400); }
 
   const url = (body.url ?? "").trim();
+  const meegestuurd = (body.caption ?? "").trim();
   const hid = (body.household_id ?? "").trim();
-  if (!url) return json({ error: "url ontbreekt" }, 400);
   if (!hid) return json({ error: "household_id ontbreekt" }, 400);
-  if (!/^https?:\/\/(www\.)?instagram\.com\//i.test(url)) {
+  if (!url && !meegestuurd) return json({ error: "url of caption ontbreekt" }, 400);
+  if (url && !/^https?:\/\/(www\.)?instagram\.com\//i.test(url)) {
     return json({ error: "Geen Instagram-link" }, 400);
   }
 
@@ -265,10 +273,13 @@ Deno.serve(async (req) => {
     }, 400);
   }
 
-  const cap = await fetchCaption(url);
+  // Instagram blokkeert de datacenter-IP's waar deze functie op draait, dus een
+  // bijschrift dat de Shortcut zelf al heeft (vanaf de telefoon, of geplakt) gaat
+  // altijd voor. Alleen als dat er niet is proberen we het hier zelf nog.
+  const cap = meegestuurd.length > 20 ? stripPrefix(decode(meegestuurd)) : await fetchCaption(url);
   if (!cap) {
     return json({
-      error: "Bijschrift kon niet worden opgehaald. Instagram blokkeert deze post — importeer hem via een screenshot in de app.",
+      error: "Bijschrift kon niet worden opgehaald. Instagram blokkeert deze post — laat de Shortcut het bijschrift meesturen, of importeer hem via een screenshot in de app.",
     }, 422);
   }
 
@@ -280,7 +291,7 @@ Deno.serve(async (req) => {
   }
 
   const { error: insErr } = await sb.from("recipe_inbox")
-    .insert({ household_id: hid, recipe, source_url: url });
+    .insert({ household_id: hid, recipe, source_url: url || null });
   if (insErr) return json({ error: "Opslaan mislukt: " + insErr.message }, 500);
 
   return json({ ok: true, name: recipe.name, ingredients: recipe.ingredients.length });
