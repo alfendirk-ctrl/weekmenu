@@ -273,10 +273,14 @@ Deno.serve(async (req) => {
     }, 400);
   }
 
-  // Instagram blokkeert de datacenter-IP's waar deze functie op draait, dus een
-  // bijschrift dat de Shortcut zelf al heeft (vanaf de telefoon, of geplakt) gaat
-  // altijd voor. Alleen als dat er niet is proberen we het hier zelf nog.
-  const cap = meegestuurd.length > 20 ? stripPrefix(decode(meegestuurd)) : await fetchCaption(url);
+  // Instagram blokkeert de datacenter-IP's waar deze functie op draait, dus wat de
+  // telefoon aanlevert gaat altijd voor. Dat mag ruwe HTML zijn — de Shortcut hoeft
+  // dan zelf niets uit te pluizen, wij hebben het uitpakken hier toch al staan.
+  const cap = meegestuurd.length > 20
+    ? (/<\/?[a-z][\s\S]*>/i.test(meegestuurd)
+        ? extractCap(meegestuurd)
+        : stripPrefix(decode(meegestuurd)))
+    : await fetchCaption(url);
   if (!cap) {
     return json({
       error: "Bijschrift kon niet worden opgehaald. Instagram blokkeert deze post — laat de Shortcut het bijschrift meesturen, of importeer hem via een screenshot in de app.",

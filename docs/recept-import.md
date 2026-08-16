@@ -20,7 +20,7 @@ Je kunt een screenshot ook rechtstreeks in het foto-tabblad plakken.
 
 Hiermee importeer je een reel zonder de app te openen. De Shortcut haalt het bijschrift op **vanaf je telefoon** en stuurt dat naar een Edge Function, die Gemini het recept eruit laat halen en het in `recipe_inbox` zet. De app pikt het op bij de volgende sync.
 
-> **Waarom de telefoon het bijschrift ophaalt.** Dat deed de server eerst zelf, maar Instagram blokkeert de datacenter-IP's waar Edge Functions op draaien: elke post gaf *"Bijschrift kon niet worden opgehaald"*, ook publieke. Vanaf je eigen verbinding lukt het meestal wel. De functie accepteert daarom zowel `caption` als `url` — is er een bijschrift meegestuurd, dan gaat dat voor; is dat er niet, dan probeert de server het alsnog zelf.
+> **Waarom de telefoon het bijschrift ophaalt.** Dat deed de server eerst zelf, maar Instagram blokkeert de datacenter-IP's waar Edge Functions op draaien: elke post gaf *"Bijschrift kon niet worden opgehaald"*, ook publieke. Vanaf je eigen verbinding lukt het meestal wel. De functie accepteert daarom zowel `caption` als `url` — is er een bijschrift meegestuurd, dan gaat dat voor; is dat er niet, dan probeert de server het alsnog zelf. `caption` mag ook de **ruwe HTML** van de pagina zijn: de server herkent HTML en haalt het bijschrift er zelf uit, zodat de Shortcut niets hoeft uit te pluizen.
 
 ### Stap 1 — de secret (staat al goed)
 
@@ -46,40 +46,41 @@ Open de app → het **wolkje** rechtsboven in de weekbalk → **Kopieer sync cod
 
 ### Stap 4 — de Shortcut bouwen
 
-Zes acties. De eerste drie halen het bijschrift op je telefoon op, de laatste drie sturen het weg.
+Drie acties. Je telefoon haalt de pagina op, stuurt hem ruw door, en de server pluist hem uit — dat uitpakken staat daar toch al (vijf strategieën), dus de Shortcut hoeft geen regex te kennen.
 
-Open **Opdrachten** → **+** → tik op de naam bovenin → **Details**. Zet **Toon in deelblad** aan en zet **Deelbladtypen** op **URL's** én **Tekst** — met tekst erbij kun je ook een bijschrift dat je zelf selecteert delen.
+Open **Opdrachten** → **+** → tik op de naam bovenin → **Details**. Zet **Toon in deelblad** aan en zet **Deelbladtypen** op **URL's** en **Tekst**. Noem hem *Recept opslaan*.
 
-**1. Haal inhoud op van URL** — hiermee haalt je telefoon de embed-pagina op.
+**Actie 1 — Vervang tekst.** Dit knipt de tracking-rommel (`?igsh=…`) van de gedeelde link.
 
-- **URL**: `https://www.instagram.com/p/PLACEHOLDER/embed/captioned/` — vervang `PLACEHOLDER` zo:
-  zet er eerst een actie **Vervang tekst** boven met **Zoek naar** `.*/(p|reel|reels|tv)/([A-Za-z0-9_-]+).*` (zet **Reguliere expressie** aan), **Vervang door** `$2`, **In** **Snelkoppelinginvoer**. Gebruik dat resultaat in de URL.
-- Klap **Toon meer** open en zet de kop `User-Agent` op
-  `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36`
+- **Zoek naar**: `\?.*$` — tik op de drie puntjes rechts en zet **Reguliere expressie** aan
+- **Vervang door**: leeg laten
+- **In**: **Snelkoppelinginvoer** (kies je via de variabelenbalk boven het toetsenbord)
 
-**2. Zoek overeenkomende tekst** — patroon `og:description" content="([^"]*)"`, **Reguliere expressie** aan, in het resultaat van actie 1.
+**Actie 2 — Haal inhoud op van URL.** Je telefoon haalt de embed-pagina op; Instagram laat dat vanaf jouw verbinding wél toe.
 
-**3. Haal groep uit overeenkomende tekst** — **Groepsindex** `1`.
+- **URL**: tik het veld, kies **Bijgewerkte tekst** (het resultaat van actie 1) en typ er direct achter: `embed/captioned/`
+- Klap **Toon meer** open, **Methode** blijft `GET`, en voeg één **kop** toe:
+  - `User-Agent` → `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36`
 
-**4. Haal inhoud op van URL** — dit is de aanroep zelf:
+**Actie 3 — Haal inhoud op van URL.** De aanroep zelf.
 
 - **URL**: `https://nejjocgplgbgmdornurw.supabase.co/functions/v1/ig-import`
 - **Methode**: `POST`
 - **Koppen** (twee stuks):
   - `Authorization` → `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5lampvY2dwbGdiZ21kb3JudXJ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM2MTk4MzEsImV4cCI6MjA5OTE5NTgzMX0.dJ_xMqV4Qp-1gZKifYJ-qTW6p9GhoMdfxlr_zIJx7Ko`
   - `Content-Type` → `application/json`
-- **Verzoektekst**: `JSON`, drie velden:
-  - `caption` (tekst) → het resultaat van actie 3
-  - `url` (tekst) → **Snelkoppelinginvoer**
-  - `household_id` (tekst) → je code uit stap 3
+- **Verzoektekst**: `JSON`, drie velden van het type **Tekst**:
+  - `caption` → **Inhoud van URL** (het resultaat van actie 2)
+  - `url` → **Snelkoppelinginvoer**
+  - `household_id` → je code uit stap 3
 
-**5. Toon melding** met de **Inhoud van URL** eronder, zodat je ziet wat de server antwoordt.
-
-Noem hem *Recept opslaan*.
+Zet er tot slot **Toon melding** onder met **Inhoud van URL**, dan zie je wat de server antwoordt.
 
 Let op: de header is `Bearer` **spatie** en dan de sleutel. Die anon key staat sowieso publiek in `index.html`, dus dat is geen geheim.
 
-Wil je het eerst simpel houden: laat acties 1–3 weg en stuur alleen `url` en `household_id`. Dan probeert de server het bijschrift zelf op te halen — dat lukt zelden (zie het kader hierboven), maar de Shortcut is dan in twee minuten klaar en je ziet meteen of de rest werkt.
+Belangrijk bij actie 3: de twee **Inhoud van URL**-variabelen verwijzen naar verschillende acties. Tik je de verkeerde aan, dan stuurt de Shortcut zijn eigen antwoord terug naar zichzelf. Controleer dat `caption` naar actie 2 wijst.
+
+Het `caption`-veld mag ruwe HTML zijn; de server herkent dat en pakt het bijschrift eruit. Geplakte tekst mag ook — deel je een stuk tekst in plaats van een link, dan gaat die er ongewijzigd in.
 
 ### Gebruiken
 
@@ -98,9 +99,9 @@ De melding vertelt wat er mis is:
 | Melding | Wat er aan de hand is |
 |---|---|
 | `Onbekend huishouden` | De household-code klopt niet, of dit apparaat heeft nog nooit gesynchroniseerd. Open de app één keer en druk op **Opslaan** in het syncvenster. |
-| `url of caption ontbreekt` | Actie 4 stuurt een leeg JSON-veld mee. Controleer of de variabelen er echt in staan. |
+| `url of caption ontbreekt` | Actie 3 stuurt lege JSON-velden mee. Controleer of de variabelen er echt in staan. |
 | `Geen Gemini API key op de server` | De secret uit stap 1 is weg of de functie is daarna niet opnieuw uitgerold. |
-| `Bijschrift kon niet worden opgehaald` | Acties 1–3 leverden niets op — en de server komt er zelf ook niet bij. Maak een screenshot en gebruik de foto-import in de app. |
+| `Bijschrift kon niet worden opgehaald` | Actie 2 leverde niets bruikbaars op — en de server komt er zelf ook niet bij. Maak een screenshot en gebruik de foto-import in de app. |
 | `Geen recept in dit bijschrift gevonden` | Het recept staat in de video of in de reacties, niet in het bijschrift. Ook hier: screenshot. |
 | `Gemini-quota is op` | De gratis limiet reset elke dag. |
 | Niets, of een 401 | De `Authorization`-header ontbreekt of mist het woord `Bearer`. |
