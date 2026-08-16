@@ -282,6 +282,9 @@ Deno.serve(async (req) => {
         : stripPrefix(decode(meegestuurd)))
     : await fetchCaption(url);
   if (!cap) {
+    // Ook naar de logs, want de melding op de telefoon wordt afgekapt.
+    console.log("GEEN BIJSCHRIFT url=%s lengte=%d begin=%s",
+      url, meegestuurd.length, JSON.stringify(meegestuurd.slice(0, 300)));
     // ontvangen/begin maken zichtbaar of de Shortcut wél iets aanleverde: een
     // lege caption en een onbruikbare pagina geven anders dezelfde melding.
     return json({
