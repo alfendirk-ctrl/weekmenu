@@ -527,6 +527,40 @@ svg{display:block;flex:0 0 auto}
 .cook-nav{display:flex;gap:var(--s-2);padding-top:var(--s-4)}
 
 /* ============================================================
+   RONDLEIDING — een kaart onderaan, niet een venster middenin,
+   zodat je de app eronder blijft zien waar het over gaat.
+   ============================================================ */
+.tour-scrim{position:fixed;inset:0;z-index:150;background:var(--scrim);
+  backdrop-filter:blur(2px);animation:tour-in .2s var(--ease);pointer-events:none}
+.tour{position:fixed;z-index:153;left:var(--s-4);right:var(--s-4);
+  bottom:calc(var(--s-4) + env(safe-area-inset-bottom));
+  max-width:32rem;margin:0 auto;background:var(--surface);
+  border:1px solid var(--line);border-radius:var(--r-xl);
+  padding:var(--s-5);box-shadow:var(--shadow-2);animation:tour-up .24s var(--ease)}
+@media (min-width:900px){
+  .tour{left:auto;right:var(--s-6);bottom:var(--s-6);width:26rem;margin:0}
+}
+.tour-head{display:flex;align-items:center;gap:var(--s-3);margin-bottom:var(--s-3)}
+.tour-icon{display:grid;place-items:center;width:34px;height:34px;border-radius:var(--r-md);
+  background:var(--accent-soft);color:var(--accent)}
+.tour-tel{font-size:var(--t-xs);color:var(--ink-3)}
+.tour-titel{font-family:var(--display);font-weight:700;font-size:var(--t-lg);
+  letter-spacing:-.02em;line-height:1.2;margin-bottom:var(--s-2);text-wrap:balance}
+.tour-tekst{font-size:var(--t-md);line-height:1.6;color:var(--ink-2)}
+.tour-stippen{display:flex;gap:4px;margin-top:var(--s-4)}
+.tour-stip{flex:1;height:3px;border-radius:99px;background:var(--line)}
+.tour-stip.gehad{background:var(--ok)}
+.tour-stip.nu{background:var(--accent)}
+/* Ruimte onderaan, anders kun je het laatste element niet vrij scrollen
+   van de kaart die eroverheen ligt. */
+body.tour-actief .app{padding-bottom:70vh}
+.tour-uitgelicht{position:relative;z-index:151;border-radius:var(--r-lg);
+  box-shadow:0 0 0 3px var(--accent), 0 0 0 12px var(--accent-soft);
+  transition:box-shadow .2s var(--ease)}
+@keyframes tour-in{from{opacity:0}to{opacity:1}}
+@keyframes tour-up{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+
+/* ============================================================
    TOAST
    ============================================================ */
 #toast-host{position:fixed;left:50%;transform:translateX(-50%);
@@ -893,6 +927,7 @@ let S={
   cook:null,                // {rc, day, rowId} — kookmodus
   cookStep:0, cookIng:false,
   leftoverPick:null,        // {day,rowId} — restjes kiezen
+  tour:null,                // index in TOUR, of null
 };
 
 function save(){
@@ -994,6 +1029,8 @@ function renderSyncModal(){
   <div class="overlay" onclick="set({syncOpen:false})">
     <div class="sheet" onclick="event.stopPropagation()">
             <h2 class="sheet-title">Synchronisatie</h2>
+      <button class="btn btn-line" style="margin-top:var(--s-4)" onclick="set({syncOpen:false});tourStart()">
+        ${ic("info",17)} Rondleiding opnieuw bekijken</button>
       <div class="field" style="margin-top:var(--s-4)">
         <label>Thema</label>
         <div class="pick-row">
@@ -1179,6 +1216,145 @@ function leftoverSources(day){
     out.push({day:d,rc});
   });
   return out;
+}
+
+// ===================== RONDLEIDING =====================
+// Eén scherm per onderwerp, in de volgorde waarin je ze tegenkomt. Elke stap
+// zet de app in de juiste staat, zodat je kijkt naar het echte scherm en niet
+// naar een plaatje ervan.
+const TOURK="wm_tour_v1";
+const TOUR=[
+  {
+    titel:"Welkom bij jullie weekmenu",
+    tekst:"Een korte rondleiding langs alles wat erin zit. Duurt een minuut, en je kunt hem later opnieuw starten via het wolkje.",
+    icoon:"kalender",
+    doe:()=>set({view:"planner"}),
+  },
+  {
+    titel:"De week in één kolom",
+    tekst:"Links staan de zeven dagen met per dag een stip per maaltijd: groen is ingevuld. Tik een dag aan om hem rechts te openen. Op je telefoon staan de dagen als een rij bovenaan.",
+    icoon:"kalender",
+    markeer:".rail",
+    doe:()=>set({view:"planner"}),
+  },
+  {
+    titel:"Per dag bepaal je de spelregels",
+    tekst:"Plannen aan of uit, apart eten aan of uit, en hoeveel tijd je die dag hebt. De generator houdt zich daaraan. Het gummetje rechtsboven maakt de hele dag in één tik leeg.",
+    icoon:"instellingen",
+    markeer:".controls",
+    doe:()=>set({view:"planner"}),
+  },
+  {
+    titel:"Apart eten",
+    tekst:"Staat het aan, dan splitsen ontbijt en lunch in een rij per persoon. Dirk begint met een kopie van de gedeelde maaltijd, zodat je alleen aanpast wat écht anders is. Zet je het weer uit, dan blijft zijn keuze bewaard.",
+    icoon:"apart",
+    markeer:".weekbox",
+  },
+  {
+    titel:"Laat de week zichzelf vullen",
+    tekst:"“Plan de week” maakt meteen een compleet voorstel. Wat goed is zet je vast met het slotje, de rest trek je opnieuw — in één keer of per maaltijd. Pas daarna kom je bij de instellingen, niet ervoor.",
+    icoon:"toveren",
+    markeer:".weekbox .btn-primary",
+  },
+  {
+    titel:"Hoe de generator kiest",
+    tekst:"Hij let op drie dingen: recepten die ingrediënten delen (kortere boodschappenlijst), wat je de afgelopen weken al at (geen herhaling), en jullie duimpjes. Twee duimen omlaag en een recept komt niet meer terug.",
+    icoon:"toveren",
+  },
+  {
+    titel:"Voor hoeveel personen?",
+    tekst:"Elk recept weet voor hoeveel mensen het geschreven is. Klopt dat niet, corrigeer het. Per maaltijd zeg je voor hoeveel monden je kookt — standaard iedereen die mee-eet. De hoeveelheden en de boodschappenlijst rekenen mee.",
+    icoon:"apart",
+  },
+  {
+    titel:"Restjes plannen",
+    tekst:"Bij het diner kun je kiezen voor restjes van een andere dag. Er wordt dan niets dubbel gekocht: op de kookdag gaat er een portie bij.",
+    icoon:"restjes",
+  },
+  {
+    titel:"Kookmodus",
+    tekst:"Bij het diner en alles vanaf een kwartier staat een pannetje. Dat opent één stap tegelijk, groot genoeg om vanaf het aanrecht te lezen. Het scherm blijft aan, en uit “bak 10 minuten” haalt hij een timer.",
+    icoon:"koken",
+  },
+  {
+    titel:"Recepten toevoegen",
+    tekst:"Drie wegen: zelf intypen, een Instagram-link of het bijschrift plakken, of een foto van een kookboekpagina. Die laatste is de betrouwbaarste — er zit niets tussen jouw telefoon en Google.",
+    icoon:"boek",
+    doe:()=>set({view:"recepten"}),
+  },
+  {
+    titel:"De boodschappenlijst schrijft zichzelf",
+    tekst:"Alles wat je inplant komt hier terecht, gegroepeerd per schap. Tik een regel aan om te zien uit welke maaltijd hij komt, of om de hoeveelheid met de hand te overschrijven.",
+    icoon:"mandje",
+    doe:()=>set({view:"boodschappen"}),
+  },
+  {
+    titel:"Samen en overal",
+    tekst:"Het wolkje deelt alles met de andere telefoons in huis via jullie sync-code. Daar zit ook de themakeuze en, als je hem nog eens wil zien, deze rondleiding.",
+    icoon:"wolk",
+    doe:()=>set({view:"planner"}),
+  },
+];
+
+function tourStart(){ set({tour:0}); }
+function tourGa(n){
+  const i=S.tour+n;
+  if(i<0)return;
+  if(i>=TOUR.length)return tourKlaar();
+  const stap=TOUR[i];
+  if(stap.doe)stap.doe();
+  set({tour:i});
+}
+function tourKlaar(){ lsSet(TOURK,true); set({tour:null}); }
+function tourOverslaan(){ tourKlaar(); toast("Je vindt de rondleiding terug onder het wolkje"); }
+
+function renderTour(){
+  const i=S.tour, stap=TOUR[i];
+  if(!stap)return "";
+  const laatste=i===TOUR.length-1;
+  return `
+  <div class="tour-scrim"></div>
+  <div class="tour" role="dialog" aria-modal="true" aria-label="Rondleiding">
+    <div class="tour-head">
+      <span class="tour-icon">${ic(stap.icoon,20)}</span>
+      <span class="num tour-tel">${i+1} / ${TOUR.length}</span>
+      <button class="btn-quiet" style="margin-left:auto;font-size:var(--t-sm)" onclick="tourOverslaan()">Overslaan</button>
+    </div>
+    <h2 class="tour-titel">${stap.titel}</h2>
+    <p class="tour-tekst">${stap.tekst}</p>
+    <div class="tour-stippen">
+      ${TOUR.map((_,k)=>`<span class="tour-stip ${k===i?"nu":""} ${k<i?"gehad":""}"></span>`).join("")}
+    </div>
+    <div class="btn-row" style="margin-top:var(--s-4)">
+      ${i>0?`<button class="btn btn-line" onclick="tourGa(-1)">${ic("terug",17)} Terug</button>`:""}
+      <button class="btn btn-primary" onclick="tourGa(1)">
+        ${laatste?`${ic("vink",17)} Aan de slag`:`Volgende ${ic("verder",17)}`}</button>
+    </div>
+  </div>`;
+}
+
+// Het onderdeel waar de stap over gaat even oplichten.
+function tourMarkeer(){
+  document.querySelectorAll(".tour-uitgelicht").forEach(el=>el.classList.remove("tour-uitgelicht"));
+  const bezig=S.tour!==null&&S.tour!==undefined;
+  document.body.classList.toggle("tour-actief",bezig);
+  if(!bezig)return;
+  const sel=(TOUR[S.tour]||{}).markeer;
+  if(!sel)return;
+  const el=document.querySelector(sel);
+  if(!el)return;
+  el.classList.add("tour-uitgelicht");
+  // De kaart staat onderaan, dus mikken we het uitgelichte deel in de
+  // bovenste helft. Anders licht je iets uit dat achter de kaart verdwijnt.
+  const kaart=document.querySelector(".tour");
+  const vrij=kaart?kaart.getBoundingClientRect().top:window.innerHeight;
+  const r=el.getBoundingClientRect();
+  if(r.top<8||r.bottom>vrij-16){
+    // Past het niet in de vrije ruimte, dan lijnen we de bovenkant uit;
+    // anders zetten we het netjes in het midden daarvan.
+    const marge = r.height>vrij-32 ? 16 : Math.max(16,(vrij-r.height)/2);
+    window.scrollTo({top:Math.max(0,window.scrollY+r.top-marge),behavior:"smooth"});
+  }
 }
 
 // ===================== PORTIES =====================
@@ -2083,6 +2259,7 @@ function render(){
     ${S.syncOpen?renderSyncModal():""}
     ${S.leftoverPick?renderLeftoverPick():""}
     ${S.cook?renderCookMode():""}
+    ${S.tour!==null&&S.tour!==undefined?renderTour():""}
   `;
 
   // Restore scroll positions
@@ -2095,6 +2272,7 @@ function render(){
   });
 
   syncBodyLock();
+  tourMarkeer();
 
   if(S.addOpen)document.querySelectorAll("[data-voor]").forEach(b=>b.classList.toggle("on",b.dataset.voor===S.formVoor));
 
@@ -3384,7 +3562,7 @@ window.wizStart=wizStart; window.wizToggleWeek=wizToggleWeek; window.wizAllDays=
 window.openCook=openCook; window.closeCook=closeCook; window.cookGo=cookGo;
 window.cookStartTimer=cookStartTimer; window.cookStopTimer=cookStopTimer;
 window.setRating=setRating; window.setRcPorties=setRcPorties; window.setSlotPorties=setSlotPorties; window.assignLeftover=assignLeftover;
-window.setTheme=setTheme; window.cycleTheme=cycleTheme; window.setDayCfg=setDayCfg; window.setDayCfgAt=setDayCfgAt; window.toggleApart=toggleApart; window.toggleApartDefault=toggleApartDefault; window.clearDay=clearDay;
+window.tourStart=tourStart; window.tourGa=tourGa; window.tourKlaar=tourKlaar; window.tourOverslaan=tourOverslaan; window.setTheme=setTheme; window.cycleTheme=cycleTheme; window.setDayCfg=setDayCfg; window.setDayCfgAt=setDayCfgAt; window.toggleApart=toggleApart; window.toggleApartDefault=toggleApartDefault; window.clearDay=clearDay;
 window.setAvondSnack=setAvondSnack; window.whoStack=whoStack; window.ic=ic;
 window.wizToggleVasteDay=wizToggleVasteDay; window.wizRemoveVaste=wizRemoveVaste;
 window.wizPickVasteRow=wizPickVasteRow; window.wizPickVasteRc=wizPickVasteRc;
@@ -3403,6 +3581,8 @@ window.pullInbox=pullInbox; window.syncPush=syncPush; window.syncPull=syncPull; 
 if(!lsGet(HHID_KEY,null)){lsSet(HHID_KEY,crypto.randomUUID());}
 applyTheme();
 render();
+// De eerste keer meteen rondleiden. Daarna alleen nog op verzoek.
+if(!lsGet(TOURK,false))setTimeout(tourStart,600);
 syncPull().catch(()=>{});
 </script>
 </body>

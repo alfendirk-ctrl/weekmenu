@@ -34,6 +34,8 @@ Everything lives in `index.html`. The structure within the `<script>` block:
 | `RESTJES` | `makeLeftover`, `isLeftover`, `leftoverCounts`, `leftoverSources` |
 | `ACTIONS` | `pickSlot`, `assignRecipe`, `clearSlot`, `saveCustomRecipe`, `boodschappen`, `runAutofill`, `exportImg`, `doImport` (IG/Gemini), `saveForm` |
 | `KOOKMODUS` | `openCook`/`closeCook`, `cookGo`, `stepSeconds`, `cookStartTimer`, `renderCookMode` |
+| `PORTIES` | `basisPorties`, `rcPorties`/`setRcPorties`, `slotEters`/`slotPorties`/`setSlotPorties`, `scaleAmt` |
+| `RONDLEIDING` | `TOUR` (12 steps), `tourStart`, `tourGa`, `tourKlaar`, `tourOverslaan`, `tourMarkeer`, `renderTour` |
 | `RENDER` | `render()` + per-view/modal render functions (`renderPlanner`, `renderRecepten`, `renderSnacks`, `renderBoodschappen`, `renderPicker`, `renderDetail`, `renderLeftoverPick`, `renderAddSheet`, `renderWizard`) |
 
 ### State management pattern
@@ -49,6 +51,8 @@ function set(patch) { Object.assign(S, patch); save(); render(); }
 function render() { document.getElementById("app").innerHTML = `...`; }
 ```
 
+Because `render()` throws away the DOM, a focused field would lose its text mid-typing. `render()` therefore snapshots the focused `INPUT`/`TEXTAREA` (`veldSelector` → `#id` or first class, plus value and selection range) and restores value, focus and caret afterwards. **Any field the user types in needs a stable `id`** — `#snack-weekend`, `#dagnotitie`, `#zoek-recepten`, `#zoek-snacks`, `#zoek-slot`, `#zoek-vaste`, `#zoek-wissel` — otherwise the selector matches the wrong element after a rerender. For the same reason `syncPush` never calls `render()`; it repaints the one sync button through `syncStatus()`.
+
 ### Data model
 
 - `S.week` — object keyed by day (`ma`–`zo`), then by row id (e.g. `diner`, `lunch_shelley`). Each value is a recipe object or `null`.
@@ -58,6 +62,22 @@ function render() { document.getElementById("app").innerHTML = `...`; }
 - `ROWS` — 8 rows; each has `id`, `cat`, `who`, and optionally `sub`, `free`, `apart`. **Which rows a day actually has is `rowsFor(day, wo)`, not `ROWS`** — rows with `apart:true` (`ontbijt_dirk`, `lunch_dirk`) only exist on days where separate eating is on, and `free:true` (`snack_avond`) is a text field, not a slot. So a day has 5 fillable slots normally and 7 when eating separately. Everything that counts slots — stats, dots, shopping list, generator — must go through `rowsFor`.
 - `S.ratings` — `{[rcId]: {shelley:1|-1, dirk:…, maeve:…}}`, persisted to `wm_ratings_v1`. Two thumbs down and the generator skips the recipe.
 - **Leftovers** — a leftover slot is a reference, not a copy: `{id:"lo_<srcId>", leftoverOf:<srcId>, ingredients:[]}`. `boodschappen()` therefore skips it and instead multiplies the source recipe's amounts by `1 + aantal restjesdagen`.
+- `S.rcServings` — `{[rcId]: n}`, persisted to `wm_servings_v1`: what a recipe's written amounts are *for*. See below.
+
+### Portions
+
+Two different numbers, and mixing them up is the bug this model exists to prevent:
+
+- **What the recipe is written for** — `rcPorties(rc)`: `S.rcServings[rc.id]` if the user corrected it, otherwise `rc.servings`, otherwise 2. Editable from the recipe detail; `setRcPorties` writes it.
+- **How many people are eating this slot** — `slotPorties(day,rowId)`: `rc.porties` stored on the slot itself if set, otherwise `slotEters(day,rowId)` — 3 for dinner, 1 for an `apart:true` row or Shelley's own row on a separate-eating day, otherwise household minus one. `setSlotPorties` writes it onto the slot, so the same recipe can be cooked for two on Tuesday and six on Saturday.
+
+`scaleAmt(amt, van, naar)` multiplies the first number it finds in an amount string by `naar/van` and rounds to one decimal; it returns the string untouched when there is no number or the factor is ~1. The old fixed `HH = 3` is gone — `basisPorties()` reads `S.cfg.huishouden` and falls back to `HH_DEFAULT = 3`. The shopping list and recipe detail both scale through this pair, never through a constant.
+
+### Onboarding tour
+
+`TOUR` is a flat array of 12 steps, each `{titel, tekst, icoon, markeer?, doe?}` — `markeer` is a CSS selector to ring, `doe` runs before the step renders (switch view, open a sheet). `S.tour` holds the index, `null` when closed; `wm_tour_v1` remembers that it has been seen and the tour auto-starts 600 ms after the first render only when that key is absent. It can be restarted from the sync sheet.
+
+The tour deliberately does **not** go through `modalOpen()`: the page must stay scrollable so `tourMarkeer()` can bring the ringed element into the free space above the card. Layering is scrim (z 150, `pointer-events:none`) → `.tour-uitgelicht` (151) → `.tour` card (153), and `body.tour-actief .app{padding-bottom:70vh}` so even the last element on the page can scroll clear of the card. When touching any of this, verify on iPhone-size: the ring must never sit behind the card.
 
 ### The week generator
 
@@ -77,10 +97,10 @@ Measured over 8 consecutive weeks (before the mealprep slot was dropped): ~93 un
 
 ### Key constants
 
-- `HH = 3` — household size used to scale recipe ingredient amounts via `scaleAmt()`
+- `HH_DEFAULT = 3` — fallback household size; read it through `basisPorties()`, which prefers `S.cfg.huishouden`
 - `DAYS = ["ma","di","wo","do","vr","za","zo"]`
 - `PEOPLE = { shelley, dirk, maeve }` each with `label`, `sub`, `color` (CSS var), `initial`
-- localStorage keys: `wm_week_YYYY-MM-DD`, `wm_notes_YYYY-MM-DD` and `wm_daycfg_YYYY-MM-DD` (keyed by that week's Monday), `wm_custom_v2`, `wm_check_v2`, `wm_cfg_v2`, `wm_ratings_v1`, `wm_snackavond_v1`, `wm_boodOver_v1`, `wm_geminikey_v1` and `wm_theme_v1` (both device-local, never synced)
+- localStorage keys: `wm_week_YYYY-MM-DD`, `wm_notes_YYYY-MM-DD` and `wm_daycfg_YYYY-MM-DD` (keyed by that week's Monday), `wm_custom_v2`, `wm_check_v2`, `wm_cfg_v2`, `wm_ratings_v1`, `wm_servings_v1`, `wm_snackavond_v1`, `wm_boodOver_v1`, `wm_tour_v1`, `wm_geminikey_v1` and `wm_theme_v1` (both device-local, never synced)
 
 ### External dependencies (CDN, no npm)
 
