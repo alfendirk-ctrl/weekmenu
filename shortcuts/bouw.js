@@ -6,7 +6,8 @@ const FN   = "https://nejjocgplgbgmdornurw.supabase.co/functions/v1/ig-import";
 const ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5lampvY2dwbGdiZ21kb3JudXJ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM2MTk4MzEsImV4cCI6MjA5OTE5NTgzMX0.dJ_xMqV4Qp-1gZKifYJ-qTW6p9GhoMdfxlr_zIJx7Ko";
 const UA   = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
-const U = { strip:"A1B2C3D4-0001-4000-8000-000000000001",
+const U = { plat :"A1B2C3D4-0005-4000-8000-000000000005",
+            strip:"A1B2C3D4-0001-4000-8000-000000000001",
             haal :"A1B2C3D4-0002-4000-8000-000000000002",
             tekst:"A1B2C3D4-0003-4000-8000-000000000003",
             post :"A1B2C3D4-0004-4000-8000-000000000004" };
@@ -60,11 +61,19 @@ const woordenboek = (paren) => ({
 });
 
 const acties = [
-  // 1. Haal de tracking-parameters van de gedeelde link
+  // 1. Instagram deelt de link als opgemaakte tekst (RTF). Zonder deze stap
+  //    klaagt de volgende actie dat hij er geen URL van kan maken.
+  { WFWorkflowActionIdentifier: "is.workflow.actions.detect.text",
+    WFWorkflowActionParameters: {
+      UUID: U.plat,
+      WFInput: losseVar(invoer()),
+    } },
+
+  // 2. Haal de tracking-parameters van de gedeelde link
   { WFWorkflowActionIdentifier: "is.workflow.actions.text.replace",
     WFWorkflowActionParameters: {
       UUID: U.strip,
-      WFInput: losseVar(invoer()),
+      WFInput: losseVar(uit(U.plat, "Tekst")),
       WFReplaceTextFind: tekst(["\\?.*$"]),
       WFReplaceTextReplace: tekst([""]),
       WFReplaceTextRegularExpression: true,
@@ -77,7 +86,6 @@ const acties = [
       UUID: U.haal,
       WFHTTPMethod: "GET",
       WFURL: tekst([uit(U.strip, "Bijgewerkte tekst"), "embed/captioned/"]),
-      WFHTTPHeaders: woordenboek([["User-Agent", UA]]),
     } },
 
   // 3. Dwing de pagina naar platte tekst, anders komt hij als bestand door
@@ -100,7 +108,7 @@ const acties = [
       WFHTTPBodyType: "JSON",
       WFJSONValues: woordenboek([
         ["caption", [uit(U.tekst, "Tekst")]],
-        ["url", [invoer()]],
+        ["url", [uit(U.plat, "Tekst")]],
         ["household_id", HH],
       ]),
     } },
