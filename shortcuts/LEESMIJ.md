@@ -23,23 +23,26 @@ iCloud-link. Die link openen op de iPhone installeert hem wél.
 
 ## De keten, en waarom hij zo is
 
-1. **Tekst** — de gedeelde link, ontdaan van opmaak
-2. **Vervang tekst** — knipt `?igsh=…` eraf
-3. **Haal inhoud op van URL** — GET op `<link>embed/captioned/`
-4. **Tekst** — de opgehaalde pagina, ontdaan van opmaak
-5. **Haal inhoud op van URL** — POST naar `ig-import` met `caption`, `url` en
+1. **Haal URL's uit invoer** — vist de link uit wat het deelpaneel aanlevert
+2. **Tekst** — die link als gewone tekenreeks
+3. **Vervang tekst** — knipt `?igsh=…` eraf
+4. **Haal inhoud op van URL** — GET op `<link>embed/captioned/`
+5. **Tekst** — de opgehaalde pagina, ontdaan van opmaak
+6. **Haal inhoud op van URL** — POST naar `ig-import` met `caption`, `url` en
    `household_id`
-6. **Toon resultaat**
+7. **Toon resultaat**
 
 Drie dingen die eerder misgingen en die deze opbouw afvangt:
 
 - **Het ophalen moet vanaf de telefoon.** Instagram weigert datacenter-IP's, en
   sinds augustus 2026 ook de publieke CORS-proxy's waar `index.html` op leunt.
   De Edge Function komt er dus niet bij; Safari op de iPhone wel.
-- **Alles moet door een Tekst-actie.** Het deelblad levert de link als
-  attributed string aan. Zowel "Vervang tekst" als "Haal tekst op uit" houden
-  die opmaak vast, waarna de URL-actie afbreekt met *"kon RTF-tekst niet
-  omzetten in URL"*. `is.workflow.actions.gettext` platst het wel.
+- **Het deelpaneel levert RTF aan, geen URL.** Daarop breekt de URL-actie af
+  met *"kon RTF-tekst niet omzetten in URL"*. Noch "Haal tekst op uit"
+  (`detect.text`) noch de Tekst-actie krijgt die opmaak eraf. Wat wel werkt:
+  `WFWorkflowInputContentItemClasses` beperken tot `WFURLContentItem`, zodat iOS
+  zelf omzet, plus `is.workflow.actions.detect.link` vooraan om de URL eruit te
+  vissen. De Tekst-actie erna maakt er een gewone tekenreeks van.
 - **Geen User-Agent-koptekst.** Safari haalt dezelfde pagina op met zijn eigen
   kenmerk; een desktop-Chrome-regel vanaf een telefoon leest Instagram eerder
   als bot.

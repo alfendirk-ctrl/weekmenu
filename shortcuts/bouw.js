@@ -12,6 +12,7 @@ const FN   = "https://nejjocgplgbgmdornurw.supabase.co/functions/v1/ig-import";
 const ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5lampvY2dwbGdiZ21kb3JudXJ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM2MTk4MzEsImV4cCI6MjA5OTE5NTgzMX0.dJ_xMqV4Qp-1gZKifYJ-qTW6p9GhoMdfxlr_zIJx7Ko";
 
 const U = {
+  ruw  : "B1000000-0006-4000-8000-000000000006",  // de link uit het deelpaneel gevist
   link : "B1000000-0001-4000-8000-000000000001",  // gedeelde link als platte tekst
   kaal : "B1000000-0002-4000-8000-000000000002",  // zonder ?igsh=...
   pagina:"B1000000-0003-4000-8000-000000000003",  // opgehaalde embed-pagina
@@ -69,10 +70,15 @@ const platteTekst = (uuid, delen) => ({
 });
 
 const acties = [
-  // 1. De gedeelde link, ontdaan van opmaak
-  platteTekst(U.link, [invoer()]),
+  // 1. Vis de link uit wat het deelpaneel aanlevert. Instagram geeft een
+  //    RTF-item door; deze actie haalt daar de URL uit.
+  { WFWorkflowActionIdentifier: "is.workflow.actions.detect.link",
+    WFWorkflowActionParameters: { UUID: U.ruw, WFInput: losseVar(invoer()) } },
 
-  // 2. Knip de tracking-parameters eraf: ?igsh=...
+  // 2. Die link als gewone tekenreeks
+  platteTekst(U.link, [uit(U.ruw, "URL's")]),
+
+  // 3. Knip de tracking-parameters eraf: ?igsh=...
   { WFWorkflowActionIdentifier: "is.workflow.actions.text.replace",
     WFWorkflowActionParameters: {
       UUID: U.kaal,
@@ -83,7 +89,7 @@ const acties = [
       WFReplaceTextCaseSensitive: false,
     } },
 
-  // 3. Haal de embed-pagina op. Dit moet vanaf de telefoon: Instagram weigert
+  // 4. Haal de embed-pagina op. Dit moet vanaf de telefoon: Instagram weigert
   //    datacenter-IP's en inmiddels ook de publieke proxy's.
   { WFWorkflowActionIdentifier: "is.workflow.actions.downloadurl",
     WFWorkflowActionParameters: {
@@ -92,11 +98,11 @@ const acties = [
       WFURL: tekst([uit(U.kaal, "Bijgewerkte tekst"), "embed/captioned/"]),
     } },
 
-  // 4. Ook die pagina platslaan, anders komt hij als bestand door en blijft het
+  // 5. Ook die pagina platslaan, anders komt hij als bestand door en blijft het
   //    caption-veld leeg
   platteTekst(U.plat, [uit(U.pagina, "Inhoud van URL")]),
 
-  // 5. Naar de server, die het bijschrift eruit pluist en Gemini het recept
+  // 6. Naar de server, die het bijschrift eruit pluist en Gemini het recept
   //    laat opmaken
   { WFWorkflowActionIdentifier: "is.workflow.actions.downloadurl",
     WFWorkflowActionParameters: {
@@ -115,7 +121,7 @@ const acties = [
       ]),
     } },
 
-  // 6. Laat zien wat de server terugzegt
+  // 7. Laat zien wat de server terugzegt
   { WFWorkflowActionIdentifier: "is.workflow.actions.showresult",
     WFWorkflowActionParameters: { Text: tekst([uit(U.post, "Inhoud van URL")]) } },
 ];
@@ -128,9 +134,8 @@ const wf = {
   WFWorkflowHasShortcutInputVariables: true,
   WFWorkflowIcon: { WFWorkflowIconGlyphNumber: 59511, WFWorkflowIconStartColor: 4274264319 },
   WFWorkflowImportQuestions: [],
-  WFWorkflowInputContentItemClasses: [
-    "WFURLContentItem", "WFStringContentItem", "WFSafariWebPageContentItem",
-  ],
+  // Alleen URL's: dan levert het deelpaneel een URL aan in plaats van RTF
+  WFWorkflowInputContentItemClasses: ["WFURLContentItem"],
   WFWorkflowMinimumClientVersion: 900,
   WFWorkflowMinimumClientVersionString: "900",
   WFWorkflowOutputContentItemClasses: [],
