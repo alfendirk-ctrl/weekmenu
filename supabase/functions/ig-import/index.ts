@@ -9,11 +9,10 @@
 //   Authorization: Bearer <anon key>
 //   {"url":"https://www.instagram.com/p/...","household_id":"...","caption":"..."}
 //
-// caption is optioneel maar wel de betrouwbare weg: Instagram blokkeert de
-// datacenter-IP's waar Edge Functions op draaien, dus het bijschrift hier zelf
-// ophalen lukt zelden. Stuurt de Shortcut het bijschrift mee (opgehaald vanaf de
-// telefoon, of geplakt), dan slaan we die stap over. url mag dan weg, en dient
-// alleen nog als bronvermelding.
+// url alleen volstaat: de functie haalt het bijschrift zelf op. Dat werkt mits
+// er een iPhone-Safari-kenmerk meegaat — met een desktop-Chrome-kenmerk geeft
+// Instagram een pagina zonder bijschrift terug. caption blijft geaccepteerd
+// (ruwe HTML of platte tekst) voor het geval een aanroeper het al heeft.
 //
 // De Gemini-key komt uit de secret GEMINI_API_KEY. De app synct zijn eigen key
 // bewust niet mee, dus zonder die secret werkt deze route niet.
@@ -33,9 +32,12 @@ const json = (body: unknown, status = 200) =>
     headers: { ...CORS, "Content-Type": "application/json" },
   });
 
+// Gemeten met ig-probe: met een desktop-Chrome-kenmerk geeft Instagram een
+// pagina zonder bijschrift terug, met dit iPhone-kenmerk komt het volledige
+// bijschrift binnen — vanaf dezelfde server, in ~600 ms.
 const UA =
-  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
-  "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 " +
+  "(KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1";
 
 // ---------- bijschrift ophalen ----------
 
@@ -99,7 +101,13 @@ function extractCap(body: string): string | null {
     const c = stripPrefix(decode(om[1]));
     if (c.length > 5) return c;
   }
-  // 6. Platte tekst — r.jina.ai levert markdown terug, geen HTML
+  // 6. JSON van een spiegeldienst, bijvoorbeeld microlink
+  try {
+    const d = JSON.parse(body);
+    const c = d?.data?.description ?? d?.description;
+    if (typeof c === "string" && c.length > 20) return stripPrefix(decode(c));
+  } catch { /* geen JSON, volgende strategie */ }
+  // 7. Platte tekst — een leesproxy levert markdown terug, geen HTML
   if (!/<html|<meta|<script/i.test(body)) {
     let t = body;
     const mc = t.indexOf("Markdown Content:");
@@ -112,9 +120,8 @@ function extractCap(body: string): string | null {
   return null;
 }
 
-// Instagram weigert datacenter-IP's, dus een directe fetch vanaf deze functie
-// loopt vrijwel altijd stuk. De proxy's halen de pagina vanaf hun eigen adressen
-// op. Dezelfde lijst die de app in de browser gebruikt, waar dit al werkt.
+// De directe fetch wint bijna altijd; de proxy's staan er als vangnet voor het
+// geval Instagram een keer dwarsligt. Alles gaat parallel, dus dat kost niets.
 async function fetchCaption(rawUrl: string): Promise<string | null> {
   if (!rawUrl) return null;
   const scm = rawUrl.match(/\/(p|reel|reels|tv)\/([A-Za-z0-9_-]+)/);
@@ -128,12 +135,10 @@ async function fetchCaption(rawUrl: string): Promise<string | null> {
   targets.push(rawUrl.split("?")[0]);
 
   const kandidaten = (t: string) => [
-    { p: t, json: false, ms: 12000 },                                             // direct, gratis poging
-    { p: `https://r.jina.ai/${t}`, json: false, ms: 20000 },                      // rendert de pagina, levert tekst
-    { p: `https://api.allorigins.win/get?url=${encodeURIComponent(t)}`, json: true, ms: 15000 },
-    { p: `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(t)}`, json: false, ms: 15000 },
-    { p: `https://corsproxy.io/?url=${encodeURIComponent(t)}`, json: false, ms: 15000 },
-    { p: `https://api.cors.lol/?url=${encodeURIComponent(t)}`, json: false, ms: 15000 },
+    { p: t, json: false, ms: 12000 },                                             // dit is de route die werkt
+    // Microlink haalt de pagina namens ons op en geeft de beschrijving terug;
+    // gemeten als enige overgebleven vangnet dat het bijschrift echt oplevert.
+    { p: `https://api.microlink.io/?url=${encodeURIComponent(t)}&meta=true`, json: false, ms: 15000 },
   ];
 
   const probeer = async ({ p, json, ms }: { p: string; json: boolean; ms: number }) => {

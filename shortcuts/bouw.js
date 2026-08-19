@@ -1,10 +1,17 @@
 // Genereert een .shortcut-bestand (plist) voor "Recept opslaan".
 //
-// De keten is bewust opgebouwd rond de Tekst-actie (is.workflow.actions.gettext).
-// Die maakt van elke invoer een gewone tekenreeks. Zonder dat struikelt de
-// URL-actie over opgemaakte tekst ("kon RTF-tekst niet omzetten in URL"): het
-// deelblad van Instagram levert de link namelijk als attributed string aan, en
-// zowel "Vervang tekst" als "Haal tekst op uit" houden die opmaak vast.
+// De opdracht stuurt alleen de gedeelde link door; de Edge Function haalt het
+// bijschrift zelf op en laat Gemini het recept eruit halen. Eerdere versies
+// lieten de telefoon de pagina ophalen, omdat ik dacht dat Instagram servers
+// weerde. Dat bleek niet zo: het lag aan het User-Agent-kenmerk. Nu de server
+// het zelf kan, valt al dat gedoe op de telefoon weg.
+//
+// Twee dingen blijven nodig:
+// - Alleen WFURLContentItem als invoertype. Accepteert de opdracht ook tekst,
+//   dan levert het deelpaneel een RTF-item en breekt alles af met "kon
+//   RTF-tekst niet omzetten in URL".
+// - detect.link plus een Tekst-actie, zodat er een gewone tekenreeks in het
+//   JSON-veld belandt.
 const fs = require("fs");
 
 const HH   = "8d0e9587-7554-44f7-a7e4-4c308c16dafa";
@@ -12,12 +19,9 @@ const FN   = "https://nejjocgplgbgmdornurw.supabase.co/functions/v1/ig-import";
 const ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5lampvY2dwbGdiZ21kb3JudXJ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM2MTk4MzEsImV4cCI6MjA5OTE5NTgzMX0.dJ_xMqV4Qp-1gZKifYJ-qTW6p9GhoMdfxlr_zIJx7Ko";
 
 const U = {
-  ruw  : "B1000000-0006-4000-8000-000000000006",  // de link uit het deelpaneel gevist
-  link : "B1000000-0001-4000-8000-000000000001",  // gedeelde link als platte tekst
-  kaal : "B1000000-0002-4000-8000-000000000002",  // zonder ?igsh=...
-  pagina:"B1000000-0003-4000-8000-000000000003",  // opgehaalde embed-pagina
-  plat : "B1000000-0004-4000-8000-000000000004",  // die pagina als platte tekst
-  post : "B1000000-0005-4000-8000-000000000005",  // antwoord van de server
+  ruw  : "C1000000-0001-4000-8000-000000000001",  // link uit het deelpaneel
+  link : "C1000000-0002-4000-8000-000000000002",  // die link als platte tekst
+  post : "C1000000-0003-4000-8000-000000000003",  // antwoord van de server
 };
 const OBJ = "￼";  // plaatshouder voor een variabele in een tekstveld
 
@@ -43,7 +47,6 @@ const p = (v, d = 0) => {
 const uit = (uuid, naam) => ({ OutputUUID: uuid, OutputName: naam, Type: "ActionOutput" });
 const invoer = () => ({ Type: "ExtensionInput" });
 
-// Tekstveld dat uit variabelen en losse tekst bestaat
 const tekst = (delen) => {
   let s = "", att = {};
   for (const d of delen) {
@@ -63,47 +66,16 @@ const woordenboek = (paren) => ({
   WFSerializationType: "WFDictionaryFieldValue",
 });
 
-// Tekst-actie: platst wat er binnenkomt tot een gewone tekenreeks
-const platteTekst = (uuid, delen) => ({
-  WFWorkflowActionIdentifier: "is.workflow.actions.gettext",
-  WFWorkflowActionParameters: { UUID: uuid, WFTextActionText: tekst(delen) },
-});
-
 const acties = [
-  // 1. Vis de link uit wat het deelpaneel aanlevert. Instagram geeft een
-  //    RTF-item door; deze actie haalt daar de URL uit.
+  // 1. Vis de link uit wat het deelpaneel aanlevert
   { WFWorkflowActionIdentifier: "is.workflow.actions.detect.link",
     WFWorkflowActionParameters: { UUID: U.ruw, WFInput: losseVar(invoer()) } },
 
-  // 2. Die link als gewone tekenreeks
-  platteTekst(U.link, [uit(U.ruw, "URL's")]),
+  // 2. Als gewone tekenreeks, zodat hij schoon in het JSON-veld past
+  { WFWorkflowActionIdentifier: "is.workflow.actions.gettext",
+    WFWorkflowActionParameters: { UUID: U.link, WFTextActionText: tekst([uit(U.ruw, "URL's")]) } },
 
-  // 3. Knip de tracking-parameters eraf: ?igsh=...
-  { WFWorkflowActionIdentifier: "is.workflow.actions.text.replace",
-    WFWorkflowActionParameters: {
-      UUID: U.kaal,
-      WFInput: losseVar(uit(U.link, "Tekst")),
-      WFReplaceTextFind: tekst(["\\?.*$"]),
-      WFReplaceTextReplace: tekst([""]),
-      WFReplaceTextRegularExpression: true,
-      WFReplaceTextCaseSensitive: false,
-    } },
-
-  // 4. Haal de embed-pagina op. Dit moet vanaf de telefoon: Instagram weigert
-  //    datacenter-IP's en inmiddels ook de publieke proxy's.
-  { WFWorkflowActionIdentifier: "is.workflow.actions.downloadurl",
-    WFWorkflowActionParameters: {
-      UUID: U.pagina,
-      WFHTTPMethod: "GET",
-      WFURL: tekst([uit(U.kaal, "Bijgewerkte tekst"), "embed/captioned/"]),
-    } },
-
-  // 5. Ook die pagina platslaan, anders komt hij als bestand door en blijft het
-  //    caption-veld leeg
-  platteTekst(U.plat, [uit(U.pagina, "Inhoud van URL")]),
-
-  // 6. Naar de server, die het bijschrift eruit pluist en Gemini het recept
-  //    laat opmaken
+  // 3. Versturen. De server doet de rest.
   { WFWorkflowActionIdentifier: "is.workflow.actions.downloadurl",
     WFWorkflowActionParameters: {
       UUID: U.post,
@@ -115,13 +87,12 @@ const acties = [
       ]),
       WFHTTPBodyType: "JSON",
       WFJSONValues: woordenboek([
-        ["caption", [uit(U.plat, "Tekst")]],
         ["url", [uit(U.link, "Tekst")]],
         ["household_id", HH],
       ]),
     } },
 
-  // 7. Laat zien wat de server terugzegt
+  // 4. Laat zien wat de server terugzegt
   { WFWorkflowActionIdentifier: "is.workflow.actions.showresult",
     WFWorkflowActionParameters: { Text: tekst([uit(U.post, "Inhoud van URL")]) } },
 ];

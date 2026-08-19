@@ -21,31 +21,36 @@ shortcuts sign -m anyone -i "Recept opslaan.shortcut" -o "Recept opslaan 2.short
 Dubbelklik het resultaat, en deel het vanuit Opdrachten op de Mac als
 iCloud-link. Die link openen op de iPhone installeert hem wél.
 
-## De keten, en waarom hij zo is
+## De keten
 
 1. **Haal URL's uit invoer** — vist de link uit wat het deelpaneel aanlevert
 2. **Tekst** — die link als gewone tekenreeks
-3. **Vervang tekst** — knipt `?igsh=…` eraf
-4. **Haal inhoud op van URL** — GET op `<link>embed/captioned/`
-5. **Tekst** — de opgehaalde pagina, ontdaan van opmaak
-6. **Haal inhoud op van URL** — POST naar `ig-import` met `caption`, `url` en
-   `household_id`
-7. **Toon resultaat**
+3. **Haal inhoud op van URL** — POST naar `ig-import` met `url` en `household_id`
+4. **Toon resultaat**
 
-Drie dingen die eerder misgingen en die deze opbouw afvangt:
+De opdracht haalt zelf niets van Instagram: dat doet de Edge Function.
 
-- **Het ophalen moet vanaf de telefoon.** Instagram weigert datacenter-IP's, en
-  sinds augustus 2026 ook de publieke CORS-proxy's waar `index.html` op leunt.
-  De Edge Function komt er dus niet bij; Safari op de iPhone wel.
-- **Het deelpaneel levert RTF aan, geen URL.** Daarop breekt de URL-actie af
-  met *"kon RTF-tekst niet omzetten in URL"*. Noch "Haal tekst op uit"
-  (`detect.text`) noch de Tekst-actie krijgt die opmaak eraf. Wat wel werkt:
+## Wat er eerder misging
+
+- **Het User-Agent-kenmerk, niet het IP.** Ik concludeerde dat Instagram
+  datacenter-IP's weert en verplaatste het ophalen naar de telefoon. Dat klopte
+  niet. `ig-probe` mat het na: met een desktop-Chrome-kenmerk komt er een pagina
+  zonder bijschrift terug, met een iPhone-Safari-kenmerk het volledige
+  bijschrift — vanaf dezelfde server, in ~600 ms. Alle omwegen daarna waren
+  overbodig.
+- **Het deelpaneel levert RTF, geen URL.** Daarop breekt elke URL-actie af met
+  *"kon RTF-tekst niet omzetten in URL"*, en noch `detect.text` noch de
+  Tekst-actie krijgt die opmaak eraf. Wat wel werkt:
   `WFWorkflowInputContentItemClasses` beperken tot `WFURLContentItem`, zodat iOS
-  zelf omzet, plus `is.workflow.actions.detect.link` vooraan om de URL eruit te
-  vissen. De Tekst-actie erna maakt er een gewone tekenreeks van.
-- **Geen User-Agent-koptekst.** Safari haalt dezelfde pagina op met zijn eigen
-  kenmerk; een desktop-Chrome-regel vanaf een telefoon leest Instagram eerder
-  als bot.
+  zelf omzet, plus `detect.link` om de URL eruit te vissen.
 
-`ig-import` accepteert zowel ruwe HTML als platte tekst in `caption`, dus het
-maakt niet uit welke van de twee de Tekst-actie oplevert.
+## Meten
+
+`ig-probe` legt veertien routes naar hetzelfde bijschrift naast elkaar en
+rapporteert per route status, bytes en of er een bijschrift uit te halen viel:
+
+```
+POST /functions/v1/ig-probe   {"url":"https://www.instagram.com/reel/..."}
+```
+
+Gebruik dat bij twijfel, in plaats van te gissen.
