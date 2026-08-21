@@ -9,6 +9,10 @@
 //   Authorization: Bearer <anon key>
 //   {"url":"https://www.instagram.com/p/...","household_id":"...","caption":"..."}
 //
+// Met {"alleen_bijschrift":true} geeft hij alleen het bijschrift terug en slaat
+// hij niets op. Dat gebruikt de app: die toont eerst een voorbeeld en laat de
+// gebruiker daarna zelf opslaan, met de key uit de eigen browser.
+//
 // url alleen volstaat: de functie haalt het bijschrift zelf op. Dat werkt mits
 // er een iPhone-Safari-kenmerk meegaat — met een desktop-Chrome-kenmerk geeft
 // Instagram een pagina zonder bijschrift terug. caption blijft geaccepteerd
@@ -281,7 +285,7 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ error: "POST vereist" }, 405);
 
-  let body: { url?: string; household_id?: string; caption?: string };
+  let body: { url?: string; household_id?: string; caption?: string; alleen_bijschrift?: boolean };
   try { body = await req.json(); } catch { return json({ error: "Ongeldige JSON" }, 400); }
 
   const url = (body.url ?? "").trim();
@@ -303,6 +307,14 @@ Deno.serve(async (req) => {
     .from("weekmenu_sync").select("state").eq("household_id", hid).single();
   if (hhErr || !hh) return json({ error: "Onbekend huishouden" }, 403);
 
+  // De app wil alleen het bijschrift: zelf ophalen lukt daar niet, want de
+  // browser mag Instagram niet aanroepen en de publieke proxy's zijn dood.
+  if (body.alleen_bijschrift) {
+    const alleen = await fetchCaption(url);
+    if (!alleen) return json({ error: "Bijschrift kon niet worden opgehaald." }, 422);
+    return json({ caption: alleen });
+  }
+
   const apiKey = Deno.env.get("GEMINI_API_KEY") ?? "";
   if (!apiKey) {
     return json({
@@ -310,9 +322,8 @@ Deno.serve(async (req) => {
     }, 400);
   }
 
-  // Instagram blokkeert de datacenter-IP's waar deze functie op draait, dus wat de
-  // telefoon aanlevert gaat altijd voor. Dat mag ruwe HTML zijn — de Shortcut hoeft
-  // dan zelf niets uit te pluizen, wij hebben het uitpakken hier toch al staan.
+  // Een meegestuurd bijschrift gaat voor — dat mag ruwe HTML of platte tekst
+  // zijn. Is er niets, dan halen we het zelf op.
   const cap = meegestuurd.length > 20
     ? (/<\/?[a-z][\s\S]*>/i.test(meegestuurd)
         ? extractCap(meegestuurd)

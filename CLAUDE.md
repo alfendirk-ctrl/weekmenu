@@ -109,6 +109,12 @@ Measured over 8 consecutive weeks (before the mealprep slot was dropped): ~93 un
 - Google Fonts: Bricolage Grotesque, Hanken Grotesk, Space Mono, Instrument Serif
 - **Anthropic Claude API** — called directly from the browser in `doImport()` to extract recipes from Instagram captions. Requires an API key; the user must supply it (there's no backend).
 
+### Instagram-import
+
+`igFetchCaption` haalt het bijschrift **niet** meer zelf op. De browser mag Instagram niet aanroepen (CORS) en de publieke CORS-proxy's waar dit op leunde zijn dood — gemeten met `ig-probe`: 403, 429 of 522. In plaats daarvan roept de app de Edge Function `ig-import` aan met `{url, household_id, alleen_bijschrift:true}`, die het bijschrift teruggeeft zonder iets op te slaan. Het extraheren tot een recept blijft in de browser, met de key van de gebruiker.
+
+De functie haalt het bijschrift rechtstreeks bij Instagram op. Dat werkt alleen met een **iPhone-Safari-User-Agent**; met desktop-Chrome komt er een pagina zonder bijschrift terug. Dat is geen detail maar de hele crux — verander die constante niet zonder `ig-probe` opnieuw te draaien.
+
 ### CSS design tokens
 
 All colors are OKLCH custom properties on `:root`. Roles, not names: `--canvas`/`--surface`/`--surface-2`/`--surface-3`, `--line`/`--line-2`, `--ink`/`--ink-2`/`--ink-3`, one `--accent` (+`-hover`/`-on`/`-soft`/`-line`), semantics `--ok`/`--warn`/`--err`, and the three people as *data* hues `--p-shelley`/`--p-dirk`/`--p-maeve`. Type scale `--t-2xs … --t-3xl` (fixed rem, ratio ~1.2), spacing `--s-1 … --s-10`, radii `--r-*`. Never hardcode a hex.

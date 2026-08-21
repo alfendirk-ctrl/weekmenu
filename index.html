@@ -1683,108 +1683,29 @@ async function fetchCaption(){
   const ta=document.getElementById("ig-cap");if(ta)ta.value=cap;
 }
 
-const igDecode=s=>s
-  .replace(/&#x([0-9a-fA-F]+);/g,(_,h)=>String.fromCodePoint(parseInt(h,16)))
-  .replace(/&#(\d+);/g,(_,d)=>String.fromCodePoint(parseInt(d,10)))
-  .replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">")
-  .replace(/&#39;/g,"'").replace(/&apos;/g,"'").replace(/&quot;/g,'"');
-
-// og:description ziet eruit als: `1.234 likes, 56 comments - naam on May 1, 2024: "bijschrift"`
-function igStripPrefix(s){
-  let t=s;
-  const m=t.match(/likes?,[^:]*comments?\s*[-–—]\s*[^:]*?:\s*([\s\S]*)$/i);
-  if(m&&m[1]&&m[1].trim().length>10)t=m[1];
-  return t.trim().replace(/^[“”‘’'"]+/,"").replace(/[“”‘’'"]+$/,"").trim();
-}
-
-// Meerdere extractiestrategieën, beste eerst
-function igExtractCap(body){
-  // 1. JSON-LD articleBody: schoonst, zonder likes/volgers-prefix
-  try{
-    const tags=[...body.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)];
-    for(const [,json] of tags){
-      const d=JSON.parse(json);
-      const b=d.articleBody||(Array.isArray(d)?d.find(x=>x.articleBody)?.articleBody:null);
-      if(b&&b.length>5)return b;
-    }
-  }catch(e){}
-  // 2. __additionalDataLoaded GraphQL blob (embed-pagina)
-  try{
-    const m=body.match(/window\.__additionalDataLoaded\(['"][^'"]*['"]\s*,\s*(\{[\s\S]+?\})\)/);
-    if(m){const d=JSON.parse(m[1]);const t=d?.graphql?.shortcode_media?.edge_media_to_caption?.edges?.[0]?.node?.text;if(t&&t.length>5)return t;}
-  }catch(e){}
-  // 3. _sharedData GraphQL (oudere pagina's)
-  try{
-    const m=body.match(/window\._sharedData\s*=\s*(\{[\s\S]+?\});\s*<\/script>/);
-    if(m){const d=JSON.parse(m[1]);const t=d?.entry_data?.PostPage?.[0]?.graphql?.shortcode_media?.edge_media_to_caption?.edges?.[0]?.node?.text;if(t&&t.length>5)return t;}
-  }catch(e){}
-  // 4. Caption in de embed-HTML zelf
-  try{
-    const m=body.match(/class="[^"]*Caption[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
-    if(m){const t=igStripPrefix(igDecode(m[1].replace(/<[^>]+>/g," ").replace(/\s+/g," ")));if(t.length>20)return t;}
-  }catch(e){}
-  // 5. og:description met prefix-strip
-  const om=body.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i)
-          ||body.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:description["']/i);
-  if(om){const c=igStripPrefix(igDecode(om[1]));if(c.length>5)return c;}
-  // 6. Platte tekst (r.jina.ai levert markdown, geen HTML)
-  if(!/<html|<meta|<script/i.test(body)){
-    let t=body;
-    const mc=t.indexOf("Markdown Content:");
-    if(mc>=0)t=t.slice(mc+17);
-    t=t.replace(/^\s*(Title|URL Source|Published Time|Warning):.*$/gim,"")
-       .replace(/!?\[[^\]]*\]\([^)]*\)/g,"")   // markdown links/afbeeldingen
-       .replace(/\n{3,}/g,"\n\n").trim();
-    if(t.length>40&&t.length<8000)return igStripPrefix(t);
-  }
-  return null;
-}
-
-// Haalt het bijschrift op via publieke CORS-proxy's. Instagram staat geen directe
-// browser-requests toe, dus dit blijft afhankelijk van externe diensten.
+// Haalt het bijschrift op via onze eigen Edge Function. De browser mag
+// Instagram niet rechtstreeks aanroepen (CORS), en de publieke proxy's waar dit
+// eerder op leunde zijn gemeten dood: 403, 429 of 522. De functie komt er wel
+// bij — met een iPhone-Safari-kenmerk levert Instagram het volledige bijschrift.
 async function igFetchCaption(rawUrl){
-  // Shortcode werkt voor /p/, /reel/ en /tv/
-  const scm=rawUrl.match(/\/(p|reel|reels|tv)\/([A-Za-z0-9_-]+)/);
-  const sc=scm?scm[2]:null;
-
-  // Embed-pagina eerst: die is bedoeld om ingesloten te worden en wordt minder geblokkeerd
-  const targets=[];
-  if(sc){
-    targets.push(`https://www.instagram.com/p/${sc}/embed/captioned/`);
-    targets.push(`https://www.instagram.com/p/${sc}/embed/`);
-  }
-  targets.push(rawUrl.split("?")[0]);
-
-  const proxyFor=t=>[
-    {p:`https://r.jina.ai/${t}`,json:false,ms:20000},           // rendert de pagina, levert tekst
-    {p:`https://api.allorigins.win/get?url=${encodeURIComponent(t)}`,json:true,ms:15000},
-    {p:`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(t)}`,json:false,ms:15000},
-    {p:`https://corsproxy.io/?url=${encodeURIComponent(t)}`,json:false,ms:15000},
-    {p:`https://api.cors.lol/?url=${encodeURIComponent(t)}`,json:false,ms:15000},
-  ];
-
-  const tryOne=async({p,json,ms})=>{
+  const hid=lsGet(HHID_KEY,null);
+  if(!hid)return null;
+  try{
     const ctrl=new AbortController();
-    const tid=setTimeout(()=>ctrl.abort(),ms);
+    const tid=setTimeout(()=>ctrl.abort(),30000);
+    let r;
     try{
-      const r=await fetch(p,{signal:ctrl.signal});
-      if(!r.ok)throw new Error("http "+r.status);
-      const body=json?((await r.json()).contents||""):await r.text();
-      const cap=igExtractCap(body);
-      if(!cap||cap.length<20)throw new Error("geen bijschrift");
-      return cap;
+      r=await fetch(SB_URL+"/functions/v1/ig-import",{
+        method:"POST",
+        headers:{"Content-Type":"application/json","Authorization":"Bearer "+SB_KEY},
+        body:JSON.stringify({url:rawUrl,household_id:hid,alleen_bijschrift:true}),
+        signal:ctrl.signal,
+      });
     }finally{clearTimeout(tid);}
-  };
-
-  // Alles parallel — eerste bruikbare bijschrift wint
-  const attempts=targets.flatMap(t=>proxyFor(t).map(cfg=>tryOne(cfg)));
-  return await new Promise(resolve=>{
-    let done=false,fails=0;
-    attempts.forEach(pr=>
-      pr.then(c=>{if(!done){done=true;resolve(c);}})
-        .catch(()=>{if(++fails===attempts.length&&!done){done=true;resolve(null);}})
-    );
-  });
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok||!d.caption)return null;
+    return d.caption.length>=20?d.caption:null;
+  }catch(e){return null;}
 }
 async function importFromUrl(){
   const url=(S.igUrl||(document.getElementById("ig-url")||{value:""}).value).trim();
