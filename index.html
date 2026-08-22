@@ -1707,6 +1707,35 @@ async function igFetchCaption(rawUrl){
     return d.caption.length>=20?d.caption:null;
   }catch(e){return null;}
 }
+// Gedeeld vanuit Instagram: de Shortcut opent de app als
+// ...?ig=<instagram-link>. De link houdt zijn eigen ?igsh=... , dus we knippen
+// op het eerste voorkomen en nemen de rest ongewijzigd over — geen decodering
+// nodig, en geen gedoe met dubbel gecodeerde parameters.
+function gedeeldeLink(){
+  const q=location.search||"";
+  const i=q.indexOf("ig=");
+  if(i<0)return null;
+  const rest=q.slice(i+3);
+  // "https%3A%2F%2F..." begint ook met "http", dus toets op het hele schema
+  const url=/^https?:\/\//i.test(rest)?rest:decodeURIComponent(rest);
+  return /^https?:\/\/(www\.)?instagram\.com\//i.test(url)?url:null;
+}
+
+// Meteen aan de slag met een gedeelde link. Het adres wordt daarna opgeschoond,
+// zodat een herlaadbeurt niet nog een keer importeert.
+async function verwerkGedeeld(){
+  const url=gedeeldeLink();
+  if(!url)return;
+  history.replaceState(null,"",location.pathname);
+  if(!S.geminiKey){
+    set({view:"recepten",addOpen:true,addTab:"ig",igUrl:url,
+      igErr:"Vul eerst je Gemini API key in, dan kan dit recept opgehaald worden."});
+    return;
+  }
+  set({view:"recepten",addOpen:true,addTab:"ig",igUrl:url});
+  await importFromUrl();
+}
+
 async function importFromUrl(){
   const url=(S.igUrl||(document.getElementById("ig-url")||{value:""}).value).trim();
   if(!url){toast("Plak eerst een Instagram link");return;}
@@ -3493,7 +3522,7 @@ window.onDayNote=onDayNote;
 window.toggleCheck=toggleCheck;
 window.openBoodDetail=openBoodDetail; window.closeBoodDetail=closeBoodDetail;
 window.saveBoodOverride=saveBoodOverride; window.deleteBoodOverride=deleteBoodOverride;
-window.fetchCaption=fetchCaption; window.importFromUrl=importFromUrl; window.doImport=doImport; window.addPhotos=addPhotos; window.removePhoto=removePhoto; window.doPhotoImport=doPhotoImport; window.saveIgRecipe=saveIgRecipe; window.saveForm=saveForm; window.setFormVoor=setFormVoor;
+window.fetchCaption=fetchCaption; window.importFromUrl=importFromUrl; window.gedeeldeLink=gedeeldeLink; window.verwerkGedeeld=verwerkGedeeld; window.doImport=doImport; window.addPhotos=addPhotos; window.removePhoto=removePhoto; window.doPhotoImport=doPhotoImport; window.saveIgRecipe=saveIgRecipe; window.saveForm=saveForm; window.setFormVoor=setFormVoor;
 window.deleteCustomRecipe=deleteCustomRecipe; window.openEdit=openEdit;
 window.exportImg=exportImg; window.exportWeekImg=exportWeekImg;
 window.pullInbox=pullInbox; window.syncPush=syncPush; window.syncPull=syncPull; window.joinHousehold=joinHousehold;
@@ -3502,8 +3531,13 @@ window.pullInbox=pullInbox; window.syncPush=syncPush; window.syncPull=syncPull; 
 if(!lsGet(HHID_KEY,null)){lsSet(HHID_KEY,crypto.randomUUID());}
 applyTheme();
 render();
-// De eerste keer meteen rondleiden. Daarna alleen nog op verzoek.
-if(!lsGet(TOURK,false))setTimeout(tourStart,600);
+// Een gedeelde link gaat voor: dan geen rondleiding, meteen importeren.
+if(gedeeldeLink()){
+  verwerkGedeeld().catch(()=>{});
+}else if(!lsGet(TOURK,false)){
+  // De eerste keer meteen rondleiden. Daarna alleen nog op verzoek.
+  setTimeout(tourStart,600);
+}
 syncPull().catch(()=>{});
 </script>
 </body>

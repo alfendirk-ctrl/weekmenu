@@ -12,7 +12,7 @@
       <key>WFWorkflowActionParameters</key>
       <dict>
         <key>UUID</key>
-        <string>C1000000-0001-4000-8000-000000000001</string>
+        <string>D1000000-0001-4000-8000-000000000001</string>
         <key>WFInput</key>
         <dict>
           <key>Value</key>
@@ -31,19 +31,19 @@
       <key>WFWorkflowActionParameters</key>
       <dict>
         <key>UUID</key>
-        <string>C1000000-0002-4000-8000-000000000002</string>
+        <string>D1000000-0002-4000-8000-000000000002</string>
         <key>WFTextActionText</key>
         <dict>
           <key>Value</key>
           <dict>
             <key>string</key>
-            <string>￼</string>
+            <string>https://alfendirk-ctrl.github.io/weekmenu/?ig=￼</string>
             <key>attachmentsByRange</key>
             <dict>
-              <key>{0, 1}</key>
+              <key>{46, 1}</key>
               <dict>
                 <key>OutputUUID</key>
-                <string>C1000000-0001-4000-8000-000000000001</string>
+                <string>D1000000-0001-4000-8000-000000000001</string>
                 <key>OutputName</key>
                 <string>URL's</string>
                 <key>Type</key>
@@ -58,183 +58,22 @@
     </dict>
     <dict>
       <key>WFWorkflowActionIdentifier</key>
-      <string>is.workflow.actions.downloadurl</string>
+      <string>is.workflow.actions.openurl</string>
       <key>WFWorkflowActionParameters</key>
       <dict>
-        <key>UUID</key>
-        <string>C1000000-0003-4000-8000-000000000003</string>
-        <key>WFHTTPMethod</key>
-        <string>POST</string>
-        <key>WFURL</key>
+        <key>WFInput</key>
         <dict>
           <key>Value</key>
           <dict>
-            <key>string</key>
-            <string>https://nejjocgplgbgmdornurw.supabase.co/functions/v1/ig-import</string>
+            <key>OutputUUID</key>
+            <string>D1000000-0002-4000-8000-000000000002</string>
+            <key>OutputName</key>
+            <string>Tekst</string>
+            <key>Type</key>
+            <string>ActionOutput</string>
           </dict>
           <key>WFSerializationType</key>
-          <string>WFTextTokenString</string>
-        </dict>
-        <key>WFHTTPHeaders</key>
-        <dict>
-          <key>Value</key>
-          <dict>
-            <key>WFDictionaryFieldValueItems</key>
-            <array>
-              <dict>
-                <key>WFItemType</key>
-                <integer>0</integer>
-                <key>WFKey</key>
-                <dict>
-                  <key>Value</key>
-                  <dict>
-                    <key>string</key>
-                    <string>Authorization</string>
-                  </dict>
-                  <key>WFSerializationType</key>
-                  <string>WFTextTokenString</string>
-                </dict>
-                <key>WFValue</key>
-                <dict>
-                  <key>Value</key>
-                  <dict>
-                    <key>string</key>
-                    <string>Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5lampvY2dwbGdiZ21kb3JudXJ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM2MTk4MzEsImV4cCI6MjA5OTE5NTgzMX0.dJ_xMqV4Qp-1gZKifYJ-qTW6p9GhoMdfxlr_zIJx7Ko</string>
-                  </dict>
-                  <key>WFSerializationType</key>
-                  <string>WFTextTokenString</string>
-                </dict>
-              </dict>
-              <dict>
-                <key>WFItemType</key>
-                <integer>0</integer>
-                <key>WFKey</key>
-                <dict>
-                  <key>Value</key>
-                  <dict>
-                    <key>string</key>
-                    <string>Content-Type</string>
-                  </dict>
-                  <key>WFSerializationType</key>
-                  <string>WFTextTokenString</string>
-                </dict>
-                <key>WFValue</key>
-                <dict>
-                  <key>Value</key>
-                  <dict>
-                    <key>string</key>
-                    <string>application/json</string>
-                  </dict>
-                  <key>WFSerializationType</key>
-                  <string>WFTextTokenString</string>
-                </dict>
-              </dict>
-            </array>
-          </dict>
-          <key>WFSerializationType</key>
-          <string>WFDictionaryFieldValue</string>
-        </dict>
-        <key>WFHTTPBodyType</key>
-        <string>JSON</string>
-        <key>WFJSONValues</key>
-        <dict>
-          <key>Value</key>
-          <dict>
-            <key>WFDictionaryFieldValueItems</key>
-            <array>
-              <dict>
-                <key>WFItemType</key>
-                <integer>0</integer>
-                <key>WFKey</key>
-                <dict>
-                  <key>Value</key>
-                  <dict>
-                    <key>string</key>
-                    <string>url</string>
-                  </dict>
-                  <key>WFSerializationType</key>
-                  <string>WFTextTokenString</string>
-                </dict>
-                <key>WFValue</key>
-                <dict>
-                  <key>Value</key>
-                  <dict>
-                    <key>string</key>
-                    <string>￼</string>
-                    <key>attachmentsByRange</key>
-                    <dict>
-                      <key>{0, 1}</key>
-                      <dict>
-                        <key>OutputUUID</key>
-                        <string>C1000000-0002-4000-8000-000000000002</string>
-                        <key>OutputName</key>
-                        <string>Tekst</string>
-                        <key>Type</key>
-                        <string>ActionOutput</string>
-                      </dict>
-                    </dict>
-                  </dict>
-                  <key>WFSerializationType</key>
-                  <string>WFTextTokenString</string>
-                </dict>
-              </dict>
-              <dict>
-                <key>WFItemType</key>
-                <integer>0</integer>
-                <key>WFKey</key>
-                <dict>
-                  <key>Value</key>
-                  <dict>
-                    <key>string</key>
-                    <string>household_id</string>
-                  </dict>
-                  <key>WFSerializationType</key>
-                  <string>WFTextTokenString</string>
-                </dict>
-                <key>WFValue</key>
-                <dict>
-                  <key>Value</key>
-                  <dict>
-                    <key>string</key>
-                    <string>8d0e9587-7554-44f7-a7e4-4c308c16dafa</string>
-                  </dict>
-                  <key>WFSerializationType</key>
-                  <string>WFTextTokenString</string>
-                </dict>
-              </dict>
-            </array>
-          </dict>
-          <key>WFSerializationType</key>
-          <string>WFDictionaryFieldValue</string>
-        </dict>
-      </dict>
-    </dict>
-    <dict>
-      <key>WFWorkflowActionIdentifier</key>
-      <string>is.workflow.actions.showresult</string>
-      <key>WFWorkflowActionParameters</key>
-      <dict>
-        <key>Text</key>
-        <dict>
-          <key>Value</key>
-          <dict>
-            <key>string</key>
-            <string>￼</string>
-            <key>attachmentsByRange</key>
-            <dict>
-              <key>{0, 1}</key>
-              <dict>
-                <key>OutputUUID</key>
-                <string>C1000000-0003-4000-8000-000000000003</string>
-                <key>OutputName</key>
-                <string>Inhoud van URL</string>
-                <key>Type</key>
-                <string>ActionOutput</string>
-              </dict>
-            </dict>
-          </dict>
-          <key>WFSerializationType</key>
-          <string>WFTextTokenString</string>
+          <string>WFTextTokenAttachment</string>
         </dict>
       </dict>
     </dict>

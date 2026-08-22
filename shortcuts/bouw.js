@@ -1,27 +1,22 @@
 // Genereert een .shortcut-bestand (plist) voor "Recept opslaan".
 //
-// De opdracht stuurt alleen de gedeelde link door; de Edge Function haalt het
-// bijschrift zelf op en laat Gemini het recept eruit halen. Eerdere versies
-// lieten de telefoon de pagina ophalen, omdat ik dacht dat Instagram servers
-// weerde. Dat bleek niet zo: het lag aan het User-Agent-kenmerk. Nu de server
-// het zelf kan, valt al dat gedoe op de telefoon weg.
+// De opdracht doet nog maar een ding: de app openen met de gedeelde link erin.
+// Al het echte werk gebeurt daar, en dat is te testen. Elke eerdere versie liet
+// Opdrachten zelf pagina's ophalen of JSON versturen, en juist daar liep het
+// telkens vast op dingen die je alleen op een toestel ziet.
 //
 // Twee dingen blijven nodig:
 // - Alleen WFURLContentItem als invoertype. Accepteert de opdracht ook tekst,
 //   dan levert het deelpaneel een RTF-item en breekt alles af met "kon
 //   RTF-tekst niet omzetten in URL".
-// - detect.link plus een Tekst-actie, zodat er een gewone tekenreeks in het
-//   JSON-veld belandt.
+// - detect.link plus een Tekst-actie, zodat er een gewone tekenreeks overblijft.
 const fs = require("fs");
 
-const HH   = "8d0e9587-7554-44f7-a7e4-4c308c16dafa";
-const FN   = "https://nejjocgplgbgmdornurw.supabase.co/functions/v1/ig-import";
-const ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5lampvY2dwbGdiZ21kb3JudXJ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM2MTk4MzEsImV4cCI6MjA5OTE5NTgzMX0.dJ_xMqV4Qp-1gZKifYJ-qTW6p9GhoMdfxlr_zIJx7Ko";
+const APP = "https://alfendirk-ctrl.github.io/weekmenu/";
 
 const U = {
-  ruw  : "C1000000-0001-4000-8000-000000000001",  // link uit het deelpaneel
-  link : "C1000000-0002-4000-8000-000000000002",  // die link als platte tekst
-  post : "C1000000-0003-4000-8000-000000000003",  // antwoord van de server
+  ruw  : "D1000000-0001-4000-8000-000000000001",  // link uit het deelpaneel
+  adres: "D1000000-0002-4000-8000-000000000002",  // het app-adres met de link erin
 };
 const OBJ = "￼";  // plaatshouder voor een variabele in een tekstveld
 
@@ -71,30 +66,17 @@ const acties = [
   { WFWorkflowActionIdentifier: "is.workflow.actions.detect.link",
     WFWorkflowActionParameters: { UUID: U.ruw, WFInput: losseVar(invoer()) } },
 
-  // 2. Als gewone tekenreeks, zodat hij schoon in het JSON-veld past
+  // 2. Plak hem achter het app-adres. De link houdt zijn eigen ?igsh=... ;
+  //    de app knipt op het eerste "ig=" en neemt de rest ongewijzigd over.
   { WFWorkflowActionIdentifier: "is.workflow.actions.gettext",
-    WFWorkflowActionParameters: { UUID: U.link, WFTextActionText: tekst([uit(U.ruw, "URL's")]) } },
-
-  // 3. Versturen. De server doet de rest.
-  { WFWorkflowActionIdentifier: "is.workflow.actions.downloadurl",
     WFWorkflowActionParameters: {
-      UUID: U.post,
-      WFHTTPMethod: "POST",
-      WFURL: tekst([FN]),
-      WFHTTPHeaders: woordenboek([
-        ["Authorization", "Bearer " + ANON],
-        ["Content-Type", "application/json"],
-      ]),
-      WFHTTPBodyType: "JSON",
-      WFJSONValues: woordenboek([
-        ["url", [uit(U.link, "Tekst")]],
-        ["household_id", HH],
-      ]),
+      UUID: U.adres,
+      WFTextActionText: tekst([APP + "?ig=", uit(U.ruw, "URL's")]),
     } },
 
-  // 4. Laat zien wat de server terugzegt
-  { WFWorkflowActionIdentifier: "is.workflow.actions.showresult",
-    WFWorkflowActionParameters: { Text: tekst([uit(U.post, "Inhoud van URL")]) } },
+  // 3. Openen. De app haalt het bijschrift op en toont het recept.
+  { WFWorkflowActionIdentifier: "is.workflow.actions.openurl",
+    WFWorkflowActionParameters: { WFInput: losseVar(uit(U.adres, "Tekst")) } },
 ];
 
 const wf = {

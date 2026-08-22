@@ -24,11 +24,18 @@ iCloud-link. Die link openen op de iPhone installeert hem wél.
 ## De keten
 
 1. **Haal URL's uit invoer** — vist de link uit wat het deelpaneel aanlevert
-2. **Tekst** — die link als gewone tekenreeks
-3. **Haal inhoud op van URL** — POST naar `ig-import` met `url` en `household_id`
-4. **Toon resultaat**
+2. **Tekst** — `https://alfendirk-ctrl.github.io/weekmenu/?ig=<link>`
+3. **Open URL's** — opent de app met die link
 
-De opdracht haalt zelf niets van Instagram: dat doet de Edge Function.
+Meer niet. De opdracht haalt niets op en verstuurt niets; de app doet het werk.
+Dat is bewust: alles wat in Opdrachten zelf gebeurt is alleen op een toestel te
+testen, en daar zijn vier eerdere versies op stukgelopen. Wat in de app gebeurt
+is wel te testen — zie `deel.js` in de scratchpad, dertien controles.
+
+De app leest de parameter in `gedeeldeLink()`: knippen op het eerste `ig=` en de
+rest ongewijzigd overnemen. De Instagram-link houdt namelijk zijn eigen
+`?igsh=...`, dus opnieuw parsen als query zou hem afkappen. Gecodeerd
+(`https%3A%2F%2F...`) mag ook.
 
 ## Wat er eerder misging
 
