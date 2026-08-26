@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Genereert het .shortcut-bestand voor "Recept naar app".
 
-Schrijft een *binair* plist, want dat is wat Opdrachten zelf uitgeeft; een
-XML-plist wordt niet overal geaccepteerd bij het importeren.
+Schrijft een *XML*-plist. Dat is wat `shortcuts sign` op de Mac accepteert;
+een binair plist gaf daar "The file couldn't be opened because it isn't in the
+correct format." Niet zelf omzetten naar binair dus.
 
 De opdracht doet een ding: de app openen met de gedeelde link erin. Al het
 echte werk gebeurt in de app en is daar getest (zie deel.js). Elke eerdere
@@ -98,5 +99,5 @@ WORKFLOW = {
 if __name__ == "__main__":
     pad = sys.argv[1]
     with open(pad, "wb") as f:
-        plistlib.dump(WORKFLOW, f, fmt=plistlib.FMT_BINARY)
+        plistlib.dump(WORKFLOW, f, fmt=plistlib.FMT_XML)
     print("geschreven:", pad)

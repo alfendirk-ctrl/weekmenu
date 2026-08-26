@@ -1,14 +1,14 @@
 # Recept opslaan — iOS Shortcut
 
-`weekmenu-deel-v7.shortcut` wordt gegenereerd door `bouw.py`:
+`weekmenu-deel-v8.shortcut` wordt gegenereerd door `bouw.py`:
 
 ```
-python3 bouw.py "weekmenu-deel-v8.shortcut"
+python3 bouw.py "weekmenu-deel-v9.shortcut"
 ```
 
-Het bestand is een **binair** plist, want dat is wat Opdrachten zelf uitgeeft.
-De eerdere generator schreef XML; dat is te lezen maar niet overal geaccepteerd
-bij het importeren.
+Het bestand is een **XML**-plist. Niet omzetten naar binair: `shortcuts sign`
+weigert dat met *"The file couldn't be opened because it isn't in the correct
+format."* — gemeten, niet aangenomen.
 
 **Geef elke versie een eigen bestandsnaam.** Bij een gelijke naam bewaart macOS
 de download als `naam-1`, `naam-2` en zo verder, terwijl `shortcuts sign` de
@@ -25,7 +25,7 @@ iOS weigert niet-ondertekende opdrachtbestanden ronduit — "Onbetrouwbare
 opdrachten toestaan" bestaat niet meer. Ondertekenen kan alleen op een Mac:
 
 ```
-shortcuts sign -m anyone -i "weekmenu-deel-v7.shortcut" -o "weekmenu-deel-v7-ondertekend.shortcut"
+shortcuts sign -m anyone -i "weekmenu-deel-v8.shortcut" -o "weekmenu-deel-v8-ondertekend.shortcut"
 ```
 
 Dubbelklik het resultaat, en deel het vanuit Opdrachten op de Mac als
