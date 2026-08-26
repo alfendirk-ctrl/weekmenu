@@ -1100,6 +1100,7 @@ function canvasColor(){
 // Eén set, één lijndikte, allemaal getekend. Emoji zijn geen icoonsysteem:
 // ze renderen per platform anders en dragen geen gewicht mee.
 const ICONS={
+  plakken:'<path d="M9 3.5h6a1 1 0 0 1 1 1v1.6H8V4.5a1 1 0 0 1 1-1Z"/><path d="M16 5.4h2.2A1.8 1.8 0 0 1 20 7.2v12A1.8 1.8 0 0 1 18.2 21H5.8A1.8 1.8 0 0 1 4 19.2v-12a1.8 1.8 0 0 1 1.8-1.8H8"/><path d="M8.5 12.5h7M8.5 16h4.5"/>',
   ontbijt:'<path d="M3 11h18a9 9 0 0 1-18 0Z"/><path d="M9 7.2c0-1 1-1.4 1-2.3S9 3.2 9 3.2M13.5 7.2c0-1 1-1.4 1-2.3s-1-1.7-1-1.7"/>',
   lunch:'<path d="M3 8.5 12 4l9 4.5-9 4.5Z"/><path d="M3 12.5 12 17l9-4.5"/><path d="M3 16.5 12 21l9-4.5"/>',
   diner:'<path d="M6 3v6a2 2 0 0 0 4 0V3"/><path d="M8 11v10"/><path d="M17 3c1.7 1.8 2.5 4.2 2.5 6.6H17V21"/>',
@@ -1707,6 +1708,27 @@ async function igFetchCaption(rawUrl){
     return d.caption.length>=20?d.caption:null;
   }catch(e){return null;}
 }
+// Instagram → Kopieer link → hier plakken. Dit is de route die het zonder
+// Opdrachten doet: Safari mag het klembord alleen op een gebruikersgebaar lezen,
+// dus dit hangt aan een knop en niet aan het opstarten.
+async function plakLink(){
+  let tekst="";
+  try{
+    tekst=await navigator.clipboard.readText();
+  }catch(e){
+    set({addOpen:true,addTab:"ig",
+      igErr:"Kon het klembord niet lezen. Plak de link met de hand in het veld hieronder."});
+    return;
+  }
+  const m=String(tekst||"").match(/https?:\/\/(?:www\.)?instagram\.com\/\S+/i);
+  if(!m){
+    set({igErr:"Geen Instagram-link op het klembord. Tik in Instagram op \u00b7\u00b7\u00b7 \u2192 Kopieer link."});
+    return;
+  }
+  set({igUrl:m[0],igErr:"",igSt:null,igFetchSt:null,igPrev:null,igCap:""});
+  await importFromUrl();
+}
+
 // Gedeeld vanuit Instagram: de Shortcut opent de app als
 // ...?ig=<instagram-link>. De link houdt zijn eigen ?igsh=... , dus we knippen
 // op het eerste voorkomen en nemen de rest ongewijzigd over — geen decodering
@@ -2802,8 +2824,10 @@ function renderAddSheet(){
           <label>Google Gemini API key ${S.geminiKey?`<span style="color:var(--ok)">opgeslagen</span>`:""} <a href="https://aistudio.google.com/apikey" target="_blank" style="color:var(--ink-3);font-size:11px;font-family:var(--num)">gratis ophalen</a></label>
           <input id="ig-key" type="password" value="${esc(S.geminiKey)}" placeholder="AIzaSy..." oninput="S.geminiKey=this.value;lsSet(GK,this.value)">
         </div>
+        <button class="btn btn-primary" onclick="plakLink()" style="width:100%;margin-bottom:var(--s-3)" ${S.igFetchSt==="loading"||S.igSt==="loading"?"disabled":""}>${ic("plakken",17)} Plak gekopieerde link</button>
+        <p style="margin:0 0 var(--s-4);font-size:var(--t-sm);color:var(--ink-3)">Tik in Instagram op ··· → Kopieer link, kom hier terug en druk op de knop.</p>
         <div class="field">
-          <label>Instagram link</label>
+          <label>Of plak de link zelf</label>
           <input id="ig-url" value="${esc(S.igUrl)}" placeholder="https://www.instagram.com/p/..." oninput="S.igUrl=this.value">
         </div>
         ${(()=>{
@@ -3522,7 +3546,7 @@ window.onDayNote=onDayNote;
 window.toggleCheck=toggleCheck;
 window.openBoodDetail=openBoodDetail; window.closeBoodDetail=closeBoodDetail;
 window.saveBoodOverride=saveBoodOverride; window.deleteBoodOverride=deleteBoodOverride;
-window.fetchCaption=fetchCaption; window.importFromUrl=importFromUrl; window.gedeeldeLink=gedeeldeLink; window.verwerkGedeeld=verwerkGedeeld; window.doImport=doImport; window.addPhotos=addPhotos; window.removePhoto=removePhoto; window.doPhotoImport=doPhotoImport; window.saveIgRecipe=saveIgRecipe; window.saveForm=saveForm; window.setFormVoor=setFormVoor;
+window.fetchCaption=fetchCaption; window.importFromUrl=importFromUrl; window.gedeeldeLink=gedeeldeLink; window.plakLink=plakLink; window.verwerkGedeeld=verwerkGedeeld; window.doImport=doImport; window.addPhotos=addPhotos; window.removePhoto=removePhoto; window.doPhotoImport=doPhotoImport; window.saveIgRecipe=saveIgRecipe; window.saveForm=saveForm; window.setFormVoor=setFormVoor;
 window.deleteCustomRecipe=deleteCustomRecipe; window.openEdit=openEdit;
 window.exportImg=exportImg; window.exportWeekImg=exportWeekImg;
 window.pullInbox=pullInbox; window.syncPush=syncPush; window.syncPull=syncPull; window.joinHousehold=joinHousehold;
