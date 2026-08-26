@@ -1722,10 +1722,13 @@ async function plakLink(){
   }
   const m=String(tekst||"").match(/https?:\/\/(?:www\.)?instagram\.com\/\S+/i);
   if(!m){
-    set({igErr:"Geen Instagram-link op het klembord. Tik in Instagram op \u00b7\u00b7\u00b7 \u2192 Kopieer link."});
+    toast("Geen Instagram-link op het klembord");
+    set({view:"recepten",addOpen:true,addTab:"ig",
+      igErr:"Geen Instagram-link op het klembord. Tik in Instagram op \u00b7\u00b7\u00b7 \u2192 Kopieer link."});
     return;
   }
-  set({igUrl:m[0],igErr:"",igSt:null,igFetchSt:null,igPrev:null,igCap:""});
+  set({view:"recepten",addOpen:true,addTab:"ig",
+    igUrl:m[0],igErr:"",igSt:null,igFetchSt:null,igPrev:null,igCap:""});
   await importFromUrl();
 }
 
@@ -2271,6 +2274,7 @@ function renderPlanner(){
         <span class="weeknav-label">week ${W.wk} · ${W.range}${off===0?" · nu":off===1?" · volgende":off===-1?" · vorige":""}</span>
         <button class="iconbtn" onclick="switchWeek(${off+1})" aria-label="Volgende week">${ic("volgende",18)}</button>
         <span style="flex:1"></span>
+        <button class="iconbtn" onclick="plakLink()" title="Recept van een gekopieerde Instagram-link" aria-label="Recept van een gekopieerde link">${ic("plakken",18)}</button>
         <button class="iconbtn" onclick="cycleTheme()" title="Thema: ${THEMES.find(t=>t[0]===curTheme())[1]}" aria-label="Thema wisselen">${ic(curTheme()==="dark"?"maan":"thema",18)}</button>
         <button class="iconbtn" onclick="set({syncOpen:true})" title="Synchronisatie"
           aria-label="Synchronisatie" style="${S.syncSt==='ok'?'color:var(--ok)':S.syncSt==='err'?'color:var(--err)':''}">

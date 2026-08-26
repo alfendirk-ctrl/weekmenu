@@ -113,7 +113,7 @@ Measured over 8 consecutive weeks (before the mealprep slot was dropped): ~93 un
 
 `igFetchCaption` haalt het bijschrift **niet** meer zelf op. De browser mag Instagram niet aanroepen (CORS) en de publieke CORS-proxy's waar dit op leunde zijn dood — gemeten met `ig-probe`: 403, 429 of 522. In plaats daarvan roept de app de Edge Function `ig-import` aan met `{url, household_id, alleen_bijschrift:true}`, die het bijschrift teruggeeft zonder iets op te slaan. Het extraheren tot een recept blijft in de browser, met de key van de gebruiker.
 
-Naast het linkveld staat **Plak gekopieerde link** (`plakLink`): die leest het klembord en importeert in één tik. Dat is de route die het zonder Opdrachten doet — Instagram → Kopieer link → knop. Safari mag het klembord alleen op een gebruikersgebaar lezen, dus dit hangt aan een knop en niet aan het opstarten. `verwerkGedeeld()` doet hetzelfde vanaf `?ig=<link>` in het adres, voor wie het wél via een Shortcut wil.
+`plakLink` leest het klembord en importeert in één tik: er staat een knopje voor in de kop van de planner (het plak-icoon, naast thema en wolk) en een knop bovenaan het Instagram-tabblad. Dat is de route die het zonder Opdrachten doet — Instagram → Kopieer link → knop. Safari mag het klembord alleen op een gebruikersgebaar lezen, dus dit hangt aan een knop en niet aan het opstarten. `verwerkGedeeld()` doet hetzelfde vanaf `?ig=<link>` in het adres, voor wie het wél via een Shortcut wil.
 
 De functie haalt het bijschrift rechtstreeks bij Instagram op. Dat werkt alleen met een **iPhone-Safari-User-Agent**; met desktop-Chrome komt er een pagina zonder bijschrift terug. Dat is geen detail maar de hele crux — verander die constante niet zonder `ig-probe` opnieuw te draaien.
 
