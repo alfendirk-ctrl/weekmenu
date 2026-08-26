@@ -1,10 +1,16 @@
 # Recept opslaan — iOS Shortcut
 
-`Recept opslaan.shortcut` wordt gegenereerd door `bouw.js`:
+`weekmenu-deel-v6.shortcut` wordt gegenereerd door `bouw.js`:
 
 ```
-node bouw.js "Recept opslaan.shortcut"
+node bouw.js "weekmenu-deel-v7.shortcut"
 ```
+
+**Geef elke versie een eigen bestandsnaam.** Bij een gelijke naam bewaart macOS
+de download als `naam-1`, `naam-2` en zo verder, terwijl `shortcuts sign` de
+oorspronkelijke naam blijft ondertekenen. Dan installeer je keer op keer de
+eerste versie en lijkt elke fix mislukt. Dat is precies wat hier vijf rondes
+lang gebeurde.
 
 Pas in `bouw.js` de constanten `HH`, `FN` en `ANON` aan als het huishouden of
 het project verandert.
@@ -15,7 +21,7 @@ iOS weigert niet-ondertekende opdrachtbestanden ronduit — "Onbetrouwbare
 opdrachten toestaan" bestaat niet meer. Ondertekenen kan alleen op een Mac:
 
 ```
-shortcuts sign -m anyone -i "Recept opslaan.shortcut" -o "Recept opslaan 2.shortcut"
+shortcuts sign -m anyone -i "weekmenu-deel-v6.shortcut" -o "weekmenu-deel-v6-ondertekend.shortcut"
 ```
 
 Dubbelklik het resultaat, en deel het vanuit Opdrachten op de Mac als
