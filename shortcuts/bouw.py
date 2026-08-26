@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
-"""Genereert het .shortcut-bestand voor "Recept naar app".
+"""Genereert het .shortcut-bestand voor "Recept opslaan".
 
-Schrijft een *XML*-plist. Dat is wat `shortcuts sign` op de Mac accepteert;
-een binair plist gaf daar "The file couldn't be opened because it isn't in the
-correct format." Niet zelf omzetten naar binair dus.
+Twee regels die hier duur zijn geleerd:
 
-De opdracht doet een ding: de app openen met de gedeelde link erin. Al het
-echte werk gebeurt in de app en is daar getest (zie deel.js). Elke eerdere
-versie liet Opdrachten zelf pagina's ophalen of JSON versturen, en juist dat
-is alleen op een toestel te controleren.
+1. XML, niet binair. `shortcuts sign` weigert een binair plist met
+   "The file couldn't be opened because it isn't in the correct format."
 
-Twee dingen blijven nodig:
-- Alleen WFURLContentItem als invoertype. Accepteert de opdracht ook tekst, dan
-  levert het deelpaneel een RTF-item en breekt alles af met "kon RTF-tekst niet
-  omzetten in URL".
-- detect.link plus een Tekst-actie, zodat er een gewone tekenreeks overblijft.
+2. Alleen acties die aantoonbaar door de ondertekening komen. Versies met
+   `is.workflow.actions.detect.link` en `is.workflow.actions.openurl` gaven
+   diezelfde format-fout; met de vier hieronder lukte het ondertekenen wel.
+   `shortcuts sign` leest het plist namelijk in als workflow, en een identifier
+   die hij niet kent laat het hele bestand afketsen.
+
+De opdracht stuurt de gedeelde link naar de Edge Function, die het bijschrift
+ophaalt en Gemini er een recept van laat maken. Het resultaat komt in
+recipe_inbox; de app pikt het op bij "Ophalen".
 
 Geef elke nieuwe versie een eigen bestandsnaam: bij een gelijke naam bewaart
 macOS de download als "naam-1" en blijft `shortcuts sign` de oude ondertekenen.
@@ -22,12 +22,16 @@ macOS de download als "naam-1" en blijft `shortcuts sign` de oude ondertekenen.
 import plistlib
 import sys
 
-APP = "https://alfendirk-ctrl.github.io/weekmenu/"
+HH   = "8d0e9587-7554-44f7-a7e4-4c308c16dafa"
+FN   = "https://nejjocgplgbgmdornurw.supabase.co/functions/v1/ig-import"
+ANON = ("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5"
+        "lampvY2dwbGdiZ21kb3JudXJ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM2MTk4MzEsImV"
+        "4cCI6MjA5OTE5NTgzMX0.dJ_xMqV4Qp-1gZKifYJ-qTW6p9GhoMdfxlr_zIJx7Ko")
+
 OBJ = "￼"  # plaatshouder voor een variabele in een tekstveld
 
-U_LINK  = "D1000000-0001-4000-8000-000000000001"
-U_ADRES = "D1000000-0002-4000-8000-000000000002"
-U_OPEN  = "D1000000-0003-4000-8000-000000000003"
+U_LINK = "E1000000-0001-4000-8000-000000000001"
+U_POST = "E1000000-0002-4000-8000-000000000002"
 
 
 def uit(uuid, naam):
@@ -39,7 +43,6 @@ def losse_var(ref):
 
 
 def tekst(delen):
-    """Tekstveld dat uit letterlijke tekst en variabelen bestaat."""
     s, att = "", {}
     for d in delen:
         if isinstance(d, str):
@@ -53,28 +56,46 @@ def tekst(delen):
     return {"Value": waarde, "WFSerializationType": "WFTextTokenString"}
 
 
+def woordenboek(paren):
+    return {
+        "Value": {"WFDictionaryFieldValueItems": [
+            {"WFItemType": 0,
+             "WFKey": tekst([k]),
+             "WFValue": tekst([v]) if isinstance(v, str) else tekst(v)}
+            for k, v in paren
+        ]},
+        "WFSerializationType": "WFDictionaryFieldValue",
+    }
+
+
 ACTIES = [
-    # 1. Vis de link uit wat het deelpaneel aanlevert
-    {"WFWorkflowActionIdentifier": "is.workflow.actions.detect.link",
+    # 1. De gedeelde link als platte tekst
+    {"WFWorkflowActionIdentifier": "is.workflow.actions.detect.text",
      "WFWorkflowActionParameters": {
          "UUID": U_LINK,
          "WFInput": losse_var({"Type": "ExtensionInput"}),
      }},
 
-    # 2. Plak hem achter het app-adres. De link houdt zijn eigen ?igsh=... ;
-    #    de app knipt op het eerste "ig=" en neemt de rest ongewijzigd over.
-    {"WFWorkflowActionIdentifier": "is.workflow.actions.gettext",
+    # 2. Naar de server. Die haalt het bijschrift op en maakt er een recept van.
+    {"WFWorkflowActionIdentifier": "is.workflow.actions.downloadurl",
      "WFWorkflowActionParameters": {
-         "UUID": U_ADRES,
-         "WFTextActionText": tekst([APP + "?ig=", uit(U_LINK, "URL's")]),
+         "UUID": U_POST,
+         "WFHTTPMethod": "POST",
+         "WFURL": tekst([FN]),
+         "WFHTTPHeaders": woordenboek([
+             ("Authorization", "Bearer " + ANON),
+             ("Content-Type", "application/json"),
+         ]),
+         "WFHTTPBodyType": "JSON",
+         "WFJSONValues": woordenboek([
+             ("url", [uit(U_LINK, "Tekst")]),
+             ("household_id", HH),
+         ]),
      }},
 
-    # 3. Openen. De app haalt het bijschrift op en toont het recept.
-    {"WFWorkflowActionIdentifier": "is.workflow.actions.openurl",
-     "WFWorkflowActionParameters": {
-         "UUID": U_OPEN,
-         "WFInput": losse_var(uit(U_ADRES, "Tekst")),
-     }},
+    # 3. Laat zien wat de server terugzegt
+    {"WFWorkflowActionIdentifier": "is.workflow.actions.showresult",
+     "WFWorkflowActionParameters": {"Text": tekst([uit(U_POST, "Inhoud van URL")])}},
 ]
 
 WORKFLOW = {
@@ -88,8 +109,9 @@ WORKFLOW = {
         "WFWorkflowIconStartColor": 4274264319,
     },
     "WFWorkflowImportQuestions": [],
-    # Alleen URL's: dan levert het deelpaneel een URL aan in plaats van RTF
-    "WFWorkflowInputContentItemClasses": ["WFURLContentItem"],
+    "WFWorkflowInputContentItemClasses": [
+        "WFURLContentItem", "WFStringContentItem", "WFSafariWebPageContentItem",
+    ],
     "WFWorkflowMinimumClientVersion": 900,
     "WFWorkflowMinimumClientVersionString": "900",
     "WFWorkflowOutputContentItemClasses": [],

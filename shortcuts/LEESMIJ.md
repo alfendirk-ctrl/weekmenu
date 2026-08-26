@@ -1,14 +1,19 @@
 # Recept opslaan — iOS Shortcut
 
-`weekmenu-deel-v8.shortcut` wordt gegenereerd door `bouw.py`:
+`weekmenu-deel-v9.shortcut` wordt gegenereerd door `bouw.py`:
 
 ```
-python3 bouw.py "weekmenu-deel-v9.shortcut"
+python3 bouw.py "weekmenu-deel-v10.shortcut"
 ```
 
-Het bestand is een **XML**-plist. Niet omzetten naar binair: `shortcuts sign`
-weigert dat met *"The file couldn't be opened because it isn't in the correct
-format."* — gemeten, niet aangenomen.
+Twee regels waar `shortcuts sign` op afketst, allebei met dezelfde nietszeggende
+melding *"The file couldn't be opened because it isn't in the correct format."*:
+
+- **XML, niet binair.** Een binair plist wordt geweigerd.
+- **Alleen bekende acties.** `shortcuts sign` leest het plist in als workflow;
+  een identifier die het niet kent laat het hele bestand afketsen. Bewezen te
+  werken: `detect.text`, `text.replace`, `downloadurl`, `showresult`,
+  `getclipboard`. Afgeketst: `detect.link`, `openurl`.
 
 **Geef elke versie een eigen bestandsnaam.** Bij een gelijke naam bewaart macOS
 de download als `naam-1`, `naam-2` en zo verder, terwijl `shortcuts sign` de
@@ -33,19 +38,18 @@ iCloud-link. Die link openen op de iPhone installeert hem wél.
 
 ## De keten
 
-1. **Haal URL's uit invoer** — vist de link uit wat het deelpaneel aanlevert
-2. **Tekst** — `https://alfendirk-ctrl.github.io/weekmenu/?ig=<link>`
-3. **Open URL's** — opent de app met die link
+1. **Haal tekst op uit** — de gedeelde link als platte tekst
+2. **Haal inhoud op van URL** — POST naar `ig-import` met `url` en `household_id`
+3. **Toon resultaat**
 
-Meer niet. De opdracht haalt niets op en verstuurt niets; de app doet het werk.
-Dat is bewust: alles wat in Opdrachten zelf gebeurt is alleen op een toestel te
-testen, en daar zijn vier eerdere versies op stukgelopen. Wat in de app gebeurt
-is wel te testen — zie `deel.js` in de scratchpad, dertien controles.
+De opdracht haalt zelf niets bij Instagram op; dat doet de Edge Function. Het
+resultaat komt in `recipe_inbox` en de app pikt het op bij **Ophalen**.
 
-De app leest de parameter in `gedeeldeLink()`: knippen op het eerste `ig=` en de
-rest ongewijzigd overnemen. De Instagram-link houdt namelijk zijn eigen
-`?igsh=...`, dus opnieuw parsen als query zou hem afkappen. Gecodeerd
-(`https%3A%2F%2F...`) mag ook.
+De app kan ook een gedeelde link rechtstreeks verwerken, via
+`?ig=<instagram-link>` — zie `gedeeldeLink()` in `index.html`. Dat pad is getest
+(`deel.js`, dertien controles) en is de betere gebruikerservaring, maar het
+vraagt de actie `openurl` in de opdracht en juist die komt niet door
+`shortcuts sign`.
 
 ## Wat er eerder misging
 
