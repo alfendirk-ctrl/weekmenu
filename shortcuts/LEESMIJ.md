@@ -1,28 +1,30 @@
 # Recept opslaan — iOS Shortcut
 
-`weekmenu-deel-v9.shortcut` wordt gegenereerd door `bouw.py`:
+`weekmenu-deel-v10.shortcut` wordt gegenereerd door `bouw.js`:
 
 ```
-python3 bouw.py "weekmenu-deel-v10.shortcut"
+node bouw.js "weekmenu-deel-v11.shortcut"
 ```
 
-Twee regels waar `shortcuts sign` op afketst, allebei met dezelfde nietszeggende
-melding *"The file couldn't be opened because it isn't in the correct format."*:
+De generator schrijft de XML zelf. Dat is geen eigenwijsheid: de tussentijdse
+variant met Python's `plistlib` leverde een bestand op dat Opdrachten op de Mac
+niet meer wilde openen — tabs in plaats van spaties, en sleutels alfabetisch
+gesorteerd in plaats van in de volgorde die Opdrachten aanhoudt. Wijk daar niet
+van af; alles buiten het actieblok is byte voor byte gelijk aan een bestand dat
+aantoonbaar geopend werd.
 
-- **XML, niet binair.** Een binair plist wordt geweigerd.
-- **Alleen bekende acties.** `shortcuts sign` leest het plist in als workflow;
-  een identifier die het niet kent laat het hele bestand afketsen. Bewezen te
-  werken: `detect.text`, `text.replace`, `downloadurl`, `showresult`,
-  `getclipboard`. Afgeketst: `detect.link`, `openurl`.
+Drie dingen die `shortcuts sign` afketsen, alle drie met dezelfde nietszeggende
+melding *"The file couldn't be opened because it isn't in the correct format"*:
 
-**Geef elke versie een eigen bestandsnaam.** Bij een gelijke naam bewaart macOS
-de download als `naam-1`, `naam-2` en zo verder, terwijl `shortcuts sign` de
-oorspronkelijke naam blijft ondertekenen. Dan installeer je keer op keer de
-eerste versie en lijkt elke fix mislukt. Dat is precies wat hier vijf rondes
-lang gebeurde.
+- een **binair** plist (XML wel)
+- de opmaak van `plistlib` (tabs, gesorteerde sleutels)
+- een **onbekende actie-identifier** — het plist wordt als workflow ingelezen, en
+  dan ketst het hele bestand af. Bewezen te werken: `detect.text`,
+  `text.replace`, `downloadurl`, `showresult`, `getclipboard`. Afgeketst:
+  `detect.link`, `openurl`.
 
-Pas in `bouw.js` de constanten `HH`, `FN` en `ANON` aan als het huishouden of
-het project verandert.
+Geef elke nieuwe versie een eigen bestandsnaam: bij een gelijke naam bewaart
+macOS de download als `naam-1` en tekent `shortcuts sign` de oude.
 
 ## Installeren
 
@@ -30,7 +32,7 @@ iOS weigert niet-ondertekende opdrachtbestanden ronduit — "Onbetrouwbare
 opdrachten toestaan" bestaat niet meer. Ondertekenen kan alleen op een Mac:
 
 ```
-shortcuts sign -m anyone -i "weekmenu-deel-v8.shortcut" -o "weekmenu-deel-v8-ondertekend.shortcut"
+shortcuts sign -m anyone -i "weekmenu-deel-v10.shortcut" -o "v10-ondertekend.shortcut"
 ```
 
 Dubbelklik het resultaat, en deel het vanuit Opdrachten op de Mac als
