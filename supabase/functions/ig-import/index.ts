@@ -105,12 +105,17 @@ function extractCap(body: string): string | null {
     const c = stripPrefix(decode(om[1]));
     if (c.length > 5) return c;
   }
-  // 6. JSON van een spiegeldienst, bijvoorbeeld microlink
+  // 6. JSON van een spiegeldienst, bijvoorbeeld microlink. Levert die niets
+  //    bruikbaars, dan stopt het hier: de JSON zelf is geen bijschrift, en
+  //    strategie 7 zou hem anders als platte tekst doorgeven.
+  let isJson = false;
   try {
     const d = JSON.parse(body);
+    isJson = true;
     const c = d?.data?.description ?? d?.description;
     if (typeof c === "string" && c.length > 20) return stripPrefix(decode(c));
   } catch { /* geen JSON, volgende strategie */ }
+  if (isJson) return null;
   // 7. Platte tekst — een leesproxy levert markdown terug, geen HTML
   if (!/<html|<meta|<script/i.test(body)) {
     let t = body;
@@ -157,7 +162,9 @@ async function fetchCaption(rawUrl: string): Promise<string | null> {
     if (!r.ok) throw new Error("http " + r.status);
     const body = json ? ((await r.json())?.contents ?? "") : await r.text();
     const cap = extractCap(body);
-    if (!cap || cap.length < 20) throw new Error("geen bijschrift");
+    // 60 in plaats van 20: een accountnaam of een titel haalt die drempel niet,
+    // en anders wint een snelle maar lege spiegeldienst de race van de echte.
+    if (!cap || cap.length < 60) throw new Error("geen bruikbaar bijschrift");
     return cap;
   };
 

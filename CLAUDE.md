@@ -117,6 +117,8 @@ Measured over 8 consecutive weeks (before the mealprep slot was dropped): ~93 un
 
 De functie haalt het bijschrift rechtstreeks bij Instagram op. Dat werkt alleen met een **iPhone-Safari-User-Agent**; met desktop-Chrome komt er een pagina zonder bijschrift terug. Dat is geen detail maar de hele crux — verander die constante niet zonder `ig-probe` opnieuw te draaien.
 
+Microlink staat ernaast als vangnet, en alle routes lopen parallel: het eerste bruikbare bijschrift wint. Twee dingen bewaken die race. `extractCap` geeft `null` zodra het antwoord JSON blijkt en er geen bruikbare `description` in staat — anders viel die JSON door naar de platte-tekst-tak en werd het hele blok als bijschrift doorgegeven. En een kandidaat telt pas mee vanaf **60 tekens**: een accountnaam of paginatitel haalt die drempel niet, zodat een snelle maar lege spiegeldienst de echte route niet aftroeft.
+
 ### CSS design tokens
 
 All colors are OKLCH custom properties on `:root`. Roles, not names: `--canvas`/`--surface`/`--surface-2`/`--surface-3`, `--line`/`--line-2`, `--ink`/`--ink-2`/`--ink-3`, one `--accent` (+`-hover`/`-on`/`-soft`/`-line`), semantics `--ok`/`--warn`/`--err`, and the three people as *data* hues `--p-shelley`/`--p-dirk`/`--p-maeve`. Type scale `--t-2xs … --t-3xl` (fixed rem, ratio ~1.2), spacing `--s-1 … --s-10`, radii `--r-*`. Never hardcode a hex.
