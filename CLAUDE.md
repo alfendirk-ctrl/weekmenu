@@ -36,7 +36,7 @@ Everything lives in `index.html`. The structure within the `<script>` block:
 | `KOOKMODUS` | `openCook`/`closeCook`, `cookGo`, `stepSeconds`, `cookStartTimer`, `renderCookMode` |
 | `PORTIES` | `basisPorties`, `rcPorties`/`setRcPorties`, `slotEters`/`slotPorties`/`setSlotPorties`, `scaleAmt` |
 | `RONDLEIDING` | `TOUR` (12 steps), `tourStart`, `tourGa`, `tourKlaar`, `tourOverslaan`, `tourMarkeer`, `renderTour` |
-| `RENDER` | `render()` + per-view/modal render functions (`renderPlanner`, `renderRecepten`, `renderSnacks`, `renderBoodschappen`, `renderPicker`, `renderDetail`, `renderLeftoverPick`, `renderAddSheet`, `renderWizard`) |
+| `RENDER` | `render()` + per-view/modal render functions (`renderPlanner`, `renderRecepten`, `renderLossePagina` → `renderSnacks`/`renderMealpreps`, `renderBoodschappen`, `renderPicker`, `renderDetail`, `renderLeftoverPick`, `renderAddSheet`, `renderWizard`) |
 
 ### State management pattern
 
@@ -51,7 +51,7 @@ function set(patch) { Object.assign(S, patch); save(); render(); }
 function render() { document.getElementById("app").innerHTML = `...`; }
 ```
 
-Because `render()` throws away the DOM, a focused field would lose its text mid-typing. `render()` therefore snapshots the focused `INPUT`/`TEXTAREA` (`veldSelector` → `#id` or first class, plus value and selection range) and restores value, focus and caret afterwards. **Any field the user types in needs a stable `id`** — `#snack-weekend`, `#dagnotitie`, `#zoek-recepten`, `#zoek-snacks`, `#zoek-slot`, `#zoek-vaste`, `#zoek-wissel` — otherwise the selector matches the wrong element after a rerender. For the same reason `syncPush` never calls `render()`; it repaints the one sync button through `syncStatus()`.
+Because `render()` throws away the DOM, a focused field would lose its text mid-typing. `render()` therefore snapshots the focused `INPUT`/`TEXTAREA` (`veldSelector` → `#id` or first class, plus value and selection range) and restores value, focus and caret afterwards. **Any field the user types in needs a stable `id`** — `#snack-weekend`, `#dagnotitie`, `#zoek-recepten`, `#zoek-weekendsnack`, `#zoek-mealprep`, `#zoek-slot`, `#zoek-vaste`, `#zoek-wissel` — otherwise the selector matches the wrong element after a rerender. For the same reason `syncPush` never calls `render()`; it repaints the one sync button through `syncStatus()`.
 
 ### Data model
 
@@ -72,6 +72,14 @@ Two different numbers, and mixing them up is the bug this model exists to preven
 - **How many people are eating this slot** — `slotPorties(day,rowId)`: `rc.porties` stored on the slot itself if set, otherwise `slotEters(day,rowId)` — 3 for dinner, 1 for an `apart:true` row or Shelley's own row on a separate-eating day, otherwise household minus one. `setSlotPorties` writes it onto the slot, so the same recipe can be cooked for two on Tuesday and six on Saturday.
 
 `scaleAmt(amt, van, naar)` multiplies the first number it finds in an amount string by `naar/van` and rounds to one decimal; it returns the string untouched when there is no number or the factor is ~1. The old fixed `HH = 3` is gone — `basisPorties()` reads `S.cfg.huishouden` and falls back to `HH_DEFAULT = 3`. The shopping list and recipe detail both scale through this pair, never through a constant.
+
+### Losse categorieën — snacks en mealpreps
+
+`LOSSE_CATS = ["weekendsnack","mealprep"]`, getoetst met `losseCat(c)`. Dit zijn recepten die bij geen enkel maaltijdslot horen: ze krijgen een eigen tab en blijven daardoor **vanzelf** buiten de receptenkast, de slotkiezer, de generator en de boodschappenlijst. Er is geen apart uitsluitingssysteem — twee filters doen het werk: `ALL().filter(rc=>!losseCat(rc.category))` in `renderRecepten` en `if(losseCat(rc.category))return false;` in `genPool`. Een derde categorie toevoegen is die array uitbreiden plus een regel in `LOSSE_PAGINA`.
+
+Beide pagina's zijn dezelfde functie: `renderLossePagina(cat)`, gestuurd door `LOSSE_PAGINA[cat]` (titel, uitleg, placeholders, en de `S`-sleutel waar de zoekterm in staat — `snackSearch` / `prepSearch`). Het zoekveld heet `#zoek-<cat>`.
+
+Bij een import kies je in de preview de **bestemming** ("Waar komt het te staan": Recepten / Snacks / Mealpreps) los van het maaltijdtype. Dat gaat via `setImportWaar`, dat net als `setFormVoor` **niet** door `render()` loopt: een rerender zou de correcties wissen die je net in de naam- en ingrediëntenvelden hebt getypt. Het maaltijdveld wordt daarom verborgen, niet weggehaald — flip je terug naar Recepten, dan staat je keuze er nog. `saveCustomRecipe` springt na het opslaan naar `snacks` of `mealpreps`, anders lijkt het toegevoegde recept verdwenen.
 
 ### Onboarding tour
 
@@ -161,7 +169,7 @@ Built-in recipes use the `r()` factory. To add a new one, append to the `RECIPES
 ```js
 r(id, ebook, "Name", "category", "time", [i("ingredient","amount"), ...], ["step 1", ...], servings, "voor")
 ```
-- `category`: `"ontbijt"` | `"lunch"` | `"diner"` | `"tussendoortje"` | `"weekendsnack"` (die laatste heeft een eigen tab en loopt niet mee in het weekmenu of de boodschappenlijst)
+- `category`: `"ontbijt"` | `"lunch"` | `"diner"` | `"tussendoortje"` | `"weekendsnack"` | `"mealprep"` (die laatste twee staan in `LOSSE_CATS` — zie hieronder)
 - `voor`: `"dirk"` | `"shelley"` | `"beiden"`
 - `ebook`: 1–7 for existing ebooks, `0` for custom recipes
 - `id`: must be unique across the array

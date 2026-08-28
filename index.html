@@ -585,8 +585,13 @@ const DAYS = ["ma","di","wo","do","vr","za","zo"];
 const WEEKEND = ["vr","za","zo"];  // avondsnack is een weekend-ding
 const DAY_FULL = {ma:"maandag",di:"dinsdag",wo:"woensdag",do:"donderdag",vr:"vrijdag",za:"zaterdag",zo:"zondag"};
 const DAY_NUM = {ma:9,di:10,wo:11,do:12,vr:13,za:14,zo:15}; // wordt dynamisch berekend
-const CATS = ["ontbijt","lunch","diner","tussendoortje","weekendsnack"];
-const CL = {ontbijt:"Ontbijt",lunch:"Lunch",diner:"Diner",tussendoortje:"Tussendoortje",weekendsnack:"Weekendsnack"};
+const CATS = ["ontbijt","lunch","diner","tussendoortje","weekendsnack","mealprep"];
+// Categorieen die bij geen enkel maaltijdslot horen: ze staan in hun eigen tab
+// en blijven daardoor vanzelf buiten de receptenkast, de kiezer, de generator
+// en de boodschappenlijst. Daar is geen apart uitsluitingssysteem voor nodig.
+const LOSSE_CATS = ["weekendsnack","mealprep"];
+const losseCat = c => LOSSE_CATS.includes(c);
+const CL = {ontbijt:"Ontbijt",lunch:"Lunch",diner:"Diner",tussendoortje:"Tussendoortje",weekendsnack:"Weekendsnack",mealprep:"Mealprep"};
 
 // People
 const PEOPLE = {
@@ -921,7 +926,7 @@ let S={
   formVoor:"beiden",
   boodDetail: null,
   boodOverride: lsGet(BOK,{}),
-  snackSearch:"", addCat:null,
+  snackSearch:"", prepSearch:"", addCat:null,
   avondSnack: lsGet(SAK,{}),
   ratings: lsGet(RTK,{}),   // rcId -> {shelley:1|-1, dirk:1|-1, maeve:1|-1}
   rcServings: lsGet(SRV,{}), // rcId -> voor hoeveel personen het recept écht is
@@ -1102,6 +1107,7 @@ function canvasColor(){
 // Eén set, één lijndikte, allemaal getekend. Emoji zijn geen icoonsysteem:
 // ze renderen per platform anders en dragen geen gewicht mee.
 const ICONS={
+  mealprep:'<path d="M4 9.2h7.6v4.2H4Z"/><path d="M4.6 6.4h6.4a.6.6 0 0 1 .6.6v2.2H4V7a.6.6 0 0 1 .6-.6Z"/><path d="M12.4 15.6H20v4.2h-7.6Z"/><path d="M13 12.8h6.4a.6.6 0 0 1 .6.6v2.2h-7.6v-2.2a.6.6 0 0 1 .6-.6Z"/><path d="M15.6 3.4h4.2M17.7 3.4v5.2"/>',
   plakken:'<path d="M9 3.5h6a1 1 0 0 1 1 1v1.6H8V4.5a1 1 0 0 1 1-1Z"/><path d="M16 5.4h2.2A1.8 1.8 0 0 1 20 7.2v12A1.8 1.8 0 0 1 18.2 21H5.8A1.8 1.8 0 0 1 4 19.2v-12a1.8 1.8 0 0 1 1.8-1.8H8"/><path d="M8.5 12.5h7M8.5 16h4.5"/>',
   ontbijt:'<path d="M3 11h18a9 9 0 0 1-18 0Z"/><path d="M9 7.2c0-1 1-1.4 1-2.3S9 3.2 9 3.2M13.5 7.2c0-1 1-1.4 1-2.3s-1-1.7-1-1.7"/>',
   lunch:'<path d="M3 8.5 12 4l9 4.5-9 4.5Z"/><path d="M3 12.5 12 17l9-4.5"/><path d="M3 16.5 12 21l9-4.5"/>',
@@ -1148,7 +1154,7 @@ function ic(name,size,extra){
   const s=size||18;
   return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"${extra?" "+extra:""}>${p}</svg>`;
 }
-const CAT_ICON={ontbijt:"ontbijt",lunch:"lunch",diner:"diner",tussendoortje:"tussendoortje",weekendsnack:"snack"};
+const CAT_ICON={ontbijt:"ontbijt",lunch:"lunch",diner:"diner",tussendoortje:"tussendoortje",weekendsnack:"snack",mealprep:"mealprep"};
 
 // ===================== INGREDIËNTEN =====================
 // Normaliseert een ingrediëntnaam tot een sleutel waarop we kunnen vergelijken.
@@ -1504,7 +1510,14 @@ function clearSlot(day,rowId){
   S.week[day]={...S.week[day],[rowId]:null};
   set({detail:null});
 }
-function saveCustomRecipe(rc){S.custom=[...S.custom,rc];set({addOpen:false,addCat:null});toast("Recept toegevoegd");}
+function saveCustomRecipe(rc){
+  S.custom=[...S.custom,rc];
+  // Een snack of mealprep staat niet in de receptenkast, dus meteen naar zijn
+  // eigen tab: anders lijkt het net toegevoegde recept verdwenen.
+  const heen=rc.category==="weekendsnack"?"snacks":rc.category==="mealprep"?"mealpreps":null;
+  set({addOpen:false,addCat:null,...(heen?{view:heen}:{})});
+  toast("Recept toegevoegd");
+}
 function updateCustomRecipe(rc){S.custom=S.custom.map(x=>x.id===rc.id?rc:x);set({editRc:null,addOpen:false,addCat:null});toast("Bijgewerkt");}
 function deleteCustomRecipe(id){if(!confirm("Recept verwijderen?"))return;S.custom=S.custom.filter(x=>x.id!==id);set({});toast("Verwijderd");}
 
@@ -2034,14 +2047,14 @@ function saveIgRecipe(){
   const nl="\n";
   const rc={...p,
     name:document.getElementById("ig-name").value.trim()||p.name,
-    category:document.getElementById("ig-cat").value,
+    category:losseCat(S.addCat)?S.addCat:document.getElementById("ig-cat").value,
     time:document.getElementById("ig-time").value||p.time,
     servings:Number(document.getElementById("ig-srv").value)||p.servings,
     voor:S.formVoor,
     ingredients:document.getElementById("ig-ing").value.split(nl).filter(Boolean).map(l=>{const s=l.split(" - ");return{n:s[0].trim(),a:s.slice(1).join(" - ").trim()}}),
     steps:document.getElementById("ig-steps").value.split(nl).filter(Boolean),
   };
-  saveCustomRecipe(rc);
+  saveCustomRecipe(rc);  // die springt zelf naar snacks of mealpreps
   set({igSt:null,igFetchSt:null,igPrev:null,igCap:"",igUrl:"",addCat:null});
 }
 
@@ -2067,6 +2080,14 @@ function saveForm(isEdit){
 function setFormVoor(v){
   S.formVoor=v;
   document.querySelectorAll("[data-voor]").forEach(b=>b.classList.toggle("on",b.dataset.voor===v));
+}
+// Ook deze gaat buiten render() om: een rerender zou de correcties wissen die
+// je net in de naam- en ingredientenvelden hebt getypt.
+function setImportWaar(waar){
+  S.addCat=waar==="recept"?null:waar;
+  document.querySelectorAll("[data-waar]").forEach(b=>b.classList.toggle("on",b.dataset.waar===waar));
+  const veld=document.getElementById("ig-cat-veld");
+  if(veld)veld.style.display=waar==="recept"?"":"none";
 }
 
 
@@ -2248,6 +2269,7 @@ function render(){
         ${S.view==="planner"?renderPlanner():""}
         ${S.view==="recepten"?renderRecepten():""}
         ${S.view==="snacks"?renderSnacks():""}
+        ${S.view==="mealpreps"?renderMealpreps():""}
         ${S.view==="boodschappen"?renderBoodschappen():""}
       </main>
     </div>
@@ -2467,6 +2489,7 @@ function renderBottomNav(){
     {id:"planner",label:"Planner",icon:"kalender"},
     {id:"recepten",label:"Recepten",icon:"boek"},
     {id:"snacks",label:"Snacks",icon:"snack"},
+    {id:"mealpreps",label:"Mealprep",icon:"mealprep"},
     {id:"boodschappen",label:"Boodschap",icon:"mandje"},
   ];
   return `<nav class="nav" aria-label="Hoofdnavigatie">
@@ -2487,8 +2510,8 @@ function whoStack(list){
 
 // ---------- RECEPTEN ----------
 function renderRecepten(){
-  const alle=ALL().filter(rc=>rc.category!=='weekendsnack');
-  const favCount=S.custom.filter(rc=>rc.category!=='weekendsnack').length;
+  const alle=ALL().filter(rc=>!losseCat(rc.category));
+  const favCount=S.custom.filter(rc=>!losseCat(rc.category)).length;
   const list=alle.filter(rc=>{
     if(S.recFilter!=="all"&&S.recFilter!=="fav"&&rc.category!==S.recFilter)return false;
     if(S.recFilter==="fav"&&rc.ebook!==0)return false;
@@ -2517,26 +2540,42 @@ function renderRecepten(){
   </div>`;
 }
 
-function renderSnacks(){
-  const all=ALL().filter(rc=>rc.category==="weekendsnack");
-  const q=(S.snackSearch||"").toLowerCase();
+// Snacks en mealpreps zijn dezelfde pagina met andere woorden erop. Ze staan
+// los van het weekmenu, dus wat hier verschilt is alleen tekst en categorie.
+const LOSSE_PAGINA = {
+  weekendsnack:{
+    titel:"Weekendsnacks", uitleg:"Om door te bladeren. Deze lopen niet mee in het weekmenu of de boodschappenlijst.",
+    zoek:"Zoek een snack…", toevoegen:"Snack toevoegen", leeg:"Nog geen snacks", veld:"snackSearch",
+  },
+  mealprep:{
+    titel:"Mealpreps", uitleg:"Gerechten die je vooruit maakt. Ze lopen niet mee in het weekmenu of de boodschappenlijst.",
+    zoek:"Zoek een mealprep…", toevoegen:"Mealprep toevoegen", leeg:"Nog geen mealpreps", veld:"prepSearch",
+  },
+};
+
+function renderLossePagina(cat){
+  const t=LOSSE_PAGINA[cat];
+  const all=ALL().filter(rc=>rc.category===cat);
+  const q=(S[t.veld]||"").toLowerCase();
   const list=q?all.filter(rc=>rc.name.toLowerCase().includes(q)):all;
   return `
   <div class="view">
     <div class="page-head">
-      <h1 class="page-title">Weekendsnacks</h1>
-      <p class="page-sub">Om door te bladeren. Deze lopen niet mee in het weekmenu of de boodschappenlijst.</p>
+      <h1 class="page-title">${t.titel}</h1>
+      <p class="page-sub">${t.uitleg}</p>
     </div>
-    <input id="zoek-snacks" class="search" placeholder="Zoek een snack…" value="${esc(S.snackSearch||"")}"
-      oninput="S.snackSearch=this.value;clearTimeout(window._sst);window._sst=setTimeout(render,200)">
+    <input id="zoek-${cat}" class="search" placeholder="${t.zoek}" value="${esc(S[t.veld]||"")}"
+      oninput="S.${t.veld}=this.value;clearTimeout(window._sst);window._sst=setTimeout(render,200)">
     <button class="btn btn-line" style="margin-bottom:var(--s-4)"
-      onclick="set({addOpen:true,editRc:null,addTab:'manual',formVoor:'beiden',addCat:'weekendsnack'})">${ic("plus",17)} Snack toevoegen</button>
+      onclick="set({addOpen:true,editRc:null,addTab:'manual',formVoor:'beiden',addCat:'${cat}'})">${ic("plus",17)} ${t.toevoegen}</button>
     ${list.length===0?`<div class="empty">
-      <div class="empty-title">${all.length?"Niets gevonden":"Nog geen snacks"}</div>
+      <div class="empty-title">${all.length?"Niets gevonden":t.leeg}</div>
       <p>${all.length?"Probeer een andere zoekterm.":"Voeg er een toe met de knop hierboven — handmatig, via Instagram of met een foto."}</p></div>`
       :`<div class="reclist">${list.map(rc=>renderRecCard(rc)).join("")}</div>`}
   </div>`;
 }
+const renderSnacks=()=>renderLossePagina("weekendsnack");
+const renderMealpreps=()=>renderLossePagina("mealprep");
 
 function renderRecCard(rc){
   const voor=rc.voor==="dirk"?"voor Dirk":rc.voor==="shelley"?"voor Shelley":"";
@@ -2824,8 +2863,27 @@ function renderAddSheet(){
         <div style="background:var(--surface);border:1px solid var(--ok);border-radius:16px;padding:16px;margin-top:14px">
           <p style="font-size:var(--t-xs);font-weight:600;color:var(--ok);margin-bottom:var(--s-3)">Recept gevonden — controleer het even</p>
           <div class="field"><label>Naam</label><input id="ig-name" value="${esc(p.name)}"></div>
+          ${(()=>{
+            // Waar komt dit terecht? Een maaltijd landt in de receptenkast en is
+            // planbaar; snacks en mealpreps krijgen hun eigen tab en blijven
+            // buiten het weekmenu. Die keuze staat los van het maaltijdtype.
+            const waar=losseCat(S.addCat||p.category)?(S.addCat||p.category):"recept";
+            const opt=(id,label)=>`<button type="button" class="pick-opt ${waar===id?"on":""}" data-waar="${id}"
+              onclick="setImportWaar('${id}')">${esc(label)}</button>`;
+            return `<div class="field"><label>Waar komt het te staan</label><div class="pick-row">
+              ${opt("recept","Recepten")}${opt("weekendsnack","Snacks")}${opt("mealprep","Mealpreps")}
+            </div></div>`;
+          })()}
           <div class="row-fields">
-            <div class="field" style="flex:1"><label>Categorie</label><select id="ig-cat">${(()=>{const pc=S.addCat||p.category;return CATS.map(c=>`<option value="${c}" ${pc===c?"selected":""}>${CL[c]}</option>`).join("");})()}</select></div>
+            ${(()=>{
+              // Het maaltijdtype blijft staan als je een snack of mealprep kiest,
+              // alleen verborgen: flip je terug, dan staat je keuze er nog.
+              const pc=S.addCat||p.category;
+              const los=losseCat(pc);
+              const sel=los?(losseCat(p.category)?"diner":p.category):pc;
+              const keuze=CATS.filter(c=>!losseCat(c));
+              return `<div class="field" id="ig-cat-veld" style="flex:1;display:${los?"none":""}"><label>Maaltijd</label><select id="ig-cat">${keuze.map(c=>`<option value="${c}" ${sel===c?"selected":""}>${CL[c]}</option>`).join("")}</select></div>`;
+            })()}
             <div class="field" style="flex:1"><label>Tijd</label><input id="ig-time" value="${esc(p.time)}"></div>
             <div class="field" style="flex:0.6"><label>Pers.</label><select id="ig-srv">${[1,2,3,4,5,6].map(n=>`<option value="${n}" ${p.servings===n?"selected":""}>${n}</option>`).join("")}</select></div>
           </div>
@@ -2968,7 +3026,7 @@ function genTake(pool, ctx){
 function genPool(cat, who){
   return ALL().filter(rc=>{
     if(rc.category!==cat)return false;
-    if(rc.category==="weekendsnack")return false;
+    if(losseCat(rc.category))return false;
     if(who==="dirk"&&rc.voor==="shelley")return false;
     if(who==="shelley"&&rc.voor==="dirk")return false;
     return true;
