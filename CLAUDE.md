@@ -121,6 +121,8 @@ Microlink staat ernaast als vangnet, en alle routes lopen parallel: het eerste b
 
 ### Gemini-aanroepen vanuit de browser
 
+De modellenlijst wordt een dag bewaard in `wm_models_v1` (per key, nooit gesynchroniseerd). Die werd bij élke import opgehaald — een volle rondgang naar Google voordat er iets kon gebeuren, terwijl de lijst hooguit een paar keer per jaar verandert. Een `404` op een model gooit de bewaarde lijst weg, zodat een ingetrokken model niet blijft plakken.
+
 `doImport` loopt de modellen langs die de key mag gebruiken. Een model dat niet
 op tijd antwoordt of onbereikbaar is laat de rest **niet** vallen: dat wordt
 onthouden in `lastErr` en de lus gaat door naar het volgende. Pas na het laatste

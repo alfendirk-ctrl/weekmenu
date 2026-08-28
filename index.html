@@ -789,6 +789,7 @@ const SK="wm_week_v2", CK="wm_custom_v2", NK="wm_notes_v2", CHK="wm_check_v2", C
 const SB_URL="https://nejjocgplgbgmdornurw.supabase.co";
 const SB_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5lampvY2dwbGdiZ21kb3JudXJ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM2MTk4MzEsImV4cCI6MjA5OTE5NTgzMX0.dJ_xMqV4Qp-1gZKifYJ-qTW6p9GhoMdfxlr_zIJx7Ko";
 const HHID_KEY="wm_household_v1";
+const MODK="wm_models_v1";   // gerangschikte modellenlijst, een dag geldig
 let _sb=null;
 function getSb(){if(!_sb)_sb=window.supabase.createClient(SB_URL,SB_KEY);return _sb;}
 function lsGet(k,d){try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}}
@@ -958,7 +959,8 @@ async function syncPush(){
       const k=localStorage.key(i);
       // GK (de Gemini API key) blijft bewust lokaal: weekmenu_sync is leesbaar
       // voor iedereen met de anon key, en die staat publiek in deze pagina.
-      if(k&&k.startsWith('wm_')&&k!==HHID_KEY&&k!==GK&&k!==MIGK&&k!==THK
+      // MODK hoort bij de key van dít apparaat en heeft elders geen betekenis.
+      if(k&&k.startsWith('wm_')&&k!==HHID_KEY&&k!==GK&&k!==MIGK&&k!==THK&&k!==MODK
          &&!/^wm_(week|notes)_\d{4}_\d+$/.test(k)){try{state[k]=JSON.parse(localStorage.getItem(k));}catch(e){}}
     }
     const {error}=await getSb().from('weekmenu_sync').upsert({household_id:hid,state,updated_at:new Date().toISOString()});
@@ -1824,20 +1826,29 @@ async function igExtractRecipe(input,apiKey,onWait){
     return v*10+kind+risky;
   };
   let models=[...fallback], available=[];
-  try{
-    const lr=await fetchT(`${base}/models${keyParam}`,{},15000);
-    if(lr.ok){
-      const ld=await lr.json();
-      available=(ld.models||[])
-        .filter(m=>(m.supportedGenerationMethods||[]).includes("generateContent"))
-        .map(m=>m.name.replace("models/",""))
-        // Beeldgeneratie, spraak en embeddings kunnen geen recept uitlezen.
-        .filter(s=>!/image|imagen|tts|audio|embed|live|veo/i.test(s));
-      if(available.length){
-        models=[...available].sort((a,b)=>rank(b)-rank(a)).slice(0,4);
+  // De lijst verandert hooguit een paar keer per jaar, maar werd bij élke import
+  // opgehaald — een volle rondgang naar Google voordat er iets kon gebeuren. Een
+  // dag bewaren scheelt die stap; verandert er iets, dan is de lijst morgen bij.
+  const bewaard=lsGet(MODK,null);
+  if(bewaard&&bewaard.key===keyParam&&Date.now()-bewaard.at<864e5&&(bewaard.lijst||[]).length){
+    models=bewaard.lijst;available=bewaard.alles||bewaard.lijst;
+  }else{
+    try{
+      const lr=await fetchT(`${base}/models${keyParam}`,{},15000);
+      if(lr.ok){
+        const ld=await lr.json();
+        available=(ld.models||[])
+          .filter(m=>(m.supportedGenerationMethods||[]).includes("generateContent"))
+          .map(m=>m.name.replace("models/",""))
+          // Beeldgeneratie, spraak en embeddings kunnen geen recept uitlezen.
+          .filter(s=>!/image|imagen|tts|audio|embed|live|veo/i.test(s));
+        if(available.length){
+          models=[...available].sort((a,b)=>rank(b)-rank(a)).slice(0,4);
+          lsSet(MODK,{key:keyParam,at:Date.now(),lijst:models,alles:available});
+        }
       }
-    }
-  }catch(e){}
+    }catch(e){}
+  }
 
   const imgs=(input&&input.images)||[];
   const parts=imgs.length
@@ -1895,6 +1906,9 @@ async function igExtractRecipe(input,apiKey,onWait){
     if(!res.ok){
       let errMsg=`Model ${model}: fout ${res.status}`;
       try{const ed=await res.json();errMsg=ed?.error?.message||errMsg;}catch(e){}
+      // 404 betekent meestal: dit model bestaat niet meer. Bewaarde lijst weg,
+      // dan wordt hij bij de volgende poging vers opgehaald.
+      if(res.status===404)lsSet(MODK,null);
       lastErr=errMsg;continue;
     }
     const data=await res.json();
