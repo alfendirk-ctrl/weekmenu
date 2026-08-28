@@ -1855,14 +1855,21 @@ async function igExtractRecipe(input,apiKey,onWait){
       {method:"POST",headers:{"Content-Type":"application/json"},
        body:JSON.stringify({contents:[{parts}],
          generationConfig:json?{temperature:0,responseMimeType:"application/json"}:{temperature:0}})},
-      imgs.length?90000:45000);
+      imgs.length?120000:90000);
     let res;
     try{
       res=await callModel(true);
       if(res.status===400)res=await callModel(false);
     }catch(e){
-      throw new Error(e&&e.name==="AbortError"
-        ? "Google reageerde niet op tijd. Controleer je verbinding en probeer het opnieuw."
+      // Niet meteen opgeven: een traag of onbereikbaar model betekent niet dat
+      // de volgende het ook niet doet. Pas na het laatste model een melding.
+      const traag=e&&e.name==="AbortError";
+      lastErr=traag
+        ? `${model} reageerde niet op tijd`
+        : `geen verbinding met ${model}`;
+      if(mi<models.length-1){say(traag?`${model} is traag, ik probeer de volgende…`:`Geen verbinding met ${model}, ik probeer de volgende…`);continue;}
+      throw new Error(traag
+        ? "Google reageerde niet op tijd. Probeer het zo nog eens — vaak lukt een tweede poging wel."
         : "Geen verbinding met Google. Controleer je internet.");
     }
     if(res.status===429){
@@ -1879,7 +1886,11 @@ async function igExtractRecipe(input,apiKey,onWait){
       await new Promise(r=>setTimeout(r,wait*1000));
       say(`Opnieuw proberen met ${model}…`);
       try{res=await callModel(true);}
-      catch(e){throw new Error("Google reageerde niet op tijd. Probeer het zo nog eens.");}
+      catch(e){
+        lastErr=`${model} reageerde niet op tijd`;
+        if(mi<models.length-1)continue;
+        throw new Error("Google reageerde niet op tijd. Probeer het zo nog eens.");
+      }
     }
     if(!res.ok){
       let errMsg=`Model ${model}: fout ${res.status}`;

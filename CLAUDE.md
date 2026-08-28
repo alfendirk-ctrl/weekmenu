@@ -119,6 +119,14 @@ De functie haalt het bijschrift rechtstreeks bij Instagram op. Dat werkt alleen 
 
 Microlink staat ernaast als vangnet, en alle routes lopen parallel: het eerste bruikbare bijschrift wint. Twee dingen bewaken die race. `extractCap` geeft `null` zodra het antwoord JSON blijkt en er geen bruikbare `description` in staat — anders viel die JSON door naar de platte-tekst-tak en werd het hele blok als bijschrift doorgegeven. En een kandidaat telt pas mee vanaf **60 tekens**: een accountnaam of paginatitel haalt die drempel niet, zodat een snelle maar lege spiegeldienst de echte route niet aftroeft.
 
+### Gemini-aanroepen vanuit de browser
+
+`doImport` loopt de modellen langs die de key mag gebruiken. Een model dat niet
+op tijd antwoordt of onbereikbaar is laat de rest **niet** vallen: dat wordt
+onthouden in `lastErr` en de lus gaat door naar het volgende. Pas na het laatste
+model volgt een melding. Wachttijd is 90 s voor tekst en 120 s voor foto's —
+mobiel internet plus een groot bijschrift haalde de oude 45 s niet.
+
 ### CSS design tokens
 
 All colors are OKLCH custom properties on `:root`. Roles, not names: `--canvas`/`--surface`/`--surface-2`/`--surface-3`, `--line`/`--line-2`, `--ink`/`--ink-2`/`--ink-3`, one `--accent` (+`-hover`/`-on`/`-soft`/`-line`), semantics `--ok`/`--warn`/`--err`, and the three people as *data* hues `--p-shelley`/`--p-dirk`/`--p-maeve`. Type scale `--t-2xs … --t-3xl` (fixed rem, ratio ~1.2), spacing `--s-1 … --s-10`, radii `--r-*`. Never hardcode a hex.
