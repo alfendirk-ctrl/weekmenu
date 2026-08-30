@@ -28,6 +28,7 @@ Everything lives in `index.html`. The structure within the `<script>` block:
 | `STATE & STORAGE` | Global state `S`, `lsGet`/`lsSet` wrappers, `save()`, `set(patch)` |
 | `HELPERS` | `shuf`, `scaleAmt`, `esc`, `toast`, `avatarStack` |
 | `ICONEN` | `ICONS` map of drawn 24×24 SVG paths + `ic(name,size)`. No emoji anywhere in the UI — they are not an icon system |
+| `ETERS` | `ALLE_ETERS`, `etersAt`/`eters`/`eetMee`, `toggleEter`, `etersAlsVast`/`etersTerug`, `kanApart`, `rowWho` — wie er mee-eet |
 | `DAGINSTELLINGEN` | `dayCfgAt`/`dayCfg`/`setDayCfg`, `rowsFor`, `clearDay` — per-day plan / apart / maxTijd |
 | `INGREDIËNTEN` | `ingKey` (normaliseert een naam), `ingKeys` (per recept) — basis voor het hergebruik in de generator |
 | `WAARDERINGEN` | `rateOf`, `setRating`, `rateScore`, `rateBadge` |
@@ -35,7 +36,7 @@ Everything lives in `index.html`. The structure within the `<script>` block:
 | `ACTIONS` | `pickSlot`, `assignRecipe`, `clearSlot`, `saveCustomRecipe`, `boodschappen`, `runAutofill`, `exportImg`, `doImport` (IG/Gemini), `saveForm` |
 | `KOOKMODUS` | `openCook`/`closeCook`, `cookGo`, `stepSeconds`, `cookStartTimer`, `renderCookMode` |
 | `PORTIES` | `basisPorties`, `rcPorties`/`setRcPorties`, `slotEters`/`slotPorties`/`setSlotPorties`, `scaleAmt` |
-| `RONDLEIDING` | `TOUR` (12 steps), `tourStart`, `tourGa`, `tourKlaar`, `tourOverslaan`, `tourMarkeer`, `renderTour` |
+| `RONDLEIDING` | `TOUR` (13 steps), `tourStart`, `tourGa`, `tourKlaar`, `tourOverslaan`, `tourMarkeer`, `renderTour` |
 | `RENDER` | `render()` + per-view/modal render functions (`renderPlanner`, `renderRecepten`, `renderLossePagina` → `renderSnacks`/`renderMealpreps`, `renderBoodschappen`, `renderPicker`, `renderDetail`, `renderLeftoverPick`, `renderAddSheet`, `renderWizard`) |
 
 ### State management pattern
@@ -51,7 +52,7 @@ function set(patch) { Object.assign(S, patch); save(); render(); }
 function render() { document.getElementById("app").innerHTML = `...`; }
 ```
 
-Because `render()` throws away the DOM, a focused field would lose its text mid-typing. `render()` therefore snapshots the focused `INPUT`/`TEXTAREA` (`veldSelector` → `#id` or first class, plus value and selection range) and restores value, focus and caret afterwards. **Any field the user types in needs a stable `id`** — `#snack-weekend`, `#dagnotitie`, `#zoek-recepten`, `#zoek-weekendsnack`, `#zoek-mealprep`, `#zoek-slot`, `#zoek-vaste`, `#zoek-wissel` — otherwise the selector matches the wrong element after a rerender. For the same reason `syncPush` never calls `render()`; it repaints the one sync button through `syncStatus()`.
+Because `render()` throws away the DOM, a focused field would lose its text mid-typing. `render()` therefore snapshots the focused `INPUT`/`TEXTAREA` (`veldSelector` → `#id` or first class, plus value and selection range) and restores value, focus and caret afterwards. **Any field the user types in needs a stable `id`** — `#snack-weekend`, `#weeknotitie`, `#zoek-recepten`, `#zoek-weekendsnack`, `#zoek-mealprep`, `#zoek-slot`, `#zoek-vaste`, `#zoek-wissel` — otherwise the selector matches the wrong element after a rerender. For the same reason `syncPush` never calls `render()`; it repaints the one sync button through `syncStatus()`.
 
 ### Data model
 
@@ -59,7 +60,7 @@ Because `render()` throws away the DOM, a focused field would lose its text mid-
 - `S.custom` — user-added recipes (persisted to `localStorage` key `wm_custom_v2`)
 - `S.cfg.apartEten` — the household default for eating separately, toggled in the planner's week column. `dayCfgAt` falls back to it for any day that has no explicit `apart` value, so a per-day choice always wins. A one-time migration (`wm_apart_migrated_v1`) turns it on for anyone whose stored weeks contain a genuinely split breakfast or lunch, so upgrading does not silently hide Dirk's meal.
 - `S.dayCfg` — per-day settings for the week being viewed, persisted to `wm_daycfg_YYYY-MM-DD`: `{plan, apart, maxTijd}`. `plan` defaults to true, `apart` falls back to `S.cfg.apartEten`, `maxTijd` is `0|15|30|45` (0 = no limit). Read it through `dayCfgAt(wo,day)`, never directly — it resolves the defaults and reads other weeks from localStorage. There are no cooking modes any more.
-- `ROWS` — 8 rows; each has `id`, `cat`, `who`, and optionally `sub`, `free`, `apart`. **Which rows a day actually has is `rowsFor(day, wo)`, not `ROWS`** — rows with `apart:true` (`ontbijt_dirk`, `lunch_dirk`) only exist on days where separate eating is on, and `free:true` (`snack_avond`) is a text field, not a slot. So a day has 5 fillable slots normally and 7 when eating separately. Everything that counts slots — stats, dots, shopping list, generator — must go through `rowsFor`.
+- `ROWS` — 8 rows; each has `id`, `cat`, `who`, and optionally `sub`, `free`, `apart`. **Which rows a day actually has is `rowsFor(day, wo)`, not `ROWS`** — rows with `apart:true` (`ontbijt_dirk`, `lunch_dirk`) only exist on days where separate eating is on, and `free:true` (`snack_avond`) is a text field, not a slot. So a day has 5 fillable slots normally and 7 when eating separately. **A row's `who` is not `row.who` but `rowWho(row)`** — see Eters below. Everything that counts slots — stats, dots, shopping list, generator — must go through `rowsFor`.
 - `S.ratings` — `{[rcId]: {shelley:1|-1, dirk:…, maeve:…}}`, persisted to `wm_ratings_v1`. Two thumbs down and the generator skips the recipe.
 - **Leftovers** — a leftover slot is a reference, not a copy: `{id:"lo_<srcId>", leftoverOf:<srcId>, ingredients:[]}`. `boodschappen()` therefore skips it and instead multiplies the source recipe's amounts by `1 + aantal restjesdagen`.
 - `S.rcServings` — `{[rcId]: n}`, persisted to `wm_servings_v1`: what a recipe's written amounts are *for*. See below.
@@ -71,7 +72,7 @@ Two different numbers, and mixing them up is the bug this model exists to preven
 - **What the recipe is written for** — `rcPorties(rc)`: `S.rcServings[rc.id]` if the user corrected it, otherwise `rc.servings`, otherwise 2. Editable from the recipe detail; `setRcPorties` writes it.
 - **How many people are eating this slot** — `slotPorties(day,rowId)`: `rc.porties` stored on the slot itself if set, otherwise `slotEters(day,rowId)` — 3 for dinner, 1 for an `apart:true` row or Shelley's own row on a separate-eating day, otherwise household minus one. `setSlotPorties` writes it onto the slot, so the same recipe can be cooked for two on Tuesday and six on Saturday.
 
-`scaleAmt(amt, van, naar)` multiplies the first number it finds in an amount string by `naar/van` and rounds to one decimal; it returns the string untouched when there is no number or the factor is ~1. The old fixed `HH = 3` is gone — `basisPorties()` reads `S.cfg.huishouden` and falls back to `HH_DEFAULT = 3`. The shopping list and recipe detail both scale through this pair, never through a constant.
+`scaleAmt(amt, van, naar)` multiplies the first number it finds in an amount string by `naar/van` and rounds to one decimal; it returns the string untouched when there is no number or the factor is ~1. The old fixed `HH = 3` is gone — `basisPorties()` is simply `eters().length` (`S.cfg.huishouden` had no UI and would have silently beaten the visible chips, so it is no longer read). The shopping list and recipe detail both scale through this pair, never through a constant.
 
 ### Losse categorieën — snacks en mealpreps
 
@@ -81,9 +82,29 @@ Beide pagina's zijn dezelfde functie: `renderLossePagina(cat)`, gestuurd door `L
 
 Bij een import kies je in de preview de **bestemming** ("Waar komt het te staan": Recepten / Snacks / Mealpreps) los van het maaltijdtype. Dat gaat via `setImportWaar`, dat net als `setFormVoor` **niet** door `render()` loopt: een rerender zou de correcties wissen die je net in de naam- en ingrediëntenvelden hebt getypt. Het maaltijdveld wordt daarom verborgen, niet weggehaald — flip je terug naar Recepten, dan staat je keuze er nog. `saveCustomRecipe` springt na het opslaan naar `snacks` of `mealpreps`, anders lijkt het toegevoegde recept verdwenen.
 
+### Eters — wie er mee-eet
+
+`S.cfg.eters` is the standing list; `wm_eters_YYYY-MM-DD` overrides it for one week. Read it through **`eters()` / `etersAt(wo)`**, never either store directly — same shape as `dayCfgAt`: the week's own choice wins, otherwise the standing list, otherwise all three. `etersEigen()` says whether this week has its own choice, which is what the week column's "Alleen deze week · Als vaste stand · Terug" line keys off. At least one eater always remains.
+
+Everything downstream reads that one list rather than carrying its own exception:
+
+- `slotEters` counts it (dinner = everyone, the rest = everyone but Maeve), so portions and the shopping list scale by themselves
+- `kanApart()` is false unless **both** Shelley and Dirk eat along — there is nothing to split otherwise. `dayCfgAt` forces `apart:false` through it, so `rowsFor`, the stats, the generator and the export all drop the `apart:true` rows at once; the two toggles hide themselves
+- **`rowWho(row)`** resolves a row's eater for this week: the `shelley` row is *the shared meal*, so with Shelley away it is simply Dirk's plate. The `voor`-filters in `recipesForRow`, `genPool` and the wizard's fixed-meal picker go through it — that is what drops `voor:"shelley"` recipes when she is not there, with no extra rule
+- `rateScore` and `rateBadge` only count thumbs from people who eat along, so a dish Shelley vetoed does not block a week without her
+- the image/PDF export takes its name list from `eters()`
+
+The row ids stay `ontbijt_shelley` / `lunch_shelley` — they are in every stored week, so renaming them would break old weeks. In the data they are Shelley's; in the UI they are the shared meal.
+
+`etersAt` is memoised in `_etersCache` because `rateBadge` asks for it once per recipe card; `render()` and `set()` clear it.
+
+### Notities
+
+One note per week, not per day: `S.notes.week`, in the same `wm_notes_YYYY-MM-DD` store as the (now removed) per-day notes, so it syncs and travels with the week for free. The field lives in the planner's week column as `#weeknotitie` and is written by `onWeekNote`, which schedules a sync the way `setAvondSnack` does. Old `S.notes[day].algemeen` values stay in storage but nothing reads them any more; the export lost its "Opmerkingen" column and carries the week note under the title instead.
+
 ### Onboarding tour
 
-`TOUR` is a flat array of 12 steps, each `{titel, tekst, icoon, markeer?, doe?}` — `markeer` is a CSS selector to ring, `doe` runs before the step renders (switch view, open a sheet). `S.tour` holds the index, `null` when closed; `wm_tour_v1` remembers that it has been seen and the tour auto-starts 600 ms after the first render only when that key is absent. It can be restarted from the sync sheet.
+`TOUR` is a flat array of 13 steps, each `{titel, tekst, icoon, markeer?, doe?}` — `markeer` is a CSS selector to ring, `doe` runs before the step renders (switch view, open a sheet). `S.tour` holds the index, `null` when closed; `wm_tour_v1` remembers that it has been seen and the tour auto-starts 600 ms after the first render only when that key is absent. It can be restarted from the sync sheet.
 
 The tour deliberately does **not** go through `modalOpen()`: the page must stay scrollable so `tourMarkeer()` can bring the ringed element into the free space above the card. Layering is scrim (z 150, `pointer-events:none`) → `.tour-uitgelicht` (151) → `.tour` card (153), and `body.tour-actief .app{padding-bottom:70vh}` so even the last element on the page can scroll clear of the card. When touching any of this, verify on iPhone-size: the ring must never sit behind the card.
 
@@ -105,10 +126,10 @@ Measured over 8 consecutive weeks (before the mealprep slot was dropped): ~93 un
 
 ### Key constants
 
-- `HH_DEFAULT = 3` — fallback household size; read it through `basisPorties()`, which prefers `S.cfg.huishouden`
+- `HH_DEFAULT = 3` — last-resort household size; read it through `basisPorties()`, which counts `eters()`
 - `DAYS = ["ma","di","wo","do","vr","za","zo"]`
 - `PEOPLE = { shelley, dirk, maeve }` each with `label`, `sub`, `color` (CSS var), `initial`
-- localStorage keys: `wm_week_YYYY-MM-DD`, `wm_notes_YYYY-MM-DD` and `wm_daycfg_YYYY-MM-DD` (keyed by that week's Monday), `wm_custom_v2`, `wm_check_v2`, `wm_cfg_v2`, `wm_ratings_v1`, `wm_servings_v1`, `wm_snackavond_v1`, `wm_boodOver_v1`, `wm_tour_v1`, `wm_geminikey_v1` and `wm_theme_v1` (both device-local, never synced)
+- localStorage keys: `wm_week_YYYY-MM-DD`, `wm_notes_YYYY-MM-DD`, `wm_daycfg_YYYY-MM-DD` and `wm_eters_YYYY-MM-DD` (keyed by that week's Monday), `wm_custom_v2`, `wm_check_v2`, `wm_cfg_v2`, `wm_ratings_v1`, `wm_servings_v1`, `wm_snackavond_v1`, `wm_boodOver_v1`, `wm_tour_v1`, `wm_geminikey_v1` and `wm_theme_v1` (both device-local, never synced)
 
 ### External dependencies (CDN, no npm)
 

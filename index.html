@@ -331,6 +331,20 @@ svg{display:block;flex:0 0 auto}
   .meal-side{grid-column:2;grid-row:2}
 }
 
+.linkbtn{background:none;border:0;padding:0;font:inherit;color:var(--accent);
+  font-weight:600;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+.linkbtn:hover{color:var(--accent-hover)}
+.linkbtn:active{opacity:.7}
+.eters{display:flex;flex-wrap:wrap;gap:var(--s-2);margin-top:var(--s-2)}
+.eter{display:inline-flex;align-items:center;gap:var(--s-2);padding:4px 10px 4px 4px;
+  border:1px solid var(--line);border-radius:99px;background:var(--surface);
+  font-size:var(--t-xs);font-weight:600;color:var(--ink-3);cursor:pointer;
+  transition:border-color .15s,color .15s,background .15s}
+.eter:hover{border-color:var(--line-2);color:var(--ink-2)}
+.eter:active{transform:translateY(1px)}
+.eter.on{border-color:var(--accent-line);background:var(--accent-soft);color:var(--ink)}
+.eter .who{opacity:.35;transition:opacity .15s}
+.eter.on .who{opacity:1}
 .who{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:99px;
   font-family:var(--num);font-size:10px;font-weight:700;color:var(--on-person);flex:0 0 auto}
 .who-stack{display:flex}
@@ -1065,7 +1079,7 @@ function switchWeek(offset){
   const newCfg=lsGet(dayCfgStoreKey(offset),{});
   set({weekOffset:offset, week:newWeek, notes:newNotes, dayCfg:newCfg, activeDay:DAYS[(new Date().getDay()+6)%7]});
 }
-function set(patch){Object.assign(S,patch);save();render();}
+function set(patch){_etersCache=null;Object.assign(S,patch);save();render();}
 function ALL(){return [...RECIPES,...S.custom];}
 
 // ===================== HELPERS =====================
@@ -1180,12 +1194,15 @@ function setRating(rcId,who,val){
   if(Object.keys(cur).length)all[rcId]=cur;else delete all[rcId];
   set({ratings:all});
 }
-// Som van de duimpjes: +1 per duim omhoog, −1 per duim omlaag.
+// Som van de duimpjes: +1 per duim omhoog, −1 per duim omlaag. Alleen van wie
+// deze week mee-eet: een gerecht dat Shelley niet lust hoort een week zonder
+// haar niet te blokkeren.
 function rateScore(rcId){
-  return Object.values(rateOf(rcId)).reduce((a,b)=>a+b,0);
+  const r=rateOf(rcId), es=eters();
+  return Object.keys(r).filter(w=>es.includes(w)).reduce((a,w)=>a+r[w],0);
 }
 function rateBadge(rcId){
-  const r=rateOf(rcId);const keys=Object.keys(r);
+  const r=rateOf(rcId);const es=eters();const keys=Object.keys(r).filter(w=>es.includes(w));
   if(!keys.length)return "";
   return `<span style="display:inline-flex;align-items:center;gap:3px">`+keys.map(w=>{
     const p=PEOPLE[w];if(!p)return"";
@@ -1251,6 +1268,13 @@ const TOUR=[
     tekst:"Plannen aan of uit, apart eten aan of uit, en hoeveel tijd je die dag hebt. De generator houdt zich daaraan. Het gummetje rechtsboven maakt de hele dag in één tik leeg.",
     icoon:"instellingen",
     markeer:".controls",
+    doe:()=>set({view:"planner"}),
+  },
+  {
+    titel:"Wie eet mee",
+    tekst:"Is Shelley een week weg, zet haar dan uit. De porties, de boodschappenlijst, de avatars en de duimpjes rekenen meteen mee, en recepten die alleen voor haar zijn vallen uit de generator. Standaard geldt je vaste stand; wijzig je het hier, dan is dat alleen voor deze week. Daaronder staat één notitieveld voor de hele week.",
+    icoon:"apart",
+    markeer:".eters",
     doe:()=>set({view:"planner"}),
   },
   {
@@ -1372,7 +1396,10 @@ function tourMarkeer(){
 //   2. voor hoeveel personen jij het die dag kookt (slotPorties)
 // De hoeveelheden schalen van het eerste naar het tweede.
 const HH_DEFAULT = 3;
-function basisPorties(){ return Number(S.cfg.huishouden)>0 ? Number(S.cfg.huishouden) : HH_DEFAULT; }
+// Hoeveel monden er standaard aan tafel zitten: precies wie er mee-eet.
+// S.cfg.huishouden had nooit een knop en zou de eterschips stilzwijgend
+// overrulen, dus die is eruit.
+function basisPorties(){ return Math.max(1, eters().length) || HH_DEFAULT; }
 
 // Wat het recept zelf zegt, tenzij jij het hebt gecorrigeerd.
 function rcPorties(rc){
@@ -1389,11 +1416,12 @@ function setRcPorties(rcId,n){
 
 // Hoeveel monden een slot standaard voedt: precies de mensen die daar eten.
 function slotEters(day,rowId){
-  if(rowId==="diner")return Object.keys(PEOPLE).length;
+  const es=eters();
+  if(rowId==="diner")return es.length;
   const row=ROWS.find(r=>r.id===rowId);
   if(row&&row.apart)return 1;                      // alleen Dirk
   if(row&&dayCfg(day).apart&&row.who==="shelley")return 1;  // alleen Shelley
-  return Math.max(1,Object.keys(PEOPLE).length-1); // Maeve eet alleen mee met het diner
+  return Math.max(1,es.filter(p=>p!=="maeve").length); // Maeve eet alleen mee met het diner
 }
 // Wat er voor dit slot gekookt wordt: jouw keuze, anders het aantal eters.
 function slotPorties(day,rowId){
@@ -1411,6 +1439,68 @@ function setSlotPorties(day,rowId,n){
   set({});
 }
 
+// ===================== ETERS =====================
+// Wie er mee-eet. Vaste stand in S.cfg.eters, per week te overrulen — hetzelfde
+// patroon als dayCfg: de keuze voor déze week wint, anders de vaste stand.
+// Alles hangt hieraan: porties, avatars, de generator, de duimpjes en de
+// export. Eén lijst, geen losse uitzonderingen per plek.
+const ALLE_ETERS = Object.keys(PEOPLE);
+function etersKey(offset){ return `wm_eters_${mondayStr(offset)}`; }
+function etersDefault(){
+  const v=S.cfg&&S.cfg.eters;
+  return Array.isArray(v)&&v.length ? v : ALLE_ETERS;
+}
+// Onthouden binnen één render: rateBadge vraagt dit per receptkaart op, en dat
+// zijn er ruim honderd. render() gooit de cache weg.
+let _etersCache=null;
+function etersAt(wo){
+  const k=wo===undefined?(S.weekOffset||0):wo;
+  if(_etersCache&&_etersCache.k===k)return _etersCache.v;
+  const w=lsGet(etersKey(k),null);
+  const lijst=Array.isArray(w)&&w.length ? w : etersDefault();
+  const v=ALLE_ETERS.filter(p=>lijst.includes(p));   // altijd dezelfde volgorde
+  _etersCache={k,v};
+  return v;
+}
+function eters(){ return etersAt(S.weekOffset||0); }
+function eetMee(p){ return eters().includes(p); }
+// Heeft deze week een eigen keuze, of volgt hij de vaste stand?
+function etersEigen(wo){
+  const w=lsGet(etersKey(wo===undefined?(S.weekOffset||0):wo),null);
+  return Array.isArray(w)&&w.length>0;
+}
+function toggleEter(p){
+  const nu=eters();
+  const bij = nu.includes(p) ? nu.filter(x=>x!==p) : [...nu,p];
+  if(!bij.length){toast("Er moet iemand mee-eten");return;}
+  lsSet(etersKey(S.weekOffset||0), ALLE_ETERS.filter(x=>bij.includes(x)));
+  set({});
+}
+function etersAlsVast(){
+  S.cfg={...S.cfg,eters:eters()};
+  try{localStorage.removeItem(etersKey(S.weekOffset||0));}catch(e){}
+  set({});
+  toast("Vaste stand bijgewerkt");
+}
+function etersTerug(){
+  try{localStorage.removeItem(etersKey(S.weekOffset||0));}catch(e){}
+  set({});
+}
+// Apart eten gaat over Shelley en Dirk uit elkaar houden. Eet er maar één van
+// die twee mee, dan is er niets om te splitsen.
+function kanApart(wo){
+  const e=etersAt(wo===undefined?(S.weekOffset||0):wo);
+  return e.includes("shelley")&&e.includes("dirk");
+}
+// De "shelley"-rij is de gedeelde maaltijd. Eet Shelley niet mee, dan is dat
+// gewoon Dirks bord — en dan moeten de voor-wie-filters dat ook zo lezen.
+function rowWho(row){
+  if(!row)return "samen";
+  if(row.who==="shelley"&&!eetMee("shelley"))return eetMee("dirk")?"dirk":"samen";
+  if(row.who==="dirk"&&!eetMee("dirk"))return eetMee("shelley")?"shelley":"samen";
+  return row.who;
+}
+
 // ===================== DAGINSTELLINGEN =====================
 // Per dag: plannen ja/nee, apart eten ja/nee, en hoeveel tijd je hebt.
 // De planner en de wizard schrijven allebei hierin — één bron.
@@ -1422,7 +1512,7 @@ function dayCfgAt(wo,day){
   const d=(rawDayCfg(wo)||{})[day]||{};
   return {
     plan: d.plan!==false,
-    apart: d.apart===undefined ? !!S.cfg.apartEten : !!d.apart,
+    apart: kanApart(wo) && (d.apart===undefined ? !!S.cfg.apartEten : !!d.apart),
     maxTijd: d.maxTijd||0,
   };
 }
@@ -1485,8 +1575,9 @@ function recipesForRow(rowId){
   const row=ROWS.find(r=>r.id===rowId);
   return ALL().filter(rc=>{
     if(row){
-      if(row.who==="dirk"&&rc.voor==="shelley")return false;
-      if(row.who==="shelley"&&rc.voor==="dirk")return false;
+      const who=rowWho(row);
+      if(who==="dirk"&&rc.voor==="shelley")return false;
+      if(who==="shelley"&&rc.voor==="dirk")return false;
       if(rc.category!==row.cat)return false;
     }
     if(S.search&&!rc.name.toLowerCase().includes(S.search.toLowerCase()))return false;
@@ -1593,6 +1684,7 @@ async function exportWeekImg(type){
   const C={bg:"#F3EAD8",card:"#FFFDF8",ink:"#2C2416",ink2:"#5C4F3A",ink3:"#8C7B5E",line:"#EAE0CC",
     terra:"#CD6A45",olive:"#8C9E6E",honey:"#D4A843",dirk:"#8C9E6E",shelley:"#CD6A45"};
   const DAY_NL={ma:"Maandag",di:"Dinsdag",wo:"Woensdag",do:"Donderdag",vr:"Vrijdag",za:"Zaterdag",zo:"Zondag"};
+  const weekNote=S.notes.week||"";
 
   const nameCell=(rc,color,label)=>rc
     ? `<div style="border-left:3px solid ${color};padding-left:8px">
@@ -1608,22 +1700,18 @@ async function exportWeekImg(type){
     const lu=w.lunch_shelley;
     const to=w.tussen_ochtend, tm=w.tussen_middag;
     const di=w.diner;
-    const note=(S.notes[day]&&S.notes[day].algemeen)||"";
-    const obSame=od&&os&&od.id===os.id;
-
-    const ontbijt=obSame
-      ? nameCell(od,C.honey,"")
-      : `${nameCell(od,C.dirk,"Dirk")}<div style="height:6px"></div>${nameCell(os,C.shelley,"Shelley")}`;
+    // Alleen splitsen als er echt twee verschillende ontbijten staan. Anders
+    // kwam er op een gewone dag een lege "Dirk"-regel boven Shelleys ontbijt.
+    const obSplit=od&&os&&od.id!==os.id;
+    const ontbijt=obSplit
+      ? `${nameCell(od,C.dirk,"Dirk")}<div style="height:6px"></div>${nameCell(os,C.shelley,"Shelley")}`
+      : nameCell(os||od,C.honey,"");
 
     const tussendoor=(to||tm)
       ? `${to?nameCell(to,"#B0A898","Ochtend"):""}${to&&tm?`<div style="height:6px"></div>`:""}${tm?nameCell(tm,"#B0A898","Middag"):""}`
       : `<div style="font-size:12px;color:${C.line};font-style:italic">—</div>`;
 
     const lunch=nameCell(lu,C.olive,"");
-
-    const noteCell=note
-      ? `<div style="font-size:11px;color:${C.ink2};line-height:1.5;font-family:'Hanken Grotesk',sans-serif;font-style:italic">${esc(note)}</div>`
-      : `<div style="font-size:12px;color:${C.line};font-style:italic">—</div>`;
 
     const td=(content,w)=>`<td style="padding:12px 14px;border-bottom:1px solid ${C.line};border-left:1px solid ${C.line};vertical-align:top;${w?`width:${w};`:""}">${content}</td>`;
 
@@ -1632,11 +1720,10 @@ async function exportWeekImg(type){
         <div style="font-family:var(--display);font-weight:700;font-size:13px;color:${C.ink}">${DAY_NL[day]}</div>
         <div style="font-family:var(--num);font-size:10px;color:${C.ink3};margin-top:1px">${W.nums[day]}</div>
       </td>
-      ${td(ontbijt,"20%")}
-      ${td(tussendoor,"14%")}
-      ${td(lunch,"22%")}
-      ${td(nameCell(di,C.terra,""),"22%")}
-      ${td(noteCell,"18%")}
+      ${td(ontbijt,"24%")}
+      ${td(tussendoor,"18%")}
+      ${td(lunch,"26%")}
+      ${td(nameCell(di,C.terra,""),"26%")}
     </tr>`;
   }).join("");
 
@@ -1648,8 +1735,9 @@ async function exportWeekImg(type){
         <div style="font-family:var(--num);font-size:9px;letter-spacing:2px;color:${C.ink3};margin-bottom:6px;text-transform:uppercase">Week ${W.wk} · ${W.range}</div>
         <div style="font-family:var(--display);font-weight:800;font-size:38px;line-height:1;color:${C.ink}">Ons weekmenu</div>
       </div>
-      <div style="font-family:'Hanken Grotesk',sans-serif;font-size:13px;color:${C.ink3};text-align:right;line-height:1.8">Shelley<br>Dirk<br>Maeve</div>
+      <div style="font-family:'Hanken Grotesk',sans-serif;font-size:13px;color:${C.ink3};text-align:right;line-height:1.8">${eters().map(p=>PEOPLE[p].label).join("<br>")}</div>
     </div>
+    ${weekNote?`<div style="font-family:'Hanken Grotesk',sans-serif;font-size:13px;color:${C.ink2};line-height:1.6;font-style:italic;margin:-14px 0 22px;padding-left:10px;border-left:1px solid ${C.line}">${esc(weekNote)}</div>`:""}
     <table style="width:100%;border-collapse:collapse;background:${C.card};border-radius:16px;overflow:hidden">
       <thead>
         <tr style="background:${C.ink}">
@@ -1658,7 +1746,6 @@ async function exportWeekImg(type){
           <th style="padding:10px 14px;text-align:left;font-family:var(--num);font-size:9px;letter-spacing:1.5px;color:#c8b88a;font-weight:700;text-transform:uppercase;border-left:1px solid rgba(255,255,255,.1)">Tussendoor</th>
           <th style="padding:10px 14px;text-align:left;font-family:var(--num);font-size:9px;letter-spacing:1.5px;color:#9db87e;font-weight:700;text-transform:uppercase;border-left:1px solid rgba(255,255,255,.1)">Lunch</th>
           <th style="padding:10px 14px;text-align:left;font-family:var(--num);font-size:9px;letter-spacing:1.5px;color:#e08f72;font-weight:700;text-transform:uppercase;border-left:1px solid rgba(255,255,255,.1)">Diner</th>
-          <th style="padding:10px 14px;text-align:left;font-family:var(--num);font-size:9px;letter-spacing:1.5px;color:#aaa;font-weight:700;text-transform:uppercase;border-left:1px solid rgba(255,255,255,.1)">Opmerkingen</th>
         </tr>
       </thead>
       <tbody>${rows}</tbody>
@@ -2238,6 +2325,7 @@ function veldSelector(el){
 }
 
 function render(){
+  _etersCache=null;
   // Een hertekening mag nooit wegvagen wat iemand op dat moment intypt.
   // De achtergrondsync kan er middenin vallen, dus bewaren we waarde,
   // focus én cursorpositie van het veld waar de cursor staat.
@@ -2338,10 +2426,17 @@ function renderPlanner(){
           <div class="weekstat"><span>Maaltijden gepland</span><span class="num">${st.filled} / ${st.total}</span></div>
           <div class="weekstat"><span>Dagen aan</span><span class="num">${DAYS.filter(d=>dayCfg(d).plan).length} / 7</span></div>
           <div class="weekstat"><span>Ingrediënten</span><span class="num">${weekIngCount()}</span></div>
-          <div style="margin-top:var(--s-4)">
+          ${renderEters()}
+          ${kanApart()?`<div style="margin-top:var(--s-4)">
             ${switchBtn(!!S.cfg.apartEten,"toggleApartDefault()","Meestal apart eten")}
             <p style="font-size:var(--t-xs);color:var(--ink-3);line-height:1.5;margin-top:var(--s-2)">
               Vertrekpunt voor dagen waar je het niet apart hebt gezet.</p>
+          </div>`:""}
+          <div class="field" style="margin-top:var(--s-4);margin-bottom:0">
+            <label for="weeknotitie">Notitie bij deze week</label>
+            <textarea id="weeknotitie" class="notefield" rows="3"
+              placeholder="Wat Maeve deze week eet, een etentje buiten, iets wat je niet wilt vergeten…"
+              onchange="onWeekNote(this.value)">${esc(S.notes.week||"")}</textarea>
           </div>
           <button class="btn btn-primary" style="margin-top:var(--s-4)" onclick="wizStart()">
             ${ic("toveren",18)} Plan de week</button>
@@ -2386,7 +2481,7 @@ function renderDayPane(day){
 
   <div class="controls">
     ${switchBtn(cfg.plan,`setDayCfg('${day}',{plan:${!cfg.plan}})`,"Plannen")}
-    ${switchBtn(cfg.apart,`toggleApart('${day}')`,"Apart eten")}
+    ${kanApart()?switchBtn(cfg.apart,`toggleApart('${day}')`,"Apart eten"):""}
     ${cfg.plan?`
     <span style="display:inline-flex;align-items:center;gap:var(--s-2)">
       <span class="seg-label">Max. kooktijd</span>
@@ -2399,8 +2494,6 @@ function renderDayPane(day){
   ${cfg.plan?`
     <div class="meals">${renderDaySlots(day)}</div>
     ${renderAvondSnack(day)}
-    <textarea id="dagnotitie" class="notefield" rows="2" placeholder="Opmerking bij ${DAY_FULL[day]} — etentje buiten, Maeve eet apart, late avond…"
-      onchange="onDayNote('${day}',this.value)">${esc((S.notes[day]&&S.notes[day].algemeen)||"")}</textarea>
   `:`
     <div class="dayoff">Deze dag plannen we niet. Zet ‘Plannen’ aan om maaltijden te kiezen.</div>
   `}`;
@@ -2432,14 +2525,19 @@ function toggleApart(day){
 
 function renderDaySlots(day){
   const apart=dayCfg(day).apart;
+  const es=eters();
+  const volw=es.filter(p=>p!=="maeve");   // Maeve eet alleen mee met het diner
+  // Bij apart eten is de gedeelde rij die van Shelley; anders is het de rij van
+  // iedereen die 's ochtends en 's middags mee-eet.
+  const gedeeld=apart?["shelley"]:volw;
   let html="";
-  html+=renderMealRow(day,"ontbijt_shelley",apart?"Ontbijt · S":"Ontbijt",apart?["shelley"]:["shelley","dirk"]);
+  html+=renderMealRow(day,"ontbijt_shelley","Ontbijt"+(apart?" · S":""),gedeeld);
   if(apart)html+=renderMealRow(day,"ontbijt_dirk","Ontbijt · D",["dirk"],true);
-  html+=renderMealRow(day,"tussen_ochtend","Tussendoor",["shelley","dirk"]);
-  html+=renderMealRow(day,"lunch_shelley",apart?"Lunch · S":"Lunch",apart?["shelley"]:["shelley","dirk"]);
+  html+=renderMealRow(day,"tussen_ochtend","Tussendoor",volw);
+  html+=renderMealRow(day,"lunch_shelley","Lunch"+(apart?" · S":""),gedeeld);
   if(apart)html+=renderMealRow(day,"lunch_dirk","Lunch · D",["dirk"],true);
-  html+=renderMealRow(day,"tussen_middag","Tussendoor",["shelley","dirk"]);
-  html+=renderMealRow(day,"diner","Diner",["shelley","dirk","maeve"]);
+  html+=renderMealRow(day,"tussen_middag","Tussendoor",volw);
+  html+=renderMealRow(day,"diner","Diner",es);
   return html;
 }
 
@@ -2481,7 +2579,38 @@ function setAvondSnack(key,val){
   lsSet(SAK,S.avondSnack);
   clearTimeout(window._syncT);window._syncT=setTimeout(syncPush,3000);
 }
-function onDayNote(day,val){S.notes[day]={...(S.notes[day]||{}),algemeen:val};lsSet(notesStoreKey(S.weekOffset||0),S.notes);}
+// Eén notitie voor de hele week in plaats van een veld per dag. Hij staat in
+// dezelfde opslag als de oude dagnotities, dus hij synchroniseert mee en
+// verhuist vanzelf met de week.
+function onWeekNote(val){
+  S.notes={...S.notes,week:val};
+  lsSet(notesStoreKey(S.weekOffset||0),S.notes);
+  clearTimeout(window._syncT);window._syncT=setTimeout(syncPush,3000);
+}
+
+// De eterskeuze: chips voor deze week, met de vaste stand eronder.
+function renderEters(){
+  const es=eters(), eigen=etersEigen(), vast=ALLE_ETERS.filter(p=>etersDefault().includes(p));
+  const namen=l=>l.map(p=>PEOPLE[p].label).join(", ");
+  return `
+  <div style="margin-top:var(--s-4)">
+    <span class="seg-label">Wie eet mee</span>
+    <div class="eters" role="group" aria-label="Wie eet mee deze week">
+      ${ALLE_ETERS.map(p=>{
+        const aan=es.includes(p);
+        return `<button class="eter ${aan?"on":""}" role="switch" aria-checked="${aan}"
+          onclick="toggleEter('${p}')"><span class="who" style="background:${PEOPLE[p].color}">${PEOPLE[p].initial}</span>${PEOPLE[p].label}</button>`;
+      }).join("")}
+    </div>
+    <p style="font-size:var(--t-xs);color:var(--ink-3);line-height:1.5;margin-top:var(--s-2)">
+      ${eigen
+        ? `Alleen deze week. Vast staat ${esc(namen(vast))}.
+           <button class="linkbtn" onclick="etersAlsVast()">Als vaste stand</button> ·
+           <button class="linkbtn" onclick="etersTerug()">Terug</button>`
+        : `Je vaste stand. Wijzig het hier en het geldt alleen voor deze week.`}
+    </p>
+  </div>`;
+}
 
 // ---------- BOTTOM NAV ----------
 function renderBottomNav(){
@@ -2530,7 +2659,7 @@ function renderRecepten(){
       oninput="S.search=this.value;clearTimeout(window._st);window._st=setTimeout(render,200)">
     <div class="chips">
       ${filters.map(([k,l])=>`<button class="chip ${S.recFilter===k?"active":""}" onclick="set({recFilter:'${k}'})">${l}</button>`).join("")}
-      <button class="chip ${S.recVoor==="shelley"?"active":""}" onclick="set({recVoor:S.recVoor==='shelley'?'all':'shelley'})">Voor Shelley</button>
+      ${eetMee("shelley")?`<button class="chip ${S.recVoor==="shelley"?"active":""}" onclick="set({recVoor:S.recVoor==='shelley'?'all':'shelley'})">Voor Shelley</button>`:""}
       <button class="chip ${S.recVoor==="dirk"?"active":""}" onclick="set({recVoor:S.recVoor==='dirk'?'all':'dirk'})">Voor Dirk</button>
     </div>
     <button class="btn btn-line" style="margin-bottom:var(--s-4)"
@@ -2696,7 +2825,9 @@ function renderPicker(){
   const {day,rowId}=S.picker;
   const row=ROWS.find(r=>r.id===rowId);
   const apart=dayCfg(day).apart;
-  const voor=row.apart?"voor Dirk":(apart&&row.who==="shelley")?"voor Shelley":"voor iedereen";
+  const vw=rowWho(row);
+  const voor=row.apart?"voor Dirk":(apart&&vw==="shelley")?"voor Shelley"
+    :(vw==="dirk"&&!eetMee("shelley"))?"voor Dirk":"voor iedereen";
   const list=recipesForRow(rowId);
   const rest=rowId==="diner"?leftoverSources(day):[];
   return `
@@ -2827,7 +2958,8 @@ function renderDetail(){
 
       <div style="margin-top:var(--s-5);padding-top:var(--s-4);border-top:1px solid var(--line)">
         <p style="font-size:var(--t-xs);font-weight:600;color:var(--ink-2);margin-bottom:var(--s-3)">Wat vonden jullie ervan?</p>
-        ${Object.entries(PEOPLE).map(([who,p])=>{
+        ${eters().map(who=>{
+          const p=PEOPLE[who];
           const v=rateOf(rc.id)[who];
           return `
           <div style="display:flex;align-items:center;gap:var(--s-3);margin-bottom:var(--s-2)">
@@ -3057,7 +3189,7 @@ function wizRerollSlot(wo,day,rowId){
   // trekken hetzelfde gerecht opleveren en lijkt de knop stuk.
   const huidig=(((S.wiz.preview[wo]||{})[day])||{})[rowId];
   if(huidig&&huidig.id!=null)ctx.usedIds.add(huidig.id);
-  const rc=genTake(genPool(row.cat,row.who),ctx);
+  const rc=genTake(genPool(row.cat,rowWho(row)),ctx);
   if(!rc){toast("Geen ander recept beschikbaar");return;}
   S.wiz.preview[wo][day][rowId]=rc;
   set({});
@@ -3124,7 +3256,7 @@ function wizGenPreview(force){
           if(ex&&!isLeftover(ex)){ctx.usedIds.add(ex.id);ingKeys(ex).forEach(k=>{ctx.used[k]=(ctx.used[k]||0)+1;});}
           return;
         }
-        let pool=genPool(row.cat,row.who);
+        let pool=genPool(row.cat,rowWho(row));
         // Maximale kooktijd van die dag respecteren, maar nooit ten koste van
         // een leeg bord: past er niets binnen, dan valt hij terug op alles.
         if(dc.maxTijd){
@@ -3386,9 +3518,10 @@ function renderWizStep2(){
   if(S.wizVastePicker&&S.wizVastePicker.step==='rc'){
     const rowId=S.wizVastePicker.rowId;
     const row=ROWS.find(r=>r.id===rowId);
+    const vwho=rowWho(row);
     const list=ALL().filter(rc=>rc.category===row.cat
-      &&!(row.who==="dirk"&&rc.voor==="shelley")
-      &&!(row.who==="shelley"&&rc.voor==="dirk")
+      &&!(vwho==="dirk"&&rc.voor==="shelley")
+      &&!(vwho==="shelley"&&rc.voor==="dirk")
       &&(!S.search||rc.name.toLowerCase().includes(S.search.toLowerCase())));
     return `
     <h2 class="sheet-title">Welk recept?</h2>
@@ -3627,9 +3760,9 @@ window.tourStart=tourStart; window.tourGa=tourGa; window.tourKlaar=tourKlaar; wi
 window.setAvondSnack=setAvondSnack; window.whoStack=whoStack; window.ic=ic;
 window.wizToggleVasteDay=wizToggleVasteDay; window.wizRemoveVaste=wizRemoveVaste;
 window.wizPickVasteRow=wizPickVasteRow; window.wizPickVasteRc=wizPickVasteRc;
-window.onDayNote=onDayNote; window.S=S; window.render=render;
+window.onWeekNote=onWeekNote; window.S=S; window.render=render;
 window.pickSlot=pickSlot; window.assignRecipe=assignRecipe; window.clearSlot=clearSlot;
-window.onDayNote=onDayNote;
+window.toggleEter=toggleEter; window.etersAlsVast=etersAlsVast; window.etersTerug=etersTerug;
 window.toggleCheck=toggleCheck;
 window.openBoodDetail=openBoodDetail; window.closeBoodDetail=closeBoodDetail;
 window.saveBoodOverride=saveBoodOverride; window.deleteBoodOverride=deleteBoodOverride;
