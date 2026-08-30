@@ -158,6 +158,15 @@ onthouden in `lastErr` en de lus gaat door naar het volgende. Pas na het laatste
 model volgt een melding. Wachttijd is 90 s voor tekst en 120 s voor foto's —
 mobiel internet plus een groot bijschrift haalde de oude 45 s niet.
 
+### Export
+
+`exportWeekImg(type)` bouwt een losse tabel in een element buiten beeld en laat html2canvas daar een foto van maken. Twee dingen houden dat overeind, en allebei zijn ze eerder stukgegaan:
+
+- **html2canvas 1.4.1 kent `oklch()` niet.** Het gooit een fout op elke kleurwaarde die het niet herkent — dus op dit hele themabestand. De exportkaart zet daarom zelf een hex `color` (dat plugt in één keer ook `border-color`, `text-decoration-color`, `caret-color` en `outline-color`, want die staan op `currentColor`), én `kleurenTijdelijkPlat()` zet de achtergrond en kleur van `<html>` en `<body>` tijdens de export om naar exact dezelfde kleur in `rgb()` — die twee leest html2canvas namelijk altijd, ook als je maar één los element fotografeert. `naarRgb()` rekent dat via het canvas, dus het is dezelfde verf en je ziet er niets van. Zet je hier een kleur in een token neer, dan valt de export om.
+- **De rijen komen niet uit `rowsFor`.** De export leest de rij-id's rechtstreeks, dus een nieuwe rij moet je hier met de hand toevoegen. Zo verdween Dirks lunch: het ontbijt splitste wel en de lunch niet.
+
+Een dag met `plan:false` krijgt één regel "Niet gepland" in plaats van vier streepjes. De weeknotitie en de weekendsnack staan onder de titel, de namenlijst komt uit `eters()`.
+
 ### CSS design tokens
 
 All colors are OKLCH custom properties on `:root`. Roles, not names: `--canvas`/`--surface`/`--surface-2`/`--surface-3`, `--line`/`--line-2`, `--ink`/`--ink-2`/`--ink-3`, one `--accent` (+`-hover`/`-on`/`-soft`/`-line`), semantics `--ok`/`--warn`/`--err`, and the three people as *data* hues `--p-shelley`/`--p-dirk`/`--p-maeve`. Type scale `--t-2xs … --t-3xl` (fixed rem, ratio ~1.2), spacing `--s-1 … --s-10`, radii `--r-*`. Never hardcode a hex.

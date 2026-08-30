@@ -1657,34 +1657,51 @@ function deleteBoodOverride(k){
 
 // ===================== WIZARD =====================
 // ===================== EXPORT =====================
-async function exportImg(type){
-  const el=document.getElementById("export-target");
-  if(!el){toast("Ga naar de planner");return;}
-  toast("Bezig met exporteren...");
+// Zet een kleur om naar rgb() via het canvas, dat rekent exact hetzelfde als de
+// verf op het scherm. Begrijpt het canvas de waarde niet, dan laten we hem staan.
+function naarRgb(kleur){
   try{
-    const canvas=await html2canvas(el,{backgroundColor:canvasColor(),scale:2,useCORS:true});
-    if(type==="pdf"){
-      const {jsPDF}=window.jspdf;
-      const pdf=new jsPDF({orientation:"portrait",unit:"mm",format:"a4"});
-      const w=pdf.internal.pageSize.getWidth()-20;
-      const h=(canvas.height/canvas.width)*w;
-      pdf.addImage(canvas.toDataURL("image/png"),"PNG",10,10,w,h);
-      pdf.save("weekmenu.pdf");
-    }else{
-      const a=document.createElement("a");
-      a.href=canvas.toDataURL("image/jpeg",0.92);
-      a.download="weekmenu.jpg";a.click();
-    }
-  }catch(e){toast("Export mislukt");}
+    const c=document.createElement("canvas");c.width=c.height=1;
+    const ctx=c.getContext("2d");
+    ctx.fillStyle="#010203";                       // onwaarschijnlijke ijkwaarde
+    ctx.fillStyle=kleur;
+    if(ctx.fillStyle==="#010203")return kleur;     // niet begrepen
+    ctx.clearRect(0,0,1,1);ctx.fillRect(0,0,1,1);
+    const d=ctx.getImageData(0,0,1,1).data;
+    return d[3]===0 ? "rgba(0, 0, 0, 0)" : `rgb(${d[0]}, ${d[1]}, ${d[2]})`;
+  }catch(e){ return kleur; }
+}
+// html2canvas 1.4.1 parseert de achtergrond van <html> en <body> altijd, ook als
+// je maar één los element fotografeert. Dit hele thema staat in oklch() en die
+// functie kent hij niet — hij gooit er een fout op nog voor er iets getekend is.
+// Tijdens de export zetten we die twee dus even om naar exact dezelfde kleur in
+// rgb(). Zelfde verf, dus je ziet er niets van.
+function kleurenTijdelijkPlat(){
+  const terug=[document.documentElement,document.body].map(el=>{
+    const cs=getComputedStyle(el);
+    const oud={bg:el.style.backgroundColor,kl:el.style.color};
+    el.style.backgroundColor=naarRgb(cs.backgroundColor);
+    el.style.color=naarRgb(cs.color);
+    return {el,oud};
+  });
+  return ()=>terug.forEach(({el,oud})=>{el.style.backgroundColor=oud.bg;el.style.color=oud.kl;});
 }
 
 async function exportWeekImg(type){
+  // Beide bibliotheken komen van een CDN. Zijn ze er niet, zeg dat dan, in
+  // plaats van tien regels verderop met "Export mislukt" te komen.
+  if(typeof html2canvas!=="function"){
+    toast("De exportbibliotheek is niet geladen — controleer je internet");return;}
+  if(type==="pdf"&&!(window.jspdf&&window.jspdf.jsPDF)){
+    toast("De pdf-bibliotheek is niet geladen — probeer de afbeelding");return;}
   toast("Even exporteren...");
   const W=curWeek();
   const C={bg:"#F3EAD8",card:"#FFFDF8",ink:"#2C2416",ink2:"#5C4F3A",ink3:"#8C7B5E",line:"#EAE0CC",
     terra:"#CD6A45",olive:"#8C9E6E",honey:"#D4A843",dirk:"#8C9E6E",shelley:"#CD6A45"};
   const DAY_NL={ma:"Maandag",di:"Dinsdag",wo:"Woensdag",do:"Donderdag",vr:"Vrijdag",za:"Zaterdag",zo:"Zondag"};
   const weekNote=S.notes.week||"";
+  const snack=(S.avondSnack&&S.avondSnack.weekend)||"";
+  const wo=S.weekOffset||0;
 
   const nameCell=(rc,color,label)=>rc
     ? `<div style="border-left:3px solid ${color};padding-left:8px">
@@ -1694,41 +1711,51 @@ async function exportWeekImg(type){
        </div>`
     : `<div style="font-size:12px;color:${C.line};font-style:italic">—</div>`;
 
-  const rows=DAYS.map(day=>{
-    const w=S.week[day]||{};
-    const od=w.ontbijt_dirk, os=w.ontbijt_shelley;
-    const lu=w.lunch_shelley;
-    const to=w.tussen_ochtend, tm=w.tussen_middag;
-    const di=w.diner;
-    // Alleen splitsen als er echt twee verschillende ontbijten staan. Anders
-    // kwam er op een gewone dag een lege "Dirk"-regel boven Shelleys ontbijt.
-    const obSplit=od&&os&&od.id!==os.id;
-    const ontbijt=obSplit
-      ? `${nameCell(od,C.dirk,"Dirk")}<div style="height:6px"></div>${nameCell(os,C.shelley,"Shelley")}`
-      : nameCell(os||od,C.honey,"");
+  // Ontbijt en lunch splitsen allebei op een dag dat jullie apart eten. De
+  // lunch deed dat niet: Dirks lunch stond simpelweg niet in de export.
+  const splitCell=(gedeeld,apartRc,kleur)=>
+    (gedeeld&&apartRc&&gedeeld.id!==apartRc.id)
+      ? `${nameCell(apartRc,C.dirk,"Dirk")}<div style="height:6px"></div>${nameCell(gedeeld,C.shelley,"Shelley")}`
+      : nameCell(gedeeld||apartRc,kleur,"");
 
+  const td=(content,w)=>`<td style="padding:12px 14px;border-bottom:1px solid ${C.line};border-left:1px solid ${C.line};vertical-align:top;${w?`width:${w};`:""}">${content}</td>`;
+  const dagKop=day=>`<td style="padding:12px 14px;border-bottom:1px solid ${C.line};vertical-align:top;white-space:nowrap">
+        <div style="font-family:var(--display);font-weight:700;font-size:13px;color:${C.ink}">${DAY_NL[day]}</div>
+        <div style="font-family:var(--num);font-size:10px;color:${C.ink3};margin-top:1px">${W.nums[day]}</div>
+      </td>`;
+
+  const rows=DAYS.map(day=>{
+    // Een dag die je niet plant is geen rij vol streepjes maar één regel.
+    if(!dayCfgAt(wo,day).plan)return `<tr>${dagKop(day)}
+      <td colspan="4" style="padding:12px 14px;border-bottom:1px solid ${C.line};border-left:1px solid ${C.line};
+        font-size:12px;color:${C.ink3};font-style:italic">Niet gepland</td></tr>`;
+
+    const w=S.week[day]||{};
+    const to=w.tussen_ochtend, tm=w.tussen_middag;
+
+    const ontbijt=splitCell(w.ontbijt_shelley,w.ontbijt_dirk,C.honey);
+    const lunch=splitCell(w.lunch_shelley,w.lunch_dirk,C.olive);
     const tussendoor=(to||tm)
       ? `${to?nameCell(to,"#B0A898","Ochtend"):""}${to&&tm?`<div style="height:6px"></div>`:""}${tm?nameCell(tm,"#B0A898","Middag"):""}`
       : `<div style="font-size:12px;color:${C.line};font-style:italic">—</div>`;
 
-    const lunch=nameCell(lu,C.olive,"");
-
-    const td=(content,w)=>`<td style="padding:12px 14px;border-bottom:1px solid ${C.line};border-left:1px solid ${C.line};vertical-align:top;${w?`width:${w};`:""}">${content}</td>`;
-
     return `<tr>
-      <td style="padding:12px 14px;border-bottom:1px solid ${C.line};vertical-align:top;white-space:nowrap">
-        <div style="font-family:var(--display);font-weight:700;font-size:13px;color:${C.ink}">${DAY_NL[day]}</div>
-        <div style="font-family:var(--num);font-size:10px;color:${C.ink3};margin-top:1px">${W.nums[day]}</div>
-      </td>
+      ${dagKop(day)}
       ${td(ontbijt,"24%")}
       ${td(tussendoor,"18%")}
       ${td(lunch,"26%")}
-      ${td(nameCell(di,C.terra,""),"26%")}
+      ${td(nameCell(w.diner,C.terra,""),"26%")}
     </tr>`;
   }).join("");
 
   const div=document.createElement("div");
-  div.style.cssText=`position:fixed;left:-9999px;top:0;width:900px;padding:36px 40px 44px;background:${C.bg};`;
+  // Alles hier staat in hex. Zonder een eigen kleur erft deze kaart var(--ink)
+  // van de pagina, en dat is oklch(); html2canvas 1.4.1 kent die functie niet en
+  // gooit er een fout op — dát was "Export mislukt". Eén regel color plugt in
+  // één keer ook border-color, text-decoration-color, caret-color en
+  // outline-color, want die staan allemaal op currentColor.
+  div.style.cssText=`position:fixed;left:-9999px;top:0;width:900px;padding:36px 40px 44px;`+
+    `background:${C.bg};color:${C.ink};font-family:'Hanken Grotesk',sans-serif;`;
   div.innerHTML=`
     <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:28px">
       <div>
@@ -1737,7 +1764,10 @@ async function exportWeekImg(type){
       </div>
       <div style="font-family:'Hanken Grotesk',sans-serif;font-size:13px;color:${C.ink3};text-align:right;line-height:1.8">${eters().map(p=>PEOPLE[p].label).join("<br>")}</div>
     </div>
-    ${weekNote?`<div style="font-family:'Hanken Grotesk',sans-serif;font-size:13px;color:${C.ink2};line-height:1.6;font-style:italic;margin:-14px 0 22px;padding-left:10px;border-left:1px solid ${C.line}">${esc(weekNote)}</div>`:""}
+    ${(weekNote||snack)?`<div style="font-size:13px;color:${C.ink2};line-height:1.6;margin:-14px 0 22px;padding-left:10px;border-left:1px solid ${C.line}">
+      ${weekNote?`<div style="font-style:italic">${esc(weekNote)}</div>`:""}
+      ${snack?`<div style="font-size:12px;color:${C.ink3};margin-top:${weekNote?"4px":"0"}">Avondsnack in het weekend · ${esc(snack)}</div>`:""}
+    </div>`:""}
     <table style="width:100%;border-collapse:collapse;background:${C.card};border-radius:16px;overflow:hidden">
       <thead>
         <tr style="background:${C.ink}">
@@ -1752,6 +1782,7 @@ async function exportWeekImg(type){
     </table>
     <div style="text-align:right;margin-top:16px;font-family:var(--num);font-size:8px;letter-spacing:2px;color:${C.line};text-transform:uppercase">Weekmenu Planner</div>`;
   document.body.appendChild(div);
+  const kleurenTerug=kleurenTijdelijkPlat();
   try{
     const canvas=await html2canvas(div,{backgroundColor:C.bg,scale:2,useCORS:true,logging:false});
     if(type==="pdf"){
@@ -1767,8 +1798,11 @@ async function exportWeekImg(type){
       a.download=`weekmenu-week${W.wk}.jpg`;a.click();
     }
     toast("Klaar");
-  }catch(e){toast("Export mislukt");}
-  finally{document.body.removeChild(div);}
+  }catch(e){
+    console.error("export mislukt",e);
+    toast("Export mislukt: "+String((e&&e.message)||"onbekende fout").slice(0,90));
+  }
+  finally{kleurenTerug();document.body.removeChild(div);}
 }
 
 // ===================== IG IMPORT =====================
@@ -3768,7 +3802,7 @@ window.openBoodDetail=openBoodDetail; window.closeBoodDetail=closeBoodDetail;
 window.saveBoodOverride=saveBoodOverride; window.deleteBoodOverride=deleteBoodOverride;
 window.fetchCaption=fetchCaption; window.importFromUrl=importFromUrl; window.gedeeldeLink=gedeeldeLink; window.plakLink=plakLink; window.verwerkGedeeld=verwerkGedeeld; window.doImport=doImport; window.addPhotos=addPhotos; window.removePhoto=removePhoto; window.doPhotoImport=doPhotoImport; window.saveIgRecipe=saveIgRecipe; window.saveForm=saveForm; window.setFormVoor=setFormVoor;
 window.deleteCustomRecipe=deleteCustomRecipe; window.openEdit=openEdit;
-window.exportImg=exportImg; window.exportWeekImg=exportWeekImg;
+window.exportWeekImg=exportWeekImg;
 window.pullInbox=pullInbox; window.syncPush=syncPush; window.syncPull=syncPull; window.joinHousehold=joinHousehold;
 
 // ===================== INIT =====================
