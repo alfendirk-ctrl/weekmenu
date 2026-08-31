@@ -39,6 +39,7 @@
   --ok:oklch(0.545 0.113 152);
   --ok-soft:oklch(0.955 0.032 152);
   --warn:oklch(0.700 0.128 80);
+  --warn-soft:oklch(0.960 0.036 82);
   --err:oklch(0.548 0.170 27);
   --err-soft:oklch(0.958 0.028 27);
 
@@ -91,6 +92,7 @@
     --ok:oklch(0.720 0.128 152);
     --ok-soft:oklch(0.288 0.042 152);
     --warn:oklch(0.790 0.128 80);
+    --warn-soft:oklch(0.300 0.046 82);
     --err:oklch(0.700 0.155 27);
     --err-soft:oklch(0.295 0.052 27);
     --p-shelley:oklch(0.672 0.152 22);
@@ -121,6 +123,7 @@
   --ok:oklch(0.720 0.128 152);
   --ok-soft:oklch(0.288 0.042 152);
   --warn:oklch(0.790 0.128 80);
+  --warn-soft:oklch(0.300 0.046 82);
   --err:oklch(0.700 0.155 27);
   --err-soft:oklch(0.295 0.052 27);
   --p-shelley:oklch(0.672 0.152 22);
@@ -331,6 +334,22 @@ svg{display:block;flex:0 0 auto}
   .meal-side{grid-column:2;grid-row:2}
 }
 
+.lijstkop{border:1px solid var(--line);border-radius:var(--r-lg);padding:var(--s-4);
+  background:var(--surface);margin-bottom:var(--s-4)}
+.lijstkop-rij{display:flex;justify-content:space-between;align-items:baseline;gap:var(--s-3)}
+.lijstkop-titel{font-weight:600;font-size:var(--t-md)}
+.lijstkop-tijd{font-size:var(--t-xs);color:var(--ink-3)}
+.lijstkop-sub{font-size:var(--t-xs);color:var(--ink-3);line-height:1.6;margin-top:var(--s-1)}
+.lijstkop-los{border-style:dashed}
+.lijstwaarschuwing{display:flex;gap:var(--s-4);align-items:center;flex-wrap:wrap;
+  border:1px solid var(--warn);border-radius:var(--r-lg);padding:var(--s-4);
+  background:var(--warn-soft);margin-bottom:var(--s-4)}
+.lijstwaarschuwing>div{flex:1;min-width:11rem}
+.lijstwaarschuwing strong{font-size:var(--t-md)}
+.lijstwaarschuwing p{font-size:var(--t-xs);color:var(--ink-2);line-height:1.6;margin-top:var(--s-1)}
+.lijstwaarschuwing .btn{width:auto;flex:0 0 auto}
+.bood-acties{display:flex;flex-wrap:wrap;gap:var(--s-2);margin-bottom:var(--s-5)}
+.bood-acties .btn{width:auto;flex:0 0 auto}
 .linkbtn{background:none;border:0;padding:0;font:inherit;color:var(--accent);
   font-weight:600;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
 .linkbtn:hover{color:var(--accent-hover)}
@@ -633,21 +652,83 @@ const ROWS = [
 ];
 
 // Boodschappen categories
+// Zoeken op deelstring zette "Italiaanse kruiden" bij groente (er zit "ui" in
+// KR-UI-DEN) en boterhammen bij vlees (BOTER-HAM). Twee regels houden dat recht:
+// een stam van drie letters of korter moet een woord beginnen, langere stammen
+// mogen overal staan — anders vindt "wokgroente" of "ossenworst" niets. En bij
+// meerdere treffers wint de langste, zodat "boterham" brood blijft en niet boter
+// wordt. Stammen zijn kort gehouden zodat meervouden meelopen: "toma" pakt ook
+// tomaten, tomaatjes en trostomaten.
 const BOOD_CATS = {
-  "groente_fruit":{label:"Groente &amp; fruit", words:["groente","sla","spinazie","paprika","tomaat","courgette","ui","knoflook","wortel","broccoli","champignon","avocado","komkommer","prei","bloemkool","pastinaak","biet","asperge","bosui","sjalot","radijs","gember","andijvie","appel","banaan","aardbei","bes","framboos","kiwi","meloen","druif","citroen","limoen","mango","granaatappel","pruim","peer","zoete aardappel","krieltjes","aardappel","peterselie","basilicum","koriander","bieslook","peer","rucola"]},
-  "vlees_vis":{label:"Vlees &amp; vis", words:["kip","gehakt","zalm","tonijn","kabeljauw","garnaal","rivierkreeft","varken","rund","ossenhaas","tartaar","ham","spek","worst","filet"]},
-  "zuivel":{label:"Zuivel &amp; eieren", words:["yoghurt","kwark","kaas","ei","melk","room","boter","feta","mozzarella","parmezaan","huttenkase","hüttenkäse","creme","crème","zuivelspread","optimel","skyr"]},
-  "brood_granen":{label:"Brood &amp; granen", words:["rijst","pasta","orzo","havermout","tortilla","brood","boterham","wrap","speltmeel","cornflakes","nori","rijstwafel","noodles","couscous","quinoa","bulgur","meel","granola"]},
-  "blik_pot":{label:"Blik &amp; pot", words:["tomatenblokjes","tomatenpuree","tomatenpulp","bonen","mais","linzen","kokosmelk","sojasaus","ketjap","pindakaas","olijven","kikkererwten","passata"]},
-  "kruiden":{label:"Kruiden &amp; olie", words:["olie","azijn","honing","mosterd","saus","kruiden","kaneel","kurkuma","kerrie","komijn","paprikapoeder","oregano","cajun","stevia","zoetstof","vanille","cacao","bouillon","chili","gember","nootmuskaat","garam"]},
+  "groente_fruit":{label:"Groente &amp; fruit", words:[
+    "groent","wokgroent","sla","spinazie","paprika","puntpaprika","toma","courgette","ui","uien",
+    "knoflook","wortel","broccoli","champignon","paddenstoel","portobello","avocado","komkommer",
+    "prei","bloemkool","pastinaak","biet","asperge","bosui","sjalot","radijs","gember","andijvie",
+    "boerenkool","spruit","aubergine","venkel","selderij","doperwt","sperzie","paksoi","tuinkers",
+    "pompoen","appel","sinaasappel","banaan","aardbei","bes","bessen","framb","moerbei","kiwi",
+    "meloen","druif","citroen","limoen","mango","granaatappel","pruim","peer","peren","ananas",
+    "kers","abrikoos","dadel","vijg","aardappel","krieltje","peterselie","basilicum","koriander",
+    "bieslook","rucola","munt","dille","tijm","rozemarijn","salie","slamelange","ijsbergsla",
+    "veldsla","little gem","fruit","roodfruit"]},
+  "vlees_vis":{label:"Vlees &amp; vis", words:[
+    "kip","kalkoen","gehakt","zalm","tonijn","kabeljauw","koolvis","pangasius","forel",
+    "garnaal","garnalen","rivierkreeft","mossel","varken","rund","biefstuk","ossenhaas",
+    "tartaar","americain","ham","achterham","spek","worst","knakworst","chorizo","salami","rosbief",
+    "shoarma","schnitzel","carpaccio","burger","tofu","tempeh","sucuk","filet"]},
+  "zuivel":{label:"Zuivel &amp; eieren", words:[
+    "yoghurt","kwark","skyr","kaas","ei","eieren","eiwit","melk","room","boter","feta",
+    "mozzarella","parmezaan","huttenkase","h\u00fcttenk\u00e4se","cottage","creme","cr\u00e8me","zuivel",
+    "optimel","karnemelk","vla","kefir","ricotta","mascarpone","brie"]},
+  "brood_granen":{label:"Brood &amp; granen", words:[
+    "rijst","risotto","pasta","spaghetti","penne","fusilli","macaroni","tagliatelle","lasagne",
+    "orzo","noodle","mie","havermout","haver","tortilla","brood","bol","bollen","boterham",
+    "cracker","beschuit","wrap","pita","naan","meel","bloem","cornflakes","granola","muesli",
+    "nori","rijstwafel","speltwafel","wafel","soepstengel","couscous","quinoa","bulgur",
+    "filodeeg","bladerdeeg","deeg","croissant","pannenkoek","volkoren","spelt"]},
+  "blik_pot":{label:"Blik, pot &amp; saus", words:[
+    "tomatenblokjes","tomatenpuree","tomatenpulp","passata","gezeefde toma","boon","bonen",
+    "kikkererwt","linze","mais","kokosmelk","kokosroom","soja","sojasaus","ketjap","pindakaas",
+    "olij","kapper","augurk","zilverui","pesto","hummus","tapenade","mayo","mayonaise","ketchup",
+    "curry","sambal","sriracha","salsa","saus","bouillon","soep","jam","appelmoes","falafel",
+    "tzatziki","dressing","zuurkool","friet","frites"]},
+  "kruiden_olie":{label:"Kruiden, olie &amp; bakken", words:[
+    "olie","olijfolie","azijn","balsamico","honing","siroop","stroop","mosterd","kruid","kruiden",
+    "zout","peper","kaneel","kurkuma","kerrie","komijn","paprikapoeder","oregano","cajun",
+    "italiaanse","speculaas","stevia","zoetstof","vanille","cacao","chocolade","chili",
+    "nootmuskaat","garam","laurier","kruidnagel","gist","bakpoeder","baksoda","suiker",
+    "tahin","sesam","piment","kokosrasp","truffel"]},
+  "noten_snack":{label:"Noten, zaden &amp; snacks", words:[
+    "noot","noten","amandel","cashew","pecan","walnoot","hazelnoot","pinda","pistache",
+    "pit","pitten","zaad","zaden","lijnzaad","chia","rozijn","cranberr","reep","nakd","breaker",
+    "chips","popcorn","koek","kruidkoek","biscuit","espresso","koffie","thee"]},
   "overig":{label:"Overig", words:[]},
 };
+// Alle stammen in één lijst, langste eerst: de langste treffer wint.
+const BOOD_STAMMEN=Object.entries(BOOD_CATS)
+  .flatMap(([cat,obj])=>obj.words.map(w=>[w.toLowerCase(),cat]))
+  .sort((a,b)=>b[0].length-a[0].length)
+  .map(([w,cat])=>{
+    const esc=w.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+    // kort = alleen aan het begin van een woord, lang = overal
+    const bron=w.length<=3 ? "(^|[^a-z\u00e0-\u00ff])"+esc : esc;
+    return [new RegExp(bron,"i"),cat];
+  });
+// Een paar samenstellingen laat de langste stam verkeerd vallen: "komijnekaas"
+// is kaas en geen komijn, "shoarmakruiden" is een kruidenmix en geen vlees, en
+// "tomatensaus" hoort in het schap bij de saus. Deze aanwijzingen gaan voor,
+// van specifiek naar algemeen.
+const BOOD_STERK=[
+  [/pindakaas|kokosmelk|kokosroom/i,"blik_pot"],
+  [/kaas/i,"zuivel"],
+  [/melk/i,"zuivel"],
+  [/kruiden|masala|poeder/i,"kruiden_olie"],
+  [/saus|dressing|mayo|ketchup/i,"blik_pot"],
+  [/wokgroent|roerbakgroent|groente/i,"groente_fruit"],
+];
 function getBoodCat(name){
-  const n=name.toLowerCase();
-  for(const [cat,obj] of Object.entries(BOOD_CATS)){
-    if(cat==="overig")continue;
-    if(obj.words.some(w=>n.includes(w)))return cat;
-  }
+  const n=" "+String(name||"").toLowerCase();
+  for(const [re,cat] of BOOD_STERK){ if(re.test(n))return cat; }
+  for(const [re,cat] of BOOD_STAMMEN){ if(re.test(n))return cat; }
   return "overig";
 }
 
@@ -1086,16 +1167,58 @@ function ALL(){return [...RECIPES,...S.custom];}
 // Schaalt een hoeveelheid van "waar het recept voor is" naar "voor hoeveel
 // je nu kookt". Werkt ook op "2 el" of "1½ blik" — alleen het eerste getal
 // gaat mee, de rest van de tekst blijft staan.
+// ---------- HOEVEELHEDEN ----------
+// De recepten staan vol met "½ citroen", "2 tl" en "300g". Om te kunnen
+// schalen én optellen moet dat eerst uit elkaar: een getal en een eenheid.
+const BREUKEN={"\u00bd":0.5,"\u00bc":0.25,"\u00be":0.75,"\u2153":1/3,"\u2154":2/3,"\u215b":0.125};
+// Eenheden waar een half getal logisch is. De rest koop je per stuk, en dan
+// rond je naar boven af: anderhalf ei bestaat niet in de winkel.
+const DEELBAAR=["g","kg","ml","l","dl","el","tl","cm"];
+// Schrijfwijzen die hetzelfde betekenen, zodat 300g en 300 gram optellen.
+const EENHEID_ALIAS={gram:"g",gr:"g",g:"g",kg:"kg",kilo:"kg",milliliter:"ml",ml:"ml",
+  liter:"l",l:"l",dl:"dl",eetlepel:"el",eetlepels:"el",el:"el",
+  theelepel:"tl",theelepels:"tl",tl:"tl",stuks:"",stuk:"",st:""};
+// "naar smaak" is geen boodschap maar een aanwijzing.
+const NAAR_SMAAK=["n.s.","ns","naar smaak","snufje","beetje","optioneel"];
+
+function parseAmt(a){
+  const ruw=String(a==null?"":a).trim();
+  if(!ruw)return {n:null,eh:"",ruw,smaak:false};
+  const m=ruw.match(/^(\d+(?:[.,]\d+)?)?\s*([\u00bd\u00bc\u00be\u2153\u2154\u215b])?\s*(.*)$/);
+  let n=null;
+  if(m[1])n=parseFloat(m[1].replace(",","."));
+  if(m[2])n=(n||0)+BREUKEN[m[2]];
+  if(n!==null&&isNaN(n))n=null;
+  let eh=(m[3]||"").trim();
+  const smaak=n===null&&NAAR_SMAAK.includes(eh.toLowerCase());
+  const sleutel=eh.toLowerCase().replace(/\.$/,"");
+  if(EENHEID_ALIAS[sleutel]!==undefined)eh=EENHEID_ALIAS[sleutel];
+  return {n,eh,ruw,smaak};
+}
+// Terug naar tekst. Halven schrijven we als ½ — zo staan ze ook in de recepten.
+function fmtGetal(n){
+  const heel=Math.floor(n+1e-9), rest=n-heel;
+  for(const [g,w] of Object.entries(BREUKEN)){
+    if(Math.abs(rest-w)<0.02)return (heel?String(heel):"")+g;
+  }
+  return String(Math.round(n*10)/10).replace(".",",");
+}
+function fmtAmt(n,eh){
+  if(n===null||n===undefined)return eh;
+  let uit;
+  if(eh==="g"||eh==="ml")uit=Math.round(n);          // geen halve grammen
+  else if(DEELBAAR.includes(eh))uit=Math.round(n*10)/10;
+  else uit=Math.ceil(n-1e-9);                        // stuks rond je naar boven af
+  return fmtGetal(uit)+(eh?" "+eh:"");
+}
+
 function scaleAmt(amt,van,naar){
   if(!amt)return amt;
   const f=(naar||basisPorties())/(van||2);
   if(Math.abs(f-1)<0.01)return amt;
-  const m=String(amt).match(/(\d+[.,]?\d*)/);
-  if(!m)return amt;
-  const n=parseFloat(m[1].replace(",","."));
-  if(isNaN(n))return amt;
-  const uit=Math.round(n*f*10)/10;
-  return String(amt).replace(m[1],String(uit).replace(".",","));
+  const p=parseAmt(amt);
+  if(p.n===null)return amt;             // "naar smaak", "handje" — niets te rekenen
+  return fmtAmt(p.n*f,p.eh);
 }
 function esc(s){return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
 function toast(msg){const h=document.getElementById("toast-host");const t=document.createElement("div");t.className="toast";t.textContent=msg;h.appendChild(t);setTimeout(()=>t.remove(),2000);}
@@ -1121,6 +1244,7 @@ function canvasColor(){
 // Eén set, één lijndikte, allemaal getekend. Emoji zijn geen icoonsysteem:
 // ze renderen per platform anders en dragen geen gewicht mee.
 const ICONS={
+  delen:'<path d="M8.6 13.4 15.4 17M15.4 7 8.6 10.6"/><circle cx="18" cy="5.4" r="2.6"/><circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="18.6" r="2.6"/>',
   mealprep:'<path d="M4 9.2h7.6v4.2H4Z"/><path d="M4.6 6.4h6.4a.6.6 0 0 1 .6.6v2.2H4V7a.6.6 0 0 1 .6-.6Z"/><path d="M12.4 15.6H20v4.2h-7.6Z"/><path d="M13 12.8h6.4a.6.6 0 0 1 .6.6v2.2h-7.6v-2.2a.6.6 0 0 1 .6-.6Z"/><path d="M15.6 3.4h4.2M17.7 3.4v5.2"/>',
   plakken:'<path d="M9 3.5h6a1 1 0 0 1 1 1v1.6H8V4.5a1 1 0 0 1 1-1Z"/><path d="M16 5.4h2.2A1.8 1.8 0 0 1 20 7.2v12A1.8 1.8 0 0 1 18.2 21H5.8A1.8 1.8 0 0 1 4 19.2v-12a1.8 1.8 0 0 1 1.8-1.8H8"/><path d="M8.5 12.5h7M8.5 16h4.5"/>',
   ontbijt:'<path d="M3 11h18a9 9 0 0 1-18 0Z"/><path d="M9 7.2c0-1 1-1.4 1-2.3S9 3.2 9 3.2M13.5 7.2c0-1 1-1.4 1-2.3s-1-1.7-1-1.7"/>',
@@ -1613,6 +1737,113 @@ function updateCustomRecipe(rc){S.custom=S.custom.map(x=>x.id===rc.id?rc:x);set(
 function deleteCustomRecipe(id){if(!confirm("Recept verwijderen?"))return;S.custom=S.custom.filter(x=>x.id!==id);set({});toast("Verwijderd");}
 
 // ===================== BOODSCHAPPEN =====================
+// De lijst wordt afgeleid uit de week, maar je winkelt met een lijst die
+// stilstaat. Daarom leg je hem vast met "Lijst opmaken"; verandert de week
+// daarna, dan zegt de app dat en beslis jij wanneer je bijwerkt. Je vinkjes en
+// je handmatige correcties staan los (op naam), dus die overleven een update.
+function boodLijstKey(offset){ return `wm_boodlijst_${mondayStr(offset)}`; }
+function boodLijstAt(wo){ return lsGet(boodLijstKey(wo),null); }
+function boodLijst(){ return boodLijstAt(S.weekOffset||0); }
+
+// Vingerafdruk van de week: welk recept in welk slot, en voor hoeveel monden.
+// Verandert er iets aan een van die twee, dan klopt de lijst niet meer.
+function weekSlots(){
+  const uit={};
+  DAYS.forEach(d=>{
+    if(!dayCfg(d).plan)return;
+    rowsFor(d).forEach(row=>{
+      const rc=S.week[d]&&S.week[d][row.id];
+      if(rc)uit[`${d}_${row.id}`]=String(rc.id)+"@"+slotPorties(d,row.id);
+    });
+  });
+  return uit;
+}
+function boodVerschil(vast){
+  if(!vast||!vast.slots)return 0;
+  const nu=weekSlots(), oud=vast.slots;
+  let n=0;
+  new Set([...Object.keys(nu),...Object.keys(oud)]).forEach(k=>{ if(nu[k]!==oud[k])n++; });
+  return n;
+}
+function lijstOpmaken(stil){
+  const g=boodschappen();
+  const items=Object.values(g).flat().map(it=>({name:it.name,cat:it.cat,amount:it.amount,sources:it.sources}));
+  const slots=weekSlots();
+  lsSet(boodLijstKey(S.weekOffset||0),{
+    op:Date.now(), eters:eters(), dagen:DAYS.filter(d=>dayCfg(d).plan).length,
+    maaltijden:Object.keys(slots).length, slots, items,
+  });
+  clearTimeout(window._syncT);window._syncT=setTimeout(syncPush,3000);
+  set({});
+  if(!stil)toast(items.length?`Lijst opgemaakt · ${items.length} regels`:"De week is nog leeg");
+}
+function lijstBijwerken(){ lijstOpmaken(true); toast("Lijst bijgewerkt"); }
+function lijstLosmaken(){
+  try{localStorage.removeItem(boodLijstKey(S.weekOffset||0));}catch(e){}
+  clearTimeout(window._syncT);window._syncT=setTimeout(syncPush,3000);
+  set({});
+}
+// Wat er op het scherm hoort: de vastgelegde lijst als die er is, anders live.
+function boodGroepen(){
+  const vast=boodLijst();
+  if(!vast)return boodschappen();
+  const grouped={};Object.keys(BOOD_CATS).forEach(c=>grouped[c]=[]);
+  (vast.items||[]).forEach(it=>{(grouped[it.cat]=grouped[it.cat]||[]).push(it);});
+  return grouped;
+}
+function datumKort(ms){
+  const d=new Date(ms), nu=new Date();
+  const tijd=String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
+  const zelfde=d.toDateString()===nu.toDateString();
+  const gister=new Date(nu);gister.setDate(nu.getDate()-1);
+  if(zelfde)return "vandaag "+tijd;
+  if(d.toDateString()===gister.toDateString())return "gisteren "+tijd;
+  const dagen=["zondag","maandag","dinsdag","woensdag","donderdag","vrijdag","zaterdag"];
+  if(nu-d<6*864e5)return dagen[d.getDay()]+" "+tijd;
+  return d.getDate()+" "+["jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"][d.getMonth()]+" "+tijd;
+}
+function namenOp(lijst){
+  const n=(lijst||[]).map(p=>PEOPLE[p]&&PEOPLE[p].label).filter(Boolean);
+  if(!n.length)return "niemand";
+  if(n.length===1)return n[0];
+  return n.slice(0,-1).join(", ")+" en "+n[n.length-1];
+}
+
+// De lijst als platte tekst, om te plakken of te delen. Afgevinkte regels gaan
+// er niet in: je stuurt door wat er nog gehaald moet worden.
+function boodTekst(){
+  const g=boodGroepen(), vast=boodLijst();
+  const W=curWeek();
+  const uit=[`Boodschappen week ${W.wk} (${W.range})`];
+  if(vast)uit.push(`Voor ${namenOp(vast.eters)} · ${vast.dagen} dagen · ${vast.maaltijden} maaltijden`);
+  let over=0;
+  Object.entries(BOOD_CATS).forEach(([cat,obj])=>{
+    const items=(g[cat]||[]).filter(it=>!S.checked[it.name.toLowerCase()]);
+    if(!items.length)return;
+    uit.push("", obj.label.replace(/&amp;/g,"&"));
+    items.forEach(it=>{
+      const k=it.name.toLowerCase();
+      const amt=S.boodOverride[k]||it.amount||"";
+      uit.push("- "+it.name+(amt?"  "+amt:""));
+      over++;
+    });
+  });
+  if(!over)uit.push("","Alles staat afgevinkt.");
+  return uit.join("\n");
+}
+async function kopieerBood(){
+  try{ await navigator.clipboard.writeText(boodTekst()); toast("Lijst gekopieerd"); }
+  catch(e){ toast("Kopiëren mag niet in deze browser"); }
+}
+async function deelBood(){
+  const tekst=boodTekst();
+  if(navigator.share){
+    try{ await navigator.share({title:"Boodschappen",text:tekst}); return; }
+    catch(e){ if(e&&e.name==="AbortError")return; }
+  }
+  kopieerBood();
+}
+
 function boodschappen(){
   const m={};
   const lo=leftoverCounts(S.week);
@@ -1628,17 +1859,41 @@ function boodschappen(){
     if(gezien.has(dedup))return; gezien.add(dedup);
     const extra=1+(lo[rc.id]||0);              // restjesdagen tellen als extra porties
     const naar=slotPorties(d,row.id)*extra;
+    const van=rcPorties(rc)||2;
     (rc.ingredients||[]).forEach(g=>{
       const k=(g.n||"").toLowerCase();
-      if(!m[k])m[k]={name:g.n,amounts:[],cat:getBoodCat(g.n),sources:[]};
-      const sc=scaleAmt(g.a,rcPorties(rc),naar);
-      if(sc&&!m[k].amounts.includes(sc))m[k].amounts.push(sc);
-      m[k].sources.push({day:d,rcName:rc.name+(extra>1?` (incl. restjes)`:"")+` · ${naar}p`,amount:sc||g.a||""});
+      if(!m[k])m[k]={name:g.n,cat:getBoodCat(g.n),delen:{},los:[],smaak:false,sources:[]};
+      const it=m[k];
+      // Optellen per eenheid. Vier keer havermout werd hiervoor als
+      // "70g + 40g + 120g + 60g" op de lijst gezet, en twee keer dezelfde
+      // hoeveelheid verdween zelfs helemaal — daar viel niet mee te winkelen.
+      const p=parseAmt(g.a);
+      let toon;
+      if(p.n!==null){
+        const n=p.n*naar/van;
+        it.delen[p.eh]=(it.delen[p.eh]||0)+n;
+        toon=fmtAmt(n,p.eh);
+      }else if(p.smaak){ it.smaak=true; toon="naar smaak"; }
+      else { if(p.ruw&&!it.los.includes(p.ruw))it.los.push(p.ruw); toon=p.ruw; }
+      it.sources.push({day:d,rcName:rc.name+(extra>1?` (incl. restjes)`:"")+` · ${naar}p`,amount:toon});
     });
   });
   });
+  // Eenheden op een vaste volgorde: eerst wat je afweegt, dan lepels, dan stuks.
+  const EH_ORDE=["g","kg","ml","l","dl","el","tl"];
+  Object.values(m).forEach(it=>{
+    const delen=Object.entries(it.delen)
+      .sort((a,b)=>{
+        const ia=EH_ORDE.indexOf(a[0]), ib=EH_ORDE.indexOf(b[0]);
+        return (ia<0?99:ia)-(ib<0?99:ib);
+      })
+      .map(([eh,n])=>fmtAmt(n,eh));
+    it.amounts=[...delen,...it.los];
+    it.amount=it.amounts.join(" + ")||(it.smaak?"naar smaak":"");
+  });
   const grouped={};Object.keys(BOOD_CATS).forEach(c=>grouped[c]=[]);
   Object.values(m).forEach(it=>{(grouped[it.cat]=grouped[it.cat]||[]).push(it);});
+  Object.values(grouped).forEach(v=>v.sort((a,b)=>a.name.localeCompare(b.name,"nl")));
   return grouped;
 }
 function toggleCheck(k){S.checked={...S.checked,[k]:!S.checked[k]};set({});}
@@ -1800,6 +2055,83 @@ async function exportWeekImg(type){
     toast("Klaar");
   }catch(e){
     console.error("export mislukt",e);
+    toast("Export mislukt: "+String((e&&e.message)||"onbekende fout").slice(0,90));
+  }
+  finally{kleurenTerug();document.body.removeChild(div);}
+}
+
+// De boodschappenlijst als foto of pdf. Zelfde grendels als de weekexport:
+// alles in hex, en <html>/<body> tijdelijk plat, want html2canvas kent oklch niet.
+async function exportBoodImg(type){
+  if(typeof html2canvas!=="function"){
+    toast("De exportbibliotheek is niet geladen — controleer je internet");return;}
+  if(type==="pdf"&&!(window.jspdf&&window.jspdf.jsPDF)){
+    toast("De pdf-bibliotheek is niet geladen — probeer de foto");return;}
+  const g=boodGroepen(), vast=boodLijst(), W=curWeek();
+  const groepen=Object.entries(BOOD_CATS)
+    .map(([cat,obj])=>[obj.label.replace(/&amp;/g,"&"),(g[cat]||[])])
+    .filter(([,items])=>items.length);
+  if(!groepen.length){toast("De lijst is nog leeg");return;}
+  toast("Even exporteren...");
+  const C={bg:"#F3EAD8",card:"#FFFDF8",ink:"#2C2416",ink2:"#5C4F3A",ink3:"#8C7B5E",
+    line:"#EAE0CC",streep:"#D8CCB2"};
+
+  const kolom=groepen.map(([label,items])=>`
+    <div style="break-inside:avoid;margin-bottom:20px">
+      <div style="font-family:var(--num);font-size:9px;letter-spacing:1.5px;text-transform:uppercase;
+        color:${C.ink3};border-bottom:1px solid ${C.streep};padding-bottom:5px;margin-bottom:8px">${esc(label)}</div>
+      ${items.map(it=>{
+        const k=it.name.toLowerCase();
+        const amt=S.boodOverride[k]||it.amount||"";
+        const af=!!S.checked[k];
+        return `<div style="display:flex;align-items:baseline;gap:8px;padding:3px 0;
+          ${af?`color:${C.ink3};text-decoration:line-through`:""}">
+          <span style="display:inline-block;width:9px;height:9px;border:1px solid ${C.streep};
+            border-radius:2px;flex:0 0 auto;background:${af?C.streep:"transparent"}"></span>
+          <span style="font-size:12px;font-weight:500;color:${af?C.ink3:C.ink};flex:1">${esc(it.name)}</span>
+          ${amt?`<span style="font-family:var(--num);font-size:11px;color:${C.ink3};white-space:nowrap">${esc(amt)}</span>`:""}
+        </div>`;
+      }).join("")}
+    </div>`).join("");
+
+  const div=document.createElement("div");
+  div.style.cssText=`position:fixed;left:-9999px;top:0;width:760px;padding:36px 40px 44px;`+
+    `background:${C.bg};color:${C.ink};font-family:'Hanken Grotesk',sans-serif;`;
+  div.innerHTML=`
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:24px">
+      <div>
+        <div style="font-family:var(--num);font-size:9px;letter-spacing:2px;color:${C.ink3};
+          margin-bottom:6px;text-transform:uppercase">Week ${W.wk} · ${W.range}</div>
+        <div style="font-family:var(--display);font-weight:800;font-size:34px;line-height:1;color:${C.ink}">Boodschappen</div>
+      </div>
+      <div style="font-size:12px;color:${C.ink3};text-align:right;line-height:1.7">
+        ${vast?`${esc(namenOp(vast.eters))}<br>${vast.dagen} dagen · ${vast.maaltijden} maaltijden`:esc(S.cfg.store)}
+      </div>
+    </div>
+    <div style="background:${C.card};border-radius:16px;padding:24px 26px 8px;column-count:2;column-gap:34px">
+      ${kolom}
+    </div>
+    <div style="text-align:right;margin-top:16px;font-family:var(--num);font-size:8px;
+      letter-spacing:2px;color:${C.line};text-transform:uppercase">Weekmenu Planner</div>`;
+  document.body.appendChild(div);
+  const kleurenTerug=kleurenTijdelijkPlat();
+  try{
+    const canvas=await html2canvas(div,{backgroundColor:C.bg,scale:2,useCORS:true,logging:false});
+    if(type==="pdf"){
+      const {jsPDF}=window.jspdf;
+      const pdf=new jsPDF({orientation:"portrait",unit:"mm",format:"a4"});
+      const w=pdf.internal.pageSize.getWidth()-20;
+      const h=(canvas.height/canvas.width)*w;
+      pdf.addImage(canvas.toDataURL("image/png"),"PNG",10,10,w,h);
+      pdf.save(`boodschappen-week${W.wk}.pdf`);
+    }else{
+      const a=document.createElement("a");
+      a.href=canvas.toDataURL("image/jpeg",0.95);
+      a.download=`boodschappen-week${W.wk}.jpg`;a.click();
+    }
+    toast("Klaar");
+  }catch(e){
+    console.error("export boodschappen mislukt",e);
     toast("Export mislukt: "+String((e&&e.message)||"onbekende fout").slice(0,90));
   }
   finally{kleurenTerug();document.body.removeChild(div);}
@@ -2759,32 +3091,67 @@ function openEdit(id){const rc=S.custom.find(x=>x.id===id);if(rc)set({editRc:rc,
 
 // ---------- BOODSCHAPPEN ----------
 function renderBoodschappen(){
-  const grouped=boodschappen();
+  const vast=boodLijst();
+  const grouped=boodGroepen();
   window.__boodList=[];
   const all=Object.values(grouped).flat();
   const total=all.length;
   const done=all.filter(it=>S.checked[it.name.toLowerCase()]).length;
   const pct=total?Math.round(done/total*100):0;
+  const gewijzigd=boodVerschil(vast);
+  const W=curWeek();
+
+  const kop=vast?`
+    <div class="lijstkop">
+      <div class="lijstkop-rij">
+        <span class="lijstkop-titel">Lijst opgemaakt</span>
+        <span class="num lijstkop-tijd">${datumKort(vast.op)}</span>
+      </div>
+      <p class="lijstkop-sub">Voor ${esc(namenOp(vast.eters))} ·
+        <span class="num">${vast.dagen}</span> dagen ·
+        <span class="num">${vast.maaltijden}</span> maaltijden ·
+        <span class="num">${(vast.items||[]).length}</span> regels</p>
+    </div>
+    ${gewijzigd?`<div class="lijstwaarschuwing">
+      <div>
+        <strong>Je week is aangepast</strong>
+        <p><span class="num">${gewijzigd}</span> ${gewijzigd===1?"maaltijd wijkt":"maaltijden wijken"} af van deze lijst. Je vinkjes blijven staan.</p>
+      </div>
+      <button class="btn btn-primary" onclick="lijstBijwerken()">${ic("opnieuw",17)} Bijwerken</button>
+    </div>`:""}`
+  :`
+    <div class="lijstkop lijstkop-los">
+      <div class="lijstkop-rij">
+        <span class="lijstkop-titel">Nog niet opgemaakt</span>
+      </div>
+      <p class="lijstkop-sub">Deze lijst beweegt mee met je week. Maak hem op zodra het menu klaar is, dan verandert hij niet meer onder je handen.</p>
+      <button class="btn btn-primary" style="margin-top:var(--s-3)" onclick="lijstOpmaken()">${ic("vink",17)} Lijst opmaken</button>
+    </div>`;
+
   return `
   <div class="view">
     <div class="page-head">
       <h1 class="page-title">Boodschappen</h1>
-      <p class="page-sub">Week ${curWeek().wk} · ${esc(S.cfg.store)}</p>
+      <p class="page-sub">Week ${W.wk} · ${esc(S.cfg.store)}</p>
     </div>
-    ${total===0?`<div class="empty">
+    ${total===0&&!vast?`<div class="empty">
       <div class="empty-title">Nog leeg</div>
       <p>Vul eerst het weekmenu in. De lijst schrijft zichzelf.</p></div>`:`
+    ${kop}
     <div class="progress">
       <div style="display:flex;justify-content:space-between;align-items:baseline;gap:var(--s-3)">
-        <span style="font-weight:600;font-size:var(--t-md)">${done===total?"Alles in huis":"Onderweg"}</span>
+        <span style="font-weight:600;font-size:var(--t-md)">${total&&done===total?"Alles in huis":"Onderweg"}</span>
         <span class="num" style="font-size:var(--t-sm);color:var(--ink-3)">${done} / ${total}</span>
       </div>
       <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
     </div>
-    <div style="display:flex;gap:var(--s-2);margin-bottom:var(--s-5)">
-      <button class="btn btn-line" onclick="exportImg('pdf')">${ic("bestand",17)} PDF</button>
-      <button class="btn btn-line" onclick="exportImg('jpg')">${ic("afbeelding",17)} JPG</button>
-      <button class="btn btn-line" onclick="set({checked:{}})">${ic("opnieuw",17)} Reset</button>
+    <div class="bood-acties">
+      <button class="btn btn-line" onclick="deelBood()">${ic("delen",17)} Delen</button>
+      <button class="btn btn-line" onclick="kopieerBood()">${ic("plakken",17)} Kopiëren</button>
+      <button class="btn btn-line" onclick="exportBoodImg('jpg')">${ic("afbeelding",17)} Foto</button>
+      <button class="btn btn-line" onclick="exportBoodImg('pdf')">${ic("bestand",17)} PDF</button>
+      <button class="btn btn-line" onclick="set({checked:{}})">${ic("opnieuw",17)} Vinkjes wissen</button>
+      ${vast?`<button class="btn btn-line" onclick="lijstLosmaken()">${ic("wissen",17)} Lijst loslaten</button>`:""}
     </div>
     ${Object.entries(BOOD_CATS).map(([cat,obj])=>{
       const items=grouped[cat]||[];if(!items.length)return"";
@@ -2798,7 +3165,7 @@ function renderBoodschappen(){
         ${items.map(it=>{
           const idx=window.__boodList.length; window.__boodList.push(it);
           const k=it.name.toLowerCase();const chk=!!S.checked[k];
-          const amt=S.boodOverride[k]||(it.amounts.length?it.amounts.join(", "):"");
+          const amt=S.boodOverride[k]||it.amount||"";
           const eigen=!!S.boodOverride[k];
           return `<div class="bood-item ${chk?"checked":""}">
             <button class="check ${chk?"on":""}" onclick="toggleCheck('${k.replace(/'/g,"")}')"
@@ -2820,7 +3187,7 @@ function renderBoodDetail(){
   const k=it.name.toLowerCase();
   const safeK=k.replace(/'/g,"");
   const hasOverride=!!S.boodOverride[k];
-  const currentAmt=S.boodOverride[k]||(it.amounts.length?it.amounts.join(", "):"");
+  const currentAmt=S.boodOverride[k]||it.amount||(it.amounts||[]).join(" + ");
   const seen=new Set();
   const uniqSources=(it.sources||[]).filter(s=>{
     const key=s.day+s.rcName; if(seen.has(key))return false; seen.add(key); return true;
@@ -3715,12 +4082,19 @@ function renderWizStep5(){
         if(!rc || isLeftover(rc))return;
         (rc.ingredients||[]).forEach(g=>{
           const k = (g.n||"").toLowerCase();
-          if(!allIng[k]) allIng[k] = {name:g.n, amounts:[]};
-          const sc = scaleAmt(g.a,rcPorties(rc),slotEters(dag,row.id));
-          if(sc&&!allIng[k].amounts.includes(sc)) allIng[k].amounts.push(sc);
+          if(!allIng[k]) allIng[k] = {name:g.n, delen:{}, los:[]};
+          const it = allIng[k];
+          const p = parseAmt(g.a);
+          if(p.n!==null){
+            const n = p.n*slotEters(dag,row.id)/(rcPorties(rc)||2);
+            it.delen[p.eh]=(it.delen[p.eh]||0)+n;
+          }else if(!p.smaak&&p.ruw&&!it.los.includes(p.ruw)) it.los.push(p.ruw);
         });
       });
     });
+  });
+  Object.values(allIng).forEach(it=>{
+    it.amounts=[...Object.entries(it.delen).map(([eh,n])=>fmtAmt(n,eh)),...it.los];
   });
   const items = Object.entries(allIng);
   const inHuis = items.filter(([k])=>S.wiz.inHuis[k]).length;
@@ -3798,6 +4172,8 @@ window.onWeekNote=onWeekNote; window.S=S; window.render=render;
 window.pickSlot=pickSlot; window.assignRecipe=assignRecipe; window.clearSlot=clearSlot;
 window.toggleEter=toggleEter; window.etersAlsVast=etersAlsVast; window.etersTerug=etersTerug;
 window.toggleCheck=toggleCheck;
+window.lijstOpmaken=lijstOpmaken; window.lijstBijwerken=lijstBijwerken; window.lijstLosmaken=lijstLosmaken;
+window.kopieerBood=kopieerBood; window.deelBood=deelBood; window.exportBoodImg=exportBoodImg;
 window.openBoodDetail=openBoodDetail; window.closeBoodDetail=closeBoodDetail;
 window.saveBoodOverride=saveBoodOverride; window.deleteBoodOverride=deleteBoodOverride;
 window.fetchCaption=fetchCaption; window.importFromUrl=importFromUrl; window.gedeeldeLink=gedeeldeLink; window.plakLink=plakLink; window.verwerkGedeeld=verwerkGedeeld; window.doImport=doImport; window.addPhotos=addPhotos; window.removePhoto=removePhoto; window.doPhotoImport=doPhotoImport; window.saveIgRecipe=saveIgRecipe; window.saveForm=saveForm; window.setFormVoor=setFormVoor;

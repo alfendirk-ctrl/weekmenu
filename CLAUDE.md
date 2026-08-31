@@ -26,14 +26,14 @@ Everything lives in `index.html`. The structure within the `<script>` block:
 | `CONFIG` | Constants: `DAYS`, `PEOPLE`, `ROWS`, `BOOD_CATS`, `EC`/`EL`, `TIJD_OPTIES` |
 | `RECIPES` | ~142 built-in recipes defined with factory functions `r(id,ebook,name,cat,time,ing,steps,srv,voor)` and `i(name,amount)` |
 | `STATE & STORAGE` | Global state `S`, `lsGet`/`lsSet` wrappers, `save()`, `set(patch)` |
-| `HELPERS` | `shuf`, `scaleAmt`, `esc`, `toast`, `avatarStack` |
+| `HELPERS` | `shuf`, `parseAmt`/`fmtAmt`/`fmtGetal`, `scaleAmt`, `esc`, `toast`, `avatarStack` |
 | `ICONEN` | `ICONS` map of drawn 24×24 SVG paths + `ic(name,size)`. No emoji anywhere in the UI — they are not an icon system |
 | `ETERS` | `ALLE_ETERS`, `etersAt`/`eters`/`eetMee`, `toggleEter`, `etersAlsVast`/`etersTerug`, `kanApart`, `rowWho` — wie er mee-eet |
 | `DAGINSTELLINGEN` | `dayCfgAt`/`dayCfg`/`setDayCfg`, `rowsFor`, `clearDay` — per-day plan / apart / maxTijd |
 | `INGREDIËNTEN` | `ingKey` (normaliseert een naam), `ingKeys` (per recept) — basis voor het hergebruik in de generator |
 | `WAARDERINGEN` | `rateOf`, `setRating`, `rateScore`, `rateBadge` |
 | `RESTJES` | `makeLeftover`, `isLeftover`, `leftoverCounts`, `leftoverSources` |
-| `ACTIONS` | `pickSlot`, `assignRecipe`, `clearSlot`, `saveCustomRecipe`, `boodschappen`, `runAutofill`, `exportImg`, `doImport` (IG/Gemini), `saveForm` |
+| `ACTIONS` | `pickSlot`, `assignRecipe`, `clearSlot`, `saveCustomRecipe`, `boodschappen`, `lijstOpmaken`, `runAutofill`, `exportWeekImg`/`exportBoodImg`, `doImport` (IG/Gemini), `saveForm` |
 | `KOOKMODUS` | `openCook`/`closeCook`, `cookGo`, `stepSeconds`, `cookStartTimer`, `renderCookMode` |
 | `PORTIES` | `basisPorties`, `rcPorties`/`setRcPorties`, `slotEters`/`slotPorties`/`setSlotPorties`, `scaleAmt` |
 | `RONDLEIDING` | `TOUR` (13 steps), `tourStart`, `tourGa`, `tourKlaar`, `tourOverslaan`, `tourMarkeer`, `renderTour` |
@@ -72,7 +72,7 @@ Two different numbers, and mixing them up is the bug this model exists to preven
 - **What the recipe is written for** — `rcPorties(rc)`: `S.rcServings[rc.id]` if the user corrected it, otherwise `rc.servings`, otherwise 2. Editable from the recipe detail; `setRcPorties` writes it.
 - **How many people are eating this slot** — `slotPorties(day,rowId)`: `rc.porties` stored on the slot itself if set, otherwise `slotEters(day,rowId)` — 3 for dinner, 1 for an `apart:true` row or Shelley's own row on a separate-eating day, otherwise household minus one. `setSlotPorties` writes it onto the slot, so the same recipe can be cooked for two on Tuesday and six on Saturday.
 
-`scaleAmt(amt, van, naar)` multiplies the first number it finds in an amount string by `naar/van` and rounds to one decimal; it returns the string untouched when there is no number or the factor is ~1. The old fixed `HH = 3` is gone — `basisPorties()` is simply `eters().length` (`S.cfg.huishouden` had no UI and would have silently beaten the visible chips, so it is no longer read). The shopping list and recipe detail both scale through this pair, never through a constant.
+`scaleAmt(amt, van, naar)` parses the amount with `parseAmt`, multiplies by `naar/van` and re-renders it with `fmtAmt`; it returns the string untouched when there is no number at all (`n.s.`, `handje`). See Hoeveelheden below. The old fixed `HH = 3` is gone — `basisPorties()` is simply `eters().length` (`S.cfg.huishouden` had no UI and would have silently beaten the visible chips, so it is no longer read). The shopping list and recipe detail both scale through this pair, never through a constant.
 
 ### Losse categorieën — snacks en mealpreps
 
@@ -157,6 +157,37 @@ op tijd antwoordt of onbereikbaar is laat de rest **niet** vallen: dat wordt
 onthouden in `lastErr` en de lus gaat door naar het volgende. Pas na het laatste
 model volgt een melding. Wachttijd is 90 s voor tekst en 120 s voor foto's —
 mobiel internet plus een groot bijschrift haalde de oude 45 s niet.
+
+### Hoeveelheden
+
+Eén parser, drie functies, en alles wat met hoeveelheden rekent gaat erdoorheen:
+
+- **`parseAmt(a)`** → `{n, eh, ruw, smaak}`. Splitst "300 g", "½ el", "1½ blikje", "2" en "n.s." in een getal en een eenheid. **`½ ¼ ¾ ⅓ ⅔ ⅛` tellen als getal** — 47 ingrediënten in de kast staan zo genoteerd en die schaalden vroeger niet mee, want de oude regex zocht naar een cijfer. `EENHEID_ALIAS` maakt van `gram`/`gr` één `g`, zodat het optelt. `smaak` markeert "n.s.", "snufje" en "naar smaak": daar valt niets aan te rekenen.
+- **`fmtAmt(n, eh)`** → tekst. `g` en `ml` rond je op hele getallen af (geen 487½ g), andere maten op één decimaal, en **alles zonder maat naar boven op een heel getal** — anderhalf ei bestaat niet in de winkel.
+- **`fmtGetal(n)`** schrijft 0,5 als `½`, net zoals de recepten dat doen.
+
+`boodschappen()` **telt op per eenheid** in `it.delen`. Daarvoor werden losse tekstjes naast elkaar gezet ("70g + 40g + 120g + 60g") en verdwenen twee gelijke hoeveelheden zelfs helemaal, doordat er op de tekst werd ontdubbeld. Wat geen getal heeft (`handje`) blijft los in `it.los` staan; `it.amount` is de regel die je ziet.
+
+### Schapindeling
+
+`getBoodCat(name)` kijkt eerst in `BOOD_STERK` — een handvol aanwijzingen voor samenstellingen die de gewone regel verkeerd laat vallen ("komijnekaas" is kaas, "shoarmakruiden" is een kruidenmix) — en daarna in `BOOD_STAMMEN`.
+
+Twee regels houden dat recht, en allebei zijn ze eerder stukgegaan:
+
+- **Een stam van drie letters of korter moet een woord beginnen.** Zoeken op deelstring zette "Italiaanse kruiden" bij groente (er zit `ui` in kr-UI-den) en boterhammen bij vlees (boter-HAM). Langere stammen mogen wél overal staan, anders vindt "wokgroente" of "ossenworst" niets.
+- **De langste treffer wint.** Anders wordt "boterham" boter en "slagroom" sla.
+
+Stammen zijn kort gehouden zodat meervouden meelopen: `toma` pakt ook tomaten, tomaatjes en trostomaten. Gemeten over de 295 ingrediënten in de kast: **1 in Overig** (was 61).
+
+### De boodschappenlijst vastleggen
+
+De lijst wordt afgeleid uit de week, maar je winkelt met een lijst die stilstaat. `lijstOpmaken()` schrijft hem naar `wm_boodlijst_YYYY-MM-DD` mét een vingerafdruk van de week (`weekSlots()` — recept-id plus porties per slot). `boodVerschil()` telt hoeveel slots sindsdien afwijken; staat dat op meer dan nul, dan verschijnt de melding met "Bijwerken". `boodGroepen()` is wat het scherm toont: de vastgelegde lijst als die er is, anders live.
+
+`S.checked` en `S.boodOverride` staan **op naam** en dus buiten die momentopname — daarom overleven je vinkjes en je handmatige correcties een bijwerking. Lees de lijst via `boodLijst()`, nooit rechtstreeks uit localStorage.
+
+`boodTekst()` levert de platte tekst voor `kopieerBood()` en `deelBood()`, zonder de afgevinkte regels: je stuurt door wat er nog gehaald moet worden. Een koppeling met Jumbo of Albert Heijn bestaat niet — geen van beide heeft een publieke API om iets aan een boodschappenlijst toe te voegen, en de omwegen die er zijn vragen om je winkelinlog.
+
+**Wat de lijst niet kan.** De recepten beschrijven wat er op het bord ligt, niet wat je koopt: "10 plakken komkommer" telt op tot 23 plakjes in plaats van één komkommer. En "Ei" en "Eieren" blijven twee regels — automatisch samenvoegen zou ook "rode ui" en "witte ui" samenvoegen. Beide los je per regel op met de handmatige correctie, die blijft staan.
 
 ### Export
 
