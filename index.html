@@ -334,6 +334,24 @@ svg{display:block;flex:0 0 auto}
   .meal-side{grid-column:2;grid-row:2}
 }
 
+.volgende{border:1px solid var(--accent-line);border-radius:var(--r-lg);
+  background:var(--surface);padding:var(--s-4);margin-bottom:var(--s-5)}
+.volgende-rij{display:flex;justify-content:space-between;align-items:baseline;
+  gap:var(--s-3);margin-bottom:var(--s-1)}
+.volgende-wat{font-size:var(--t-xs);font-weight:600;color:var(--accent)}
+.volgende-wanneer{font-size:var(--t-xs);color:var(--ink-3)}
+.volgende-regel+.volgende-regel{border-top:1px solid var(--line);margin-top:var(--s-3);padding-top:var(--s-3)}
+.volgende-item{display:flex;align-items:flex-start;gap:var(--s-3);width:100%;
+  background:none;border:0;padding:0;text-align:left;cursor:pointer;color:inherit}
+.volgende-item .who{flex:0 0 auto;margin-top:2px}
+.volgende-naam{flex:1;min-width:0;font-family:var(--display);font-weight:700;font-size:var(--t-lg);
+  line-height:1.25;color:var(--ink);transition:color .15s;text-wrap:balance}
+.volgende-naam.leeg{font-family:inherit;font-weight:600;font-size:var(--t-md);color:var(--ink-3)}
+.volgende-item:hover .volgende-naam{color:var(--accent)}
+.volgende-item:active{opacity:.7}
+.volgende-voet{display:flex;align-items:center;gap:var(--s-2);margin-top:var(--s-2);min-height:1.75rem}
+.volgende-meta{display:inline-flex;align-items:center;gap:var(--s-1);
+  font-size:var(--t-xs);color:var(--ink-3);white-space:nowrap}
 .lijstkop{border:1px solid var(--line);border-radius:var(--r-lg);padding:var(--s-4);
   background:var(--surface);margin-bottom:var(--s-4)}
 .lijstkop-rij{display:flex;justify-content:space-between;align-items:baseline;gap:var(--s-3)}
@@ -638,17 +656,21 @@ const EC={1:"#E0916B",2:"#8C9E6E",3:"#9DAA78",4:"#C2724E",5:"#E8C06A",6:"#70a0a0
 const EL={1:"Broodje Dunner 1",2:"Broodje Dunner 2",3:"Broodje Dunner 3",4:"Broodje Dunner 4",5:"Broodje Dunner 5",6:"Broodje Dunner 6",7:"Broodje Dunner 7",0:"Eigen recept"};
 
 // Planner rows
+// `tijd` is het richttijdstip in minuten na middernacht. Het plant niets en
+// staat nergens in de weergave — het bepaalt alleen de volgorde van de dag,
+// zodat "de volgende maaltijd" weet wat er nog komt. Rijen met hetzelfde
+// tijdstip (ontbijt van Shelley en van Dirk) horen bij elkaar.
 const ROWS = [
   // Rijen met apart:true bestaan alleen op dagen waar apart eten aanstaat.
   // De "shelley"-rij is dan de gedeelde maaltijd voor iedereen.
-  {id:"ontbijt_shelley", label:"Ontbijt", who:"shelley", cat:"ontbijt"},
-  {id:"ontbijt_dirk", label:"Ontbijt", who:"dirk", cat:"ontbijt", apart:true},
-  {id:"tussen_ochtend", label:"Tussendoor", who:"samen", cat:"tussendoortje", split:false, sub:"ochtend"},
-  {id:"lunch_shelley", label:"Lunch", who:"shelley", cat:"lunch"},
-  {id:"lunch_dirk", label:"Lunch", who:"dirk", cat:"lunch", apart:true},
-  {id:"tussen_middag", label:"Tussendoor", who:"samen", cat:"tussendoortje", split:false, sub:"middag"},
-  {id:"diner", label:"Diner", who:"samen", cat:"diner", split:false},
-  {id:"snack_avond", label:"Avondsnack", who:"samen", cat:"tussendoortje", split:false, sub:"avond", free:true},
+  {id:"ontbijt_shelley", label:"Ontbijt", who:"shelley", cat:"ontbijt", tijd:7*60+30},
+  {id:"ontbijt_dirk", label:"Ontbijt", who:"dirk", cat:"ontbijt", apart:true, tijd:7*60+30},
+  {id:"tussen_ochtend", label:"Tussendoor", who:"samen", cat:"tussendoortje", split:false, sub:"ochtend", tijd:10*60+30},
+  {id:"lunch_shelley", label:"Lunch", who:"shelley", cat:"lunch", tijd:12*60+30},
+  {id:"lunch_dirk", label:"Lunch", who:"dirk", cat:"lunch", apart:true, tijd:12*60+30},
+  {id:"tussen_middag", label:"Tussendoor", who:"samen", cat:"tussendoortje", split:false, sub:"middag", tijd:15*60+30},
+  {id:"diner", label:"Diner", who:"samen", cat:"diner", split:false, tijd:18*60},
+  {id:"snack_avond", label:"Avondsnack", who:"samen", cat:"tussendoortje", split:false, sub:"avond", free:true, tijd:20*60+30},
 ];
 
 // Boodschappen categories
@@ -1658,6 +1680,56 @@ function setDayCfgAt(wo,day,patch){
 function rowsFor(day,wo){
   const apart=dayCfgAt(wo===undefined?(S.weekOffset||0):wo, day).apart;
   return ROWS.filter(r=>!r.free && (!r.apart || apart));
+}
+
+// ===================== VOLGENDE MAALTIJD =====================
+// Eén kaart bovenaan de planner: wat eet je hierna. Die kijkt naar de échte
+// klok en de échte week, niet naar de week die je toevallig staat te bekijken —
+// blader je naar volgende maand, dan blijft de kaart zeggen wat er vanavond op
+// tafel komt.
+function weekAt(wo){
+  return wo===(S.weekOffset||0) ? S.week : lsGet(weekStoreKey(wo),{});
+}
+function volgendeMaaltijd(){
+  const nu=new Date();
+  const nuMin=nu.getHours()*60+nu.getMinutes();
+  const start=(nu.getDay()+6)%7;                 // 0 = maandag
+  for(let stap=0;stap<8;stap++){
+    const idx=(start+stap)%7;
+    const wo=(start+stap)>=7?1:0;                // over zondag heen = volgende week
+    const dag=DAYS[idx];
+    if(!dayCfgAt(wo,dag).plan)continue;
+    const week=weekAt(wo)||{};
+    const rijen=rowsFor(dag,wo)
+      .filter(r=>stap>0||r.tijd>nuMin)           // vandaag alleen wat nog komt
+      .sort((a,b)=>a.tijd-b.tijd);
+    // Rijen met hetzelfde tijdstip horen bij elkaar: op een dag dat je apart
+    // eet zijn dat twee ontbijten naast elkaar, niet twee momenten.
+    const tijden=[...new Set(rijen.map(r=>r.tijd))];
+    for(const tijd of tijden){
+      const groep=rijen.filter(r=>r.tijd===tijd)
+        .map(row=>({row, rc:(week[dag]||{})[row.id]||null}));
+      const leeg=groep.every(g=>!g.rc);
+      if(leeg){
+        // Een leeg tussendoortje laat je vaker bewust open; daar hoef je niets
+        // van te weten. Een leeg ontbijt, lunch of diner is juist het bericht —
+        // maar alleen vandaag of morgen. Dat vrijdag nog niet gevuld is hoor je
+        // van de weekplanner, niet van deze kaart.
+        if(groep.every(g=>g.row.cat==="tussendoortje"))continue;
+        if(stap>1)continue;
+      }
+      return {wo, dag, stap, tijd, groep};
+    }
+  }
+  return null;
+}
+// "vanavond", "morgenochtend", "vrijdagavond" — het dagdeel komt uit de rij.
+function wanneerTekst(v){
+  const row=v.groep[0].row;
+  const deel=row.sub||({ontbijt:"ochtend",lunch:"middag",diner:"avond"}[row.cat]||"");
+  if(v.stap===0)return deel?"van"+deel:"straks";   // vanochtend, vanmiddag, vanavond
+  if(v.stap===1)return deel?"morgen"+deel:"morgen";
+  return DAY_FULL[v.dag]+(deel||"");
 }
 
 // ===================== WEEK STATS =====================
@@ -2785,6 +2857,8 @@ function renderPlanner(){
       <p class="page-sub">${st.total===0?"Geen dag staat aan deze week.":st.empty===0?"De week staat compleet.":`Nog ${st.empty} van de ${st.total} maaltijden te kiezen.`}</p>
     </div>
 
+    ${renderVolgende()}
+
     <div class="planner">
       <div class="railcol">
         <div class="rail">${DAYS.map(d=>renderDayCard(d)).join("")}</div>
@@ -2976,6 +3050,59 @@ function renderEters(){
         : `Je vaste stand. Wijzig het hier en het geldt alleen voor deze week.`}
     </p>
   </div>`;
+}
+
+// ---------- VOLGENDE MAALTIJD ----------
+function renderVolgende(){
+  const v=volgendeMaaltijd();
+  if(!v)return "";
+  const label=v.groep.length>1 ? v.groep[0].row.label : v.groep[0].row.label+(v.groep[0].row.sub?" · "+v.groep[0].row.sub:"");
+  return `
+  <div class="volgende">
+    <div class="volgende-rij">
+      <span class="volgende-wat">${esc(label)}</span>
+      <span class="volgende-wanneer">${esc(wanneerTekst(v))}</span>
+    </div>
+    ${v.groep.map(({row,rc})=>{
+      const lo=isLeftover(rc);
+      const kan=rc&&!lo&&(rc.steps||[]).length>0&&(row.id==="diner"||parseInt(rc.time)>=15);
+      const p=PEOPLE[rowWho(row)];
+      const wie=v.groep.length>1&&p?`<span class="who" style="background:${p.color}">${p.initial}</span>`:"";
+      return `<div class="volgende-regel">
+        <button class="volgende-item" onclick="volgendeOpenen('${row.id}')">
+          ${wie}<span class="volgende-naam ${rc?"":"leeg"}">${rc?esc(rc.name):"Nog niets gekozen"}</span>
+        </button>
+        <div class="volgende-voet">
+          <span class="volgende-meta">
+            ${rc?(lo?`${ic("restjes",13)} restjes`:`<span class="num">${esc(rc.time)}</span> · voor <span class="num">${slotPorties(v.dag,row.id)}</span>`)
+               :"Tik om te kiezen"}
+          </span>
+          <span style="flex:1"></span>
+          ${kan?`<button class="iconbtn bordered" title="Kookmodus" aria-label="Kookmodus"
+            onclick="volgendeKoken('${row.id}')">${ic("koken",17)}</button>`:""}
+        </div>
+      </div>`;
+    }).join("")}
+  </div>`;
+}
+// De kaart kan naar een andere week wijzen dan je staat te bekijken: die maakt
+// hij dan eerst actueel, zodat pickSlot en de kookmodus in de goede week staan.
+function volgendeGaNaar(){
+  const v=volgendeMaaltijd();
+  if(!v)return null;
+  if((S.weekOffset||0)!==v.wo)switchWeek(v.wo);
+  S.view="planner"; S.activeDay=v.dag;
+  return v;
+}
+function volgendeOpenen(rowId){
+  const v=volgendeGaNaar();
+  if(v)pickSlot(v.dag,rowId);
+}
+function volgendeKoken(rowId){
+  const v=volgendeGaNaar();
+  if(!v)return;
+  const rc=(S.week[v.dag]||{})[rowId];
+  if(rc)openCook(rc.id,v.dag,rowId);
 }
 
 // ---------- BOTTOM NAV ----------
@@ -4170,6 +4297,7 @@ window.wizToggleVasteDay=wizToggleVasteDay; window.wizRemoveVaste=wizRemoveVaste
 window.wizPickVasteRow=wizPickVasteRow; window.wizPickVasteRc=wizPickVasteRc;
 window.onWeekNote=onWeekNote; window.S=S; window.render=render;
 window.pickSlot=pickSlot; window.assignRecipe=assignRecipe; window.clearSlot=clearSlot;
+window.volgendeOpenen=volgendeOpenen; window.volgendeKoken=volgendeKoken;
 window.toggleEter=toggleEter; window.etersAlsVast=etersAlsVast; window.etersTerug=etersTerug;
 window.toggleCheck=toggleCheck;
 window.lijstOpmaken=lijstOpmaken; window.lijstBijwerken=lijstBijwerken; window.lijstLosmaken=lijstLosmaken;

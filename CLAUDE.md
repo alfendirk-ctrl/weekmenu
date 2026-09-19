@@ -29,6 +29,7 @@ Everything lives in `index.html`. The structure within the `<script>` block:
 | `HELPERS` | `shuf`, `parseAmt`/`fmtAmt`/`fmtGetal`, `scaleAmt`, `esc`, `toast`, `avatarStack` |
 | `ICONEN` | `ICONS` map of drawn 24×24 SVG paths + `ic(name,size)`. No emoji anywhere in the UI — they are not an icon system |
 | `ETERS` | `ALLE_ETERS`, `etersAt`/`eters`/`eetMee`, `toggleEter`, `etersAlsVast`/`etersTerug`, `kanApart`, `rowWho` — wie er mee-eet |
+| `VOLGENDE MAALTIJD` | `weekAt`, `volgendeMaaltijd`, `wanneerTekst`, `renderVolgende`, `volgendeOpenen`/`volgendeKoken` |
 | `DAGINSTELLINGEN` | `dayCfgAt`/`dayCfg`/`setDayCfg`, `rowsFor`, `clearDay` — per-day plan / apart / maxTijd |
 | `INGREDIËNTEN` | `ingKey` (normaliseert een naam), `ingKeys` (per recept) — basis voor het hergebruik in de generator |
 | `WAARDERINGEN` | `rateOf`, `setRating`, `rateScore`, `rateBadge` |
@@ -60,7 +61,7 @@ Because `render()` throws away the DOM, a focused field would lose its text mid-
 - `S.custom` — user-added recipes (persisted to `localStorage` key `wm_custom_v2`)
 - `S.cfg.apartEten` — the household default for eating separately, toggled in the planner's week column. `dayCfgAt` falls back to it for any day that has no explicit `apart` value, so a per-day choice always wins. A one-time migration (`wm_apart_migrated_v1`) turns it on for anyone whose stored weeks contain a genuinely split breakfast or lunch, so upgrading does not silently hide Dirk's meal.
 - `S.dayCfg` — per-day settings for the week being viewed, persisted to `wm_daycfg_YYYY-MM-DD`: `{plan, apart, maxTijd}`. `plan` defaults to true, `apart` falls back to `S.cfg.apartEten`, `maxTijd` is `0|15|30|45` (0 = no limit). Read it through `dayCfgAt(wo,day)`, never directly — it resolves the defaults and reads other weeks from localStorage. There are no cooking modes any more.
-- `ROWS` — 8 rows; each has `id`, `cat`, `who`, and optionally `sub`, `free`, `apart`. **Which rows a day actually has is `rowsFor(day, wo)`, not `ROWS`** — rows with `apart:true` (`ontbijt_dirk`, `lunch_dirk`) only exist on days where separate eating is on, and `free:true` (`snack_avond`) is a text field, not a slot. So a day has 5 fillable slots normally and 7 when eating separately. **A row's `who` is not `row.who` but `rowWho(row)`** — see Eters below. Everything that counts slots — stats, dots, shopping list, generator — must go through `rowsFor`.
+- `ROWS` — 8 rows; each has `id`, `cat`, `who`, `tijd`, and optionally `sub`, `free`, `apart`. `tijd` is a target time in minutes after midnight; it plans nothing and is never displayed — it only orders the day for the next-meal card. **Which rows a day actually has is `rowsFor(day, wo)`, not `ROWS`** — rows with `apart:true` (`ontbijt_dirk`, `lunch_dirk`) only exist on days where separate eating is on, and `free:true` (`snack_avond`) is a text field, not a slot. So a day has 5 fillable slots normally and 7 when eating separately. **A row's `who` is not `row.who` but `rowWho(row)`** — see Eters below. Everything that counts slots — stats, dots, shopping list, generator — must go through `rowsFor`.
 - `S.ratings` — `{[rcId]: {shelley:1|-1, dirk:…, maeve:…}}`, persisted to `wm_ratings_v1`. Two thumbs down and the generator skips the recipe.
 - **Leftovers** — a leftover slot is a reference, not a copy: `{id:"lo_<srcId>", leftoverOf:<srcId>, ingredients:[]}`. `boodschappen()` therefore skips it and instead multiplies the source recipe's amounts by `1 + aantal restjesdagen`.
 - `S.rcServings` — `{[rcId]: n}`, persisted to `wm_servings_v1`: what a recipe's written amounts are *for*. See below.
@@ -73,6 +74,19 @@ Two different numbers, and mixing them up is the bug this model exists to preven
 - **How many people are eating this slot** — `slotPorties(day,rowId)`: `rc.porties` stored on the slot itself if set, otherwise `slotEters(day,rowId)` — 3 for dinner, 1 for an `apart:true` row or Shelley's own row on a separate-eating day, otherwise household minus one. `setSlotPorties` writes it onto the slot, so the same recipe can be cooked for two on Tuesday and six on Saturday.
 
 `scaleAmt(amt, van, naar)` parses the amount with `parseAmt`, multiplies by `naar/van` and re-renders it with `fmtAmt`; it returns the string untouched when there is no number at all (`n.s.`, `handje`). See Hoeveelheden below. The old fixed `HH = 3` is gone — `basisPorties()` is simply `eters().length` (`S.cfg.huishouden` had no UI and would have silently beaten the visible chips, so it is no longer read). The shopping list and recipe detail both scale through this pair, never through a constant.
+
+### De volgende maaltijd
+
+Eén kaart bovenaan de planner, boven `.planner` en los van de rest: wat eet je hierna. `volgendeMaaltijd()` loopt vanaf nu maximaal acht dagen vooruit en geeft `{wo, dag, stap, tijd, groep}` terug.
+
+Twee dingen die makkelijk misgaan:
+
+- **De kaart kijkt naar de échte klok en de échte week**, niet naar de week die je staat te bekijken. Daarom leest hij via `weekAt(wo)` — dat is `S.week` voor de huidige week en localStorage voor de andere, net als `rawDayCfg`. Blader je naar volgende maand, dan blijft de kaart zeggen wat er vanavond op tafel komt. `volgendeGaNaar()` zet de goede week klaar met `switchWeek` vóór `pickSlot` of `openCook`, anders wijzen die naar het verkeerde weekbestand.
+- **Rijen met hetzelfde `tijd` horen bij elkaar.** Op een dag dat je apart eet zijn `ontbijt_shelley` en `ontbijt_dirk` twee borden op één moment, niet twee momenten. `groep` bevat ze allebei en de kaart zet er de initialen bij.
+
+Wanneer een leeg slot zich meldt: een leeg **tussendoortje** nooit (dat laat je vaker bewust open), een leeg ontbijt/lunch/diner alleen **vandaag of morgen** (`stap<=1`). Dat vrijdag nog niet gevuld is hoor je van de weekplanner, niet van deze kaart. Is er in acht dagen niets te melden, dan verdwijnt de kaart.
+
+`wanneerTekst()` plakt het dagdeel aan het moment: `vanavond`, `morgenochtend`, `vrijdagavond`. Het dagdeel komt uit `row.sub` als die er is, anders uit de categorie.
 
 ### Losse categorieën — snacks en mealpreps
 
