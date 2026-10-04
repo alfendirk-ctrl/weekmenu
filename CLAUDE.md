@@ -29,7 +29,8 @@ Everything lives in `index.html`. The structure within the `<script>` block:
 | `HELPERS` | `shuf`, `parseAmt`/`fmtAmt`/`fmtGetal`, `scaleAmt`, `esc`, `toast`, `avatarStack` |
 | `ICONEN` | `ICONS` map of drawn 24×24 SVG paths + `ic(name,size)`. No emoji anywhere in the UI — they are not an icon system |
 | `ETERS` | `ALLE_ETERS`, `etersAt`/`eters`/`eetMee`, `toggleEter`, `etersAlsVast`/`etersTerug`, `kanApart`, `rowWho` — wie er mee-eet |
-| `VOLGENDE MAALTIJD` | `weekAt`, `volgendeMaaltijd`, `wanneerTekst`, `renderVolgende`, `volgendeOpenen`/`volgendeKoken`/`volgendeVerras`, `slotCtx`/`kiesVoorSlot`/`verrasSlot` |
+| `VOLGENDE MAALTIJD` | `weekAt`, `volgendeMaaltijd`, `wanneerTekst`, `renderVolgende`, `volgendeOpenen`/`volgendeKoken` |
+| `LOSSE KIEZER` | `kiesUitAlles`, `verrasOpen`/`verrasTrek`/`verrasCat`/`verrasTagToggle`, `verrasInWeek`/`verrasBekijk`, `renderVerras` |
 | `DAGINSTELLINGEN` | `dayCfgAt`/`dayCfg`/`setDayCfg`, `rowsFor`, `clearDay` — per-day plan / apart / maxTijd |
 | `INGREDIËNTEN` | `ingKey` (normaliseert een naam), `ingKeys` (per recept) — basis voor het hergebruik in de generator |
 | `TAGS` | `autoTags`/`eigenTags`/`tagsOf`, `alleTags`, `heeftTags`, `tagSel`/`tagToggle`/`tagWis`, `tagsZet`, `tagVoegToe`/`tagHaalWeg`, `renderTagFilter`, `tagStand` |
@@ -110,18 +111,15 @@ In de **generator** werkt een tagkeuze als de maximale kooktijd: `wizGenPreview`
 
 Beheren kan op drie plekken: het **receptdetail** (chips met een kruisje plus een invoerveld — werkt voor élk recept, ook die uit een kookboek), het **handmatige formulier** en de **importpreview** (allebei één veld met komma's). De laatste twee schrijven via `tagsZet(rc.id, …)` ná het samenstellen van het recept, want pas dan is het id bekend. Het veld in het detail heet `#tag-nieuw` — een stabiel id, anders wist een hertekening wat je aan het typen bent.
 
-### Eén maaltijd laten kiezen
+### Wat zal ik eten? — de losse kiezer
 
-`verrasSlot(day, rowId, tags)` vult één slot, los van de wizard. Het zit op twee plekken: de kaart met de volgende maaltijd (grote knop "Kies iets voor me" als het slot leeg is, een toverknopje als er al iets staat) en de slotkiezer ("Kies voor me", die het actieve tagfilter van die kiezer meeneemt).
+Een zwevende knop rechtsonder (`.zweef`), op elk scherm, die `renderVerras()` opent. Hij staat **bewust nergens aan vast**: niet aan de kaart met de volgende maaltijd, niet aan de slotkiezer, en hij schrijft uit zichzelf niets in de week. `S.verras` = `{cat, tags, rc, gehad}`; `gehad` is de laatste 30 getoonde recepten, zodat "nog eens" ook echt iets anders geeft en pas opnieuw begint als de pool op is.
 
-Het is **dezelfde generator**, niet een tweede: `kiesVoorSlot` hergebruikt `genPool`, `genScore` en `genTake`, en past dezelfde narrowing toe als `wizGenPreview` — de maximale kooktijd van die dag, eventuele tags, en allebei met terugval op de hele pool. Verandert er iets aan de scoring, dan verandert dit mee.
+`kiesUitAlles(cat, tags, gehad)` trekt uit **`ALL()`** — alle categorieën, inclusief snacks en mealpreps, zonder persoonsfilter. Daarom gebruikt hij **bewust niet `genScore`**: die beloont ingrediënten die je toch al koopt en straft elke nieuwe regel op de boodschappenlijst. Binnen één categorie scheelt dat weinig, maar over de hele kast wint dan altijd het recept met de kortste lijst — gemeten kwam er veertig keer achter elkaar een tussendoortje uit. De scoring hier is: random, min wat je de laatste vier weken at, min wat deze week al op het menu staat, plus de duimpjes (en −50 bij twee omlaag), daarna willekeurig uit de top 5.
 
-Twee verschillen met de wizard:
+Inplannen is een losse handeling: `verrasInWeek()` zet het recept in het slot van **vandaag** dat bij zijn categorie hoort (`CAT_SLOT`). Een weekendsnack of mealprep hoort bij geen slot, dus dan verschijnt die knop niet maar wel de uitleg waarom.
 
-- `slotCtx(wo, negeer)` bouwt de context uit **wat er nu al in de week staat** (en slaat het slot zelf over), waar de wizard hem tijdens het genereren opbouwt. Daardoor telt alles wat je al gepland hebt mee als "niet nog eens".
-- Wat er op dat moment in het slot staat valt uit de pool: "iets anders" moet iets anders zijn.
-
-`verrasSlot` schrijft in `S.week`, dus de aanroeper moet in de goede week staan — `volgendeVerras` gaat daarom via `volgendeGaNaar()`. Is de pool leeg, dan verandert er niets en volgt een melding.
+De knop verbergt zichzelf zodra er een venster open staat (`modalOpen()`, die `S.verras` meetelt) en `.app` heeft onderaan extra ruimte zodat hij de laatste kaart in een lijst niet afdekt.
 
 ### Losse categorieën — snacks en mealpreps
 

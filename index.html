@@ -163,12 +163,12 @@ svg{display:block;flex:0 0 auto}
    SHELL — mobiel één kolom, desktop een zijnavigatie
    ============================================================ */
 .shell{display:flex;flex-direction:column;min-height:100dvh}
-.app{flex:1;min-width:0;padding-bottom:calc(72px + env(safe-area-inset-bottom))}
+.app{flex:1;min-width:0;padding-bottom:calc(72px + 5rem + env(safe-area-inset-bottom))}
 .view{max-width:46rem;margin:0 auto;padding:0 var(--s-5)}
 
 @media (min-width:900px){
   .shell{flex-direction:row}
-  .app{padding-bottom:0;min-height:100dvh}
+  .app{padding-bottom:6rem;min-height:100dvh}
   .view{max-width:64rem;padding:0 var(--s-8)}
 }
 @media (min-width:1280px){
@@ -334,6 +334,19 @@ svg{display:block;flex:0 0 auto}
   .meal-side{grid-column:2;grid-row:2}
 }
 
+.zweef{position:fixed;z-index:60;right:var(--s-5);
+  bottom:calc(72px + var(--s-4) + env(safe-area-inset-bottom));
+  width:3.5rem;height:3.5rem;border-radius:99px;display:grid;place-items:center;
+  border:0;background:var(--accent);color:var(--accent-on);cursor:pointer;
+  box-shadow:var(--shadow-2);transition:transform .15s,filter .15s}
+.zweef:hover{filter:brightness(1.06);transform:translateY(-1px)}
+.zweef:active{transform:translateY(1px)}
+@media(min-width:900px){ .zweef{bottom:var(--s-6);right:var(--s-6)} }
+.verraskaart{border:1px solid var(--line);border-radius:var(--r-lg);
+  background:var(--surface);padding:var(--s-4);margin-top:var(--s-4)}
+.verras-naam{font-family:var(--display);font-weight:800;font-size:var(--t-xl);
+  line-height:1.2;margin:var(--s-1) 0 var(--s-2);text-wrap:balance}
+.verras-ing{font-size:var(--t-xs);color:var(--ink-3);line-height:1.6;margin-top:var(--s-3)}
 .tagrij{margin-top:calc(var(--s-2) * -1)}
 .tagchip{font-weight:500}
 .tagchip.wis{display:inline-flex;align-items:center;gap:var(--s-1);color:var(--ink-3)}
@@ -1059,6 +1072,7 @@ let S={
   recFilter:"all", recVoor:"all", search:"",
   tags: lsGet(TGK,{}),      // rcId -> ["flatbread", ...]
   recTags:[], losseTags:[], pickTags:[], // welke tags er nu gefilterd zijn
+  verras:null,              // {cat, tags, rc, gehad} — het losse kiesvenster
   formVoor:"beiden",
   boodDetail: null,
   boodOverride: lsGet(BOK,{}),
@@ -2855,7 +2869,7 @@ function renderCookMode(){
 // Zet de pagina achter een open modal vast, zodat die niet meescrollt.
 let _lockY=0;
 function modalOpen(){
-  return !!(S.picker||S.detail||S.boodDetail!==null||S.wizOpen||S.addOpen||S.syncOpen||S.cook||S.leftoverPick);
+  return !!(S.picker||S.detail||S.boodDetail!==null||S.wizOpen||S.addOpen||S.syncOpen||S.cook||S.leftoverPick||S.verras);
 }
 function syncBodyLock(){
   const b=document.body, open=modalOpen(), locked=b.classList.contains('modal-open');
@@ -2915,6 +2929,10 @@ function render(){
         ${S.view==="boodschappen"?renderBoodschappen():""}
       </main>
     </div>
+    ${modalOpen()||S.tour!==null&&S.tour!==undefined?"":`
+      <button class="zweef" onclick="verrasOpen()" title="Kies iets voor me"
+        aria-label="Kies een gerecht voor me">${ic("toveren",24)}</button>`}
+    ${S.verras?renderVerras():""}
     ${S.picker?renderPicker():""}
     ${S.detail?renderDetail():""}
     ${S.boodDetail!==null?renderBoodDetail():""}
@@ -3168,53 +3186,141 @@ function renderEters(){
   </div>`;
 }
 
-// ---------- ÉÉN MAALTIJD LATEN KIEZEN ----------
-// Dezelfde generator als de weekplanner, maar voor één slot. Hij hergebruikt
-// genPool/genScore/genTake, dus hij houdt zich aan dezelfde regels: de juiste
-// categorie en persoon, de maximale kooktijd van die dag, de duimpjes, en geen
-// herhaling van wat er elders in de week al staat.
-function slotCtx(wo,negeer){
-  const ctx={used:{},usedIds:new Set(),recent:recentlyUsed(4)};
-  const week=weekAt(wo)||{};
-  DAYS.forEach(d=>{
-    if(!dayCfgAt(wo,d).plan)return;
-    rowsFor(d,wo).forEach(row=>{
-      if(negeer&&negeer.day===d&&negeer.rowId===row.id)return;
-      const rc=(week[d]||{})[row.id];
-      if(!rc||isLeftover(rc))return;
-      ctx.usedIds.add(rc.id);
-      ingKeys(rc).forEach(k=>{ctx.used[k]=(ctx.used[k]||0)+1;});
-    });
-  });
-  return ctx;
-}
-function kiesVoorSlot(day,rowId,wo,tags){
-  wo=wo===undefined?(S.weekOffset||0):wo;
-  const row=ROWS.find(r=>r.id===rowId);
-  if(!row)return null;
-  let pool=genPool(row.cat,rowWho(row));
-  const dc=dayCfgAt(wo,day);
-  if(dc.maxTijd){
-    const past=pool.filter(rc=>{const m=parseInt(rc.time);return !m||m<=dc.maxTijd;});
-    if(past.length)pool=past;
-  }
+// Dezelfde scoring als de weekplanner (duimpjes, niet pas gegeten, niet wat er
+// deze week al staat), maar zonder categorie- of persoonsfilter.
+const VERRAS_CATS=[["alles","Alles"],...CATS.map(c=>[c,CL[c]])];
+// Welke rij van vandaag bij een categorie hoort, voor het inplannen.
+const CAT_SLOT={ontbijt:"ontbijt_shelley",lunch:"lunch_shelley",diner:"diner",tussendoortje:"tussen_middag"};
+
+function kiesUitAlles(cat,tags,gehad){
+  let pool=ALL();
+  if(cat&&cat!=="alles")pool=pool.filter(rc=>rc.category===cat);
   if(tags&&tags.length){
     const metTag=pool.filter(rc=>heeftTags(rc,tags));
     if(metTag.length)pool=metTag;
   }
-  // Wat er nu staat niet opnieuw trekken: "iets anders" moet iets anders zijn.
-  const huidig=(weekAt(wo)[day]||{})[rowId];
-  if(huidig&&pool.length>1)pool=pool.filter(rc=>rc.id!==huidig.id);
-  return genTake(pool,slotCtx(wo,{day,rowId}));
+  // "Nog eens" moet ook echt iets anders geven, zolang er nog wat over is.
+  const vers=pool.filter(rc=>!(gehad||[]).includes(rc.id));
+  if(vers.length)pool=vers;
+  if(!pool.length)return null;
+
+  // Bewust níet genScore: die beloont ingrediënten die je toch al koopt en
+  // straft elke nieuwe regel op de boodschappenlijst. Binnen één categorie
+  // scheelt dat weinig, maar over de hele kast wint dan altijd het recept met
+  // de kortste lijst — gemeten kwam er dan veertig keer achter elkaar een
+  // tussendoortje uit. Hier telt alleen: verras me, maar niet met wat je net
+  // op hebt of wat al op het menu staat, en niet met wat jullie niet lusten.
+  const recent=recentlyUsed(4);
+  const week=weekAt(S.weekOffset||0)||{};
+  const staatAl=new Set();
+  DAYS.forEach(d=>ROWS.forEach(row=>{
+    const rc=(week[d]||{})[row.id];
+    if(rc&&rc.id&&!isLeftover(rc))staatAl.add(rc.id);
+  }));
+  const ranked=pool.map(rc=>{
+    let s=Math.random();
+    s-=(recent[rc.id]||0)*0.8;
+    if(staatAl.has(rc.id))s-=2;
+    const r=rateScore(rc.id);
+    s+=(r<=-2?-50:r*0.8);
+    return {rc,s};
+  }).sort((a,b)=>b.s-a.s);
+  const top=ranked.slice(0,Math.min(5,ranked.length));
+  return top[Math.floor(Math.random()*top.length)].rc;
 }
-// Kiezen én neerzetten. De week moet de actuele zijn, want S.week is wat telt.
-function verrasSlot(day,rowId,tags){
-  const rc=kiesVoorSlot(day,rowId,S.weekOffset||0,tags);
-  if(!rc){toast("Geen recept gevonden voor dit slot");return null;}
-  S.week={...S.week,[day]:{...(S.week[day]||{}),[rowId]:rc}};
-  set({picker:null});
-  toast(rc.name);
-  return rc;
+function verrasOpen(){
+  set({verras:{cat:"alles",tags:[],rc:null,gehad:[]}});
+  verrasTrek();
+}
+function verrasTrek(){
+  const v=S.verras; if(!v)return;
+  const rc=kiesUitAlles(v.cat,v.tags,v.gehad);
+  if(!rc){
+    // Alles al gehad? Dan opnieuw beginnen in plaats van niets zeggen.
+    if(v.gehad.length){ set({verras:{...v,gehad:[]}}); return verrasTrek(); }
+    set({verras:{...v,rc:null}});
+    toast("Geen recept gevonden");
+    return;
+  }
+  set({verras:{...v,rc,gehad:[...v.gehad,rc.id].slice(-30)}});
+}
+function verrasCat(cat){
+  const v=S.verras; if(!v)return;
+  S.verras={...v,cat,gehad:[]};
+  verrasTrek();
+}
+function verrasTagToggle(tag){
+  const v=S.verras; if(!v)return;
+  const k=tagKey(tag);
+  const bij=v.tags.some(t=>tagKey(t)===k)?v.tags.filter(t=>tagKey(t)!==k):[...v.tags,tag];
+  S.verras={...v,tags:bij,gehad:[]};
+  verrasTrek();
+}
+function verrasInWeek(){
+  const v=S.verras; if(!v||!v.rc)return;
+  const rowId=CAT_SLOT[v.rc.category];
+  if(!rowId){toast("Dit hoort niet bij een maaltijd in de week");return;}
+  const dag=DAYS[(new Date().getDay()+6)%7];
+  if((S.weekOffset||0)!==0)switchWeek(0);
+  if(!dayCfg(dag).plan){toast("Vandaag staat niet aan in de planner");return;}
+  const rc=v.rc;
+  S.week={...S.week,[dag]:{...(S.week[dag]||{}),[rowId]:rc}};
+  set({verras:null,view:"planner",activeDay:dag});
+  toast(`Ingepland als ${ROWS.find(r=>r.id===rowId).label.toLowerCase()} van vandaag`);
+}
+function verrasBekijk(){
+  const v=S.verras; if(!v||!v.rc)return;
+  set({verras:null,detail:{rc:v.rc,day:null,rowId:null},detailTab:"ing"});
+}
+
+// ---------- HET LOSSE KIESVENSTER ----------
+function renderVerras(){
+  const v=S.verras, rc=v.rc;
+  const kanInplannen=rc&&CAT_SLOT[rc.category];
+  const dagNaam=DAY_FULL[DAYS[(new Date().getDay()+6)%7]];
+  return `
+  <div class="overlay" onclick="set({verras:null})">
+    <div class="sheet" onclick="event.stopPropagation()">
+      <div class="sheet-head">
+        <div style="flex:1">
+          <h2 class="sheet-title">Wat zal ik eten?</h2>
+          <p class="sheet-sub">Eén gerecht uit de hele kast. Staat los van je weekmenu.</p>
+        </div>
+        <button class="iconbtn" onclick="set({verras:null})" aria-label="Sluiten">${ic("sluiten",18)}</button>
+      </div>
+      <div class="chips">
+        ${VERRAS_CATS.map(([k,l])=>`<button class="chip ${v.cat===k?"active":""}"
+          onclick="verrasCat('${k}')">${l}</button>`).join("")}
+      </div>
+      ${(()=>{
+        const tags=alleTags();
+        if(!tags.length)return "";
+        return `<div class="chips tagrij">${tags.map(t=>{
+          const aan=v.tags.some(x=>tagKey(x)===tagKey(t));
+          return `<button class="chip tagchip ${aan?"active":""}"
+            onclick="verrasTagToggle(${JSON.stringify(t).replace(/"/g,"&quot;")})">${esc(t)}</button>`;
+        }).join("")}</div>`;
+      })()}
+      ${rc?`
+      <div class="verraskaart">
+        <span class="rec-cat">${CL[rc.category]}</span>
+        <div class="verras-naam">${esc(rc.name)}</div>
+        <div class="rec-meta"><span class="num">${esc(rc.time)}</span><span>${rc.servings||2}p</span>${rateBadge(rc.id)}</div>
+        ${tagsOf(rc).length?`<div class="rec-tags">${tagsOf(rc).map(t=>`<span class="tagje">${esc(t)}</span>`).join("")}</div>`:""}
+        ${(rc.ingredients||[]).length?`<p class="verras-ing">${esc((rc.ingredients||[]).slice(0,6).map(g=>g.n).join(" · "))}${(rc.ingredients||[]).length>6?" …":""}</p>`:""}
+      </div>
+      <div class="btn-row" style="margin-top:var(--s-4)">
+        <button class="btn btn-line" onclick="verrasTrek()">${ic("opnieuw",17)} Nog eens</button>
+        <button class="btn btn-ink" onclick="verrasBekijk()" style="white-space:nowrap">Bekijk recept</button>
+      </div>
+      ${kanInplannen?`<button class="btn btn-primary" style="margin-top:var(--s-2)" onclick="verrasInWeek()">
+        ${ic("kalender",17)} Zet in ${dagNaam} als ${esc(CL[rc.category].toLowerCase())}</button>`
+      :`<p style="font-size:var(--t-xs);color:var(--ink-3);line-height:1.5;margin-top:var(--s-3)">
+        ${esc(CL[rc.category])}s staan niet in het weekmenu, dus die kun je hier niet inplannen.</p>`}
+      `:`<div class="empty"><div class="empty-title">Niets gevonden</div>
+        <p>Geen recept met deze combinatie. Kies een andere categorie of haal een tag weg.</p></div>`}
+    </div>
+  </div>`;
 }
 
 // ---------- VOLGENDE MAALTIJD ----------
@@ -3238,16 +3344,13 @@ function renderVolgende(){
           ${wie}<span class="volgende-naam ${rc?"":"leeg"}">${rc?esc(rc.name):"Nog niets gekozen"}</span>
         </button>
         <div class="volgende-voet">
-          ${rc?`<span class="volgende-meta">
-            ${lo?`${ic("restjes",13)} restjes`:`<span class="num">${esc(rc.time)}</span> · voor <span class="num">${slotPorties(v.dag,row.id)}</span>`}
+          <span class="volgende-meta">
+            ${rc?(lo?`${ic("restjes",13)} restjes`:`<span class="num">${esc(rc.time)}</span> · voor <span class="num">${slotPorties(v.dag,row.id)}</span>`)
+               :"Tik om te kiezen"}
           </span>
           <span style="flex:1"></span>
-          ${lo?"":`<button class="iconbtn bordered" title="Kies iets anders" aria-label="Kies iets anders"
-            onclick="volgendeVerras('${row.id}')">${ic("toveren",17)}</button>`}
           ${kan?`<button class="iconbtn bordered" title="Kookmodus" aria-label="Kookmodus"
-            onclick="volgendeKoken('${row.id}')">${ic("koken",17)}</button>`:""}`
-          :`<button class="btn btn-primary" style="width:auto"
-            onclick="volgendeVerras('${row.id}')">${ic("toveren",16)} Kies iets voor me</button>`}
+            onclick="volgendeKoken('${row.id}')">${ic("koken",17)}</button>`:""}
         </div>
       </div>`;
     }).join("")}
@@ -3265,10 +3368,6 @@ function volgendeGaNaar(){
 function volgendeOpenen(rowId){
   const v=volgendeGaNaar();
   if(v)pickSlot(v.dag,rowId);
-}
-function volgendeVerras(rowId){
-  const v=volgendeGaNaar();
-  if(v)verrasSlot(v.dag,rowId);
 }
 function volgendeKoken(rowId){
   const v=volgendeGaNaar();
@@ -3553,7 +3652,6 @@ function renderPicker(){
         oninput="S.search=this.value;clearTimeout(window._pt);window._pt=setTimeout(render,200)">
       ${renderTagFilter("pickTags",basis)}
       <div style="display:flex;gap:var(--s-2);flex-wrap:wrap;margin-bottom:var(--s-4)">
-        <button class="btn btn-line" onclick="verrasSlot('${day}','${rowId}',S.pickTags)">${ic("toveren",17)} Kies voor me</button>
         ${rest.length?`<button class="btn btn-line" onclick="set({leftoverPick:{day:'${day}',rowId:'${rowId}'},picker:null})">${ic("restjes",17)} Restjes</button>`:""}
         ${S.week[day]&&S.week[day][rowId]?`<button class="btn btn-line" onclick="clearSlot('${day}','${rowId}');set({picker:null})">${ic("sluiten",17)} Leeg laten</button>`:""}
       </div>
@@ -4530,9 +4628,10 @@ window.wizToggleVasteDay=wizToggleVasteDay; window.wizRemoveVaste=wizRemoveVaste
 window.wizPickVasteRow=wizPickVasteRow; window.wizPickVasteRc=wizPickVasteRc;
 window.onWeekNote=onWeekNote; window.S=S; window.render=render;
 window.pickSlot=pickSlot; window.assignRecipe=assignRecipe; window.clearSlot=clearSlot;
-window.volgendeOpenen=volgendeOpenen; window.volgendeKoken=volgendeKoken; window.volgendeVerras=volgendeVerras;
-window.verrasSlot=verrasSlot; window.kiesVoorSlot=kiesVoorSlot;
-window.tagToggle=tagToggle; window.tagWis=tagWis; window.tagVoegToe=tagVoegToe; window.tagHaalWeg=tagHaalWeg;
+window.volgendeOpenen=volgendeOpenen; window.volgendeKoken=volgendeKoken;
+window.tagToggle=tagToggle; window.tagWis=tagWis;
+window.verrasOpen=verrasOpen; window.verrasTrek=verrasTrek; window.verrasCat=verrasCat;
+window.verrasTagToggle=verrasTagToggle; window.verrasInWeek=verrasInWeek; window.verrasBekijk=verrasBekijk; window.tagVoegToe=tagVoegToe; window.tagHaalWeg=tagHaalWeg;
 window.toggleEter=toggleEter; window.etersAlsVast=etersAlsVast; window.etersTerug=etersTerug;
 window.toggleCheck=toggleCheck;
 window.lijstOpmaken=lijstOpmaken; window.lijstBijwerken=lijstBijwerken; window.lijstLosmaken=lijstLosmaken;
