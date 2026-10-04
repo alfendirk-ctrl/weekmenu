@@ -334,6 +334,22 @@ svg{display:block;flex:0 0 auto}
   .meal-side{grid-column:2;grid-row:2}
 }
 
+.tagrij{margin-top:calc(var(--s-2) * -1)}
+.tagchip{font-weight:500}
+.tagchip.wis{display:inline-flex;align-items:center;gap:var(--s-1);color:var(--ink-3)}
+.rec-tags{display:flex;flex-wrap:wrap;gap:var(--s-1);margin-top:var(--s-2)}
+.tagje{display:inline-flex;align-items:center;gap:var(--s-1);
+  padding:2px var(--s-2);border-radius:99px;border:1px solid var(--line);
+  background:var(--surface-2);font-size:var(--t-2xs);font-weight:600;color:var(--ink-3);
+  line-height:1.6;white-space:nowrap}
+.tagje.meer{color:var(--ink-3);background:none}
+.tagje.groot{font-size:var(--t-xs);padding:3px var(--s-2) 3px var(--s-3);color:var(--ink-2)}
+.tagje.vast{border-color:var(--accent-line);background:var(--accent-soft);color:var(--ink-2)}
+.tagje button{display:inline-grid;place-items:center;width:1rem;height:1rem;padding:0;
+  border:0;border-radius:99px;background:none;color:var(--ink-3);cursor:pointer;
+  transition:color .15s,background .15s}
+.tagje button:hover{color:var(--err);background:var(--err-soft)}
+.tagbeheer{display:flex;flex-wrap:wrap;gap:var(--s-2);align-items:center}
 .volgende{border:1px solid var(--accent-line);border-radius:var(--r-lg);
   background:var(--surface);padding:var(--s-4);margin-bottom:var(--s-5)}
 .volgende-rij{display:flex;justify-content:space-between;align-items:baseline;
@@ -907,7 +923,7 @@ r(85,3,"Bananenbrood","tussendoortje","60 min",[i("Banaan","2"),i("Ei","2"),i("B
 ];
 
 // ===================== STATE & STORAGE =====================
-const SK="wm_week_v2", CK="wm_custom_v2", NK="wm_notes_v2", CHK="wm_check_v2", CFG="wm_cfg_v2", BOK="wm_boodOver_v1", AK="wm_apikey_v1", GK="wm_geminikey_v1", SAK="wm_snackavond_v1", RTK="wm_ratings_v1", THK="wm_theme_v1", SRV="wm_servings_v1";
+const SK="wm_week_v2", CK="wm_custom_v2", NK="wm_notes_v2", CHK="wm_check_v2", CFG="wm_cfg_v2", BOK="wm_boodOver_v1", AK="wm_apikey_v1", GK="wm_geminikey_v1", SAK="wm_snackavond_v1", RTK="wm_ratings_v1", THK="wm_theme_v1", SRV="wm_servings_v1", TGK="wm_tags_v1";
 const SB_URL="https://nejjocgplgbgmdornurw.supabase.co";
 const SB_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5lampvY2dwbGdiZ21kb3JudXJ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM2MTk4MzEsImV4cCI6MjA5OTE5NTgzMX0.dJ_xMqV4Qp-1gZKifYJ-qTW6p9GhoMdfxlr_zIJx7Ko";
 const HHID_KEY="wm_household_v1";
@@ -1040,6 +1056,8 @@ let S={
   wizIgCap:"", wizIgUrl:"", wizIgSt:null, wizIgErr:"", wizIgPrev:null,
   photos:[], photoSt:null,
   recFilter:"all", recVoor:"all", search:"",
+  tags: lsGet(TGK,{}),      // rcId -> ["flatbread", ...]
+  recTags:[], losseTags:[], // welke tags er nu gefilterd zijn
   formVoor:"beiden",
   boodDetail: null,
   boodOverride: lsGet(BOK,{}),
@@ -1057,7 +1075,7 @@ function save(){
   lsSet(weekStoreKey(S.weekOffset||0),S.week);
   lsSet(notesStoreKey(S.weekOffset||0),S.notes);
   lsSet(dayCfgStoreKey(S.weekOffset||0),S.dayCfg);
-  lsSet(CK,S.custom);lsSet(CHK,S.checked);lsSet(CFG,S.cfg);lsSet(BOK,S.boodOverride);lsSet(SAK,S.avondSnack);lsSet(RTK,S.ratings);lsSet(SRV,S.rcServings);
+  lsSet(CK,S.custom);lsSet(TGK,S.tags);lsSet(CHK,S.checked);lsSet(CFG,S.cfg);lsSet(BOK,S.boodOverride);lsSet(SAK,S.avondSnack);lsSet(RTK,S.ratings);lsSet(SRV,S.rcServings);
   clearTimeout(window._syncT);window._syncT=setTimeout(syncPush,3000);
 }
 
@@ -1114,6 +1132,7 @@ async function syncPull(hid){
       // Daginstellingen horen hier ook bij: zonder deze regel blijven de
       // schakelaars van de andere telefoon in het geheugen hangen.
       S.dayCfg=lsGet(dayCfgStoreKey(S.weekOffset||0),{});
+      S.tags=lsGet(TGK,{});
       syncStatus("ok");
     }else{syncStatus(error?"err":"ok");}
     const n=await pullInbox(hid);
@@ -1329,6 +1348,83 @@ function ingKey(name){
 function ingKeys(rc){
   const out=[];(rc&&rc.ingredients||[]).forEach(g=>{const k=ingKey(g.n);if(k&&!out.includes(k))out.push(k);});
   return out;
+}
+
+// ===================== TAGS =====================
+// Labels naast de categorie. Ze staan in een eigen opslag op recept-id, niet
+// op het recept zelf: zo kun je ook een ingebouwd recept uit een kookboek een
+// tag geven zonder de RECIPES-array aan te raken.
+// Eén tag is afgeleid en niet te verwijderen: alles uit een kookboek draagt
+// "Broodje Dunner". Die hoeft dus nergens opgeslagen te worden en klopt altijd.
+const AUTO_TAG="Broodje Dunner";
+const tagKey=t=>String(t||"").trim().toLowerCase();
+function autoTags(rc){ return (rc&&rc.ebook>0) ? [AUTO_TAG] : []; }
+function eigenTags(rc){ return (rc&&S.tags[rc.id])||[]; }
+function tagsOf(rc){
+  const auto=autoTags(rc), gezien=new Set(auto.map(tagKey));
+  return [...auto,...eigenTags(rc).filter(t=>{
+    const k=tagKey(t); if(gezien.has(k))return false; gezien.add(k); return true;
+  })];
+}
+// Alle tags die ergens in gebruik zijn, op alfabet. Dat is de filterrij.
+function alleTags(lijst){
+  const op=new Map();
+  (lijst||ALL()).forEach(rc=>tagsOf(rc).forEach(t=>{ if(!op.has(tagKey(t)))op.set(tagKey(t),t); }));
+  return [...op.values()].sort((a,b)=>a.localeCompare(b,"nl"));
+}
+// Meerdere tags betekent "alle drie", niet "een van de drie": je gebruikt ze
+// om te versmallen.
+function heeftTags(rc,sel){
+  if(!sel||!sel.length)return true;
+  const mijn=new Set(tagsOf(rc).map(tagKey));
+  return sel.every(t=>mijn.has(tagKey(t)));
+}
+function tagToggle(sleutel,tag){
+  const nu=S[sleutel]||[];
+  const k=tagKey(tag);
+  set({[sleutel]: nu.some(t=>tagKey(t)===k) ? nu.filter(t=>tagKey(t)!==k) : [...nu,tag]});
+}
+function tagsZet(rcId,lijst){
+  const schoon=[];
+  const gezien=new Set();
+  (lijst||[]).forEach(t=>{
+    const naam=String(t||"").trim(), k=tagKey(naam);
+    if(!naam||k===tagKey(AUTO_TAG)||gezien.has(k))return;   // de afgeleide tag niet opslaan
+    gezien.add(k); schoon.push(naam);
+  });
+  const alles={...S.tags};
+  if(schoon.length)alles[rcId]=schoon; else delete alles[rcId];
+  S.tags=alles;
+}
+function tagVoegToe(rcId){
+  const veld=document.getElementById("tag-nieuw");
+  const ruw=(veld&&veld.value)||"";
+  // komma's splitsen, zodat "flatbread, snel" in één keer kan
+  const nieuw=ruw.split(",").map(t=>t.trim()).filter(Boolean);
+  if(!nieuw.length)return;
+  const rc=getRc(rcId);
+  tagsZet(rcId,[...eigenTags(rc),...nieuw]);
+  if(veld)veld.value="";
+  set({});
+}
+function tagHaalWeg(rcId,tag){
+  const rc=getRc(rcId);
+  tagsZet(rcId,eigenTags(rc).filter(t=>tagKey(t)!==tagKey(tag)));
+  set({});
+}
+// De filterrij: alleen tonen als er iets te filteren valt.
+function renderTagFilter(sleutel,lijst){
+  const tags=alleTags(lijst);
+  if(!tags.length)return "";
+  const sel=S[sleutel]||[];
+  return `<div class="chips tagrij">
+    ${tags.map(t=>{
+      const aan=sel.some(x=>tagKey(x)===tagKey(t));
+      return `<button class="chip tagchip ${aan?"active":""}"
+        onclick="tagToggle('${sleutel}',${JSON.stringify(t).replace(/"/g,"&quot;")})">${esc(t)}</button>`;
+    }).join("")}
+    ${sel.length?`<button class="chip tagchip wis" onclick="set({${sleutel}:[]})">${ic("sluiten",13)} wis</button>`:""}
+  </div>`;
 }
 
 // ===================== WAARDERINGEN =====================
@@ -2579,6 +2675,7 @@ function saveIgRecipe(){
     ingredients:document.getElementById("ig-ing").value.split(nl).filter(Boolean).map(l=>{const s=l.split(" - ");return{n:s[0].trim(),a:s.slice(1).join(" - ").trim()}}),
     steps:document.getElementById("ig-steps").value.split(nl).filter(Boolean),
   };
+  tagsZet(rc.id,((document.getElementById("ig-tags")||{}).value||"").split(","));
   saveCustomRecipe(rc);  // die springt zelf naar snacks of mealpreps
   set({igSt:null,igFetchSt:null,igPrev:null,igCap:"",igUrl:"",addCat:null});
 }
@@ -2598,6 +2695,7 @@ function saveForm(isEdit){
     steps:document.getElementById("rc-steps").value.split(nl).filter(Boolean),
     link:document.getElementById("rc-link").value.trim()||null,
   };
+  tagsZet(rc.id,(document.getElementById("rc-tags").value||"").split(","));
   if(isEdit)updateCustomRecipe(rc);else saveCustomRecipe(rc);
 }
 // Niet via render(): dat zou het half ingevulde formulier weggooien.
@@ -3138,6 +3236,7 @@ function renderRecepten(){
     if(S.recFilter!=="all"&&S.recFilter!=="fav"&&rc.category!==S.recFilter)return false;
     if(S.recFilter==="fav"&&rc.ebook!==0)return false;
     if(S.recVoor!=="all"&&rc.voor!==S.recVoor&&rc.voor!=="beiden")return false;
+    if(!heeftTags(rc,S.recTags))return false;
     if(S.search&&!rc.name.toLowerCase().includes(S.search.toLowerCase()))return false;
     return true;
   });
@@ -3155,6 +3254,7 @@ function renderRecepten(){
       ${eetMee("shelley")?`<button class="chip ${S.recVoor==="shelley"?"active":""}" onclick="set({recVoor:S.recVoor==='shelley'?'all':'shelley'})">Voor Shelley</button>`:""}
       <button class="chip ${S.recVoor==="dirk"?"active":""}" onclick="set({recVoor:S.recVoor==='dirk'?'all':'dirk'})">Voor Dirk</button>
     </div>
+    ${renderTagFilter("recTags",alle)}
     <button class="btn btn-line" style="margin-bottom:var(--s-4)"
       onclick="set({addOpen:true,editRc:null,addTab:'manual',formVoor:'beiden',addCat:null})">${ic("plus",17)} Recept toevoegen</button>
     ${list.length===0?`<div class="empty"><div class="empty-title">Niets gevonden</div><p>Probeer een andere zoekterm of filter.</p></div>`
@@ -3179,7 +3279,7 @@ function renderLossePagina(cat){
   const t=LOSSE_PAGINA[cat];
   const all=ALL().filter(rc=>rc.category===cat);
   const q=(S[t.veld]||"").toLowerCase();
-  const list=q?all.filter(rc=>rc.name.toLowerCase().includes(q)):all;
+  const list=all.filter(rc=>heeftTags(rc,S.losseTags)&&(!q||rc.name.toLowerCase().includes(q)));
   return `
   <div class="view">
     <div class="page-head">
@@ -3188,6 +3288,7 @@ function renderLossePagina(cat){
     </div>
     <input id="zoek-${cat}" class="search" placeholder="${t.zoek}" value="${esc(S[t.veld]||"")}"
       oninput="S.${t.veld}=this.value;clearTimeout(window._sst);window._sst=setTimeout(render,200)">
+    ${renderTagFilter("losseTags",all)}
     <button class="btn btn-line" style="margin-bottom:var(--s-4)"
       onclick="set({addOpen:true,editRc:null,addTab:'manual',formVoor:'beiden',addCat:'${cat}'})">${ic("plus",17)} ${t.toevoegen}</button>
     ${list.length===0?`<div class="empty">
@@ -3207,6 +3308,11 @@ function renderRecCard(rc){
       <span class="rec-cat">${CL[rc.category]}</span>
       <div class="rec-name">${esc(rc.name)}</div>
       <div class="rec-meta"><span class="num">${esc(rc.time)}</span><span>${rc.servings||2}p</span>${voor?`<span>${voor}</span>`:""}${rateBadge(rc.id)}</div>
+      ${(()=>{
+        const tg=tagsOf(rc);
+        if(!tg.length)return "";
+        return `<div class="rec-tags">${tg.slice(0,3).map(t=>`<span class="tagje">${esc(t)}</span>`).join("")}${tg.length>3?`<span class="tagje meer">+${tg.length-3}</span>`:""}</div>`;
+      })()}
     </button>
     ${rc.ebook===0?`<span style="display:flex;gap:2px">
       <button class="iconbtn" onclick="openEdit(${rc.id})" title="Bewerken" aria-label="Bewerken">${ic("notitie",16)}</button>
@@ -3485,6 +3591,25 @@ function renderDetail(){
       <button class="btn btn-ink" style="margin-top:var(--s-4)" onclick="openCook(${rcArg},${day?`'${day}'`:"null"},${rowId?`'${rowId}'`:"null"})">${ic("koken",17)} Kookmodus</button>
 
       <div style="margin-top:var(--s-5);padding-top:var(--s-4);border-top:1px solid var(--line)">
+        <p style="font-size:var(--t-xs);font-weight:600;color:var(--ink-2);margin-bottom:var(--s-3)">Tags</p>
+        <div class="tagbeheer">
+          ${tagsOf(rc).map(t=>{
+            const vast=autoTags(rc).some(a=>tagKey(a)===tagKey(t));
+            return `<span class="tagje groot ${vast?"vast":""}">${esc(t)}${vast?"":`
+              <button onclick="tagHaalWeg(${rcArg},${JSON.stringify(t).replace(/"/g,"&quot;")})"
+                aria-label="${esc(t)} weghalen" title="Weghalen">${ic("sluiten",11)}</button>`}</span>`;
+          }).join("")}
+          ${tagsOf(rc).length?"":`<span style="font-size:var(--t-xs);color:var(--ink-3)">Nog geen tags.</span>`}
+        </div>
+        <div style="display:flex;gap:var(--s-2);margin-top:var(--s-3)">
+          <input id="tag-nieuw" class="search" style="margin-bottom:0" list="tag-suggesties"
+            placeholder="flatbread, snel…" onkeydown="if(event.key==='Enter'){event.preventDefault();tagVoegToe(${rcArg});}">
+          <datalist id="tag-suggesties">${alleTags().map(t=>`<option value="${esc(t)}"></option>`).join("")}</datalist>
+          <button class="btn btn-ink" style="width:auto;flex:0 0 auto" onclick="tagVoegToe(${rcArg})">${ic("plus",16)}</button>
+        </div>
+      </div>
+
+      <div style="margin-top:var(--s-5);padding-top:var(--s-4);border-top:1px solid var(--line)">
         <p style="font-size:var(--t-xs);font-weight:600;color:var(--ink-2);margin-bottom:var(--s-3)">Wat vonden jullie ervan?</p>
         ${eters().map(who=>{
           const p=PEOPLE[who];
@@ -3554,6 +3679,9 @@ function renderAddSheet(){
           </div></div>
           <div class="field"><label>Ingrediënten</label><textarea id="ig-ing" rows="4">${esc((p.ingredients||[]).map(g=>g.n+(g.a?" - "+g.a:"")).join(nl))}</textarea></div>
           <div class="field"><label>Stappen</label><textarea id="ig-steps" rows="4">${esc((p.steps||[]).join(nl))}</textarea></div>
+          <div class="field"><label for="ig-tags">Tags (gescheiden door komma's)</label>
+            <input id="ig-tags" list="tag-suggesties-ig" placeholder="flatbread, snel">
+            <datalist id="tag-suggesties-ig">${alleTags().map(t=>`<option value="${esc(t)}"></option>`).join("")}</datalist></div>
           <button class="btn btn-primary" onclick="saveIgRecipe()">${ic("vink",17)} Toevoegen</button>
         </div>`:"";
   return `
@@ -3627,6 +3755,9 @@ function renderAddSheet(){
         <div class="field"><label>Ingrediënten (1 per regel: naam - hoeveelheid)</label><textarea id="rc-ing" rows="5" placeholder="Kipfilet - 300g">${esc(ingStr)}</textarea></div>
         <div class="field"><label>Stappen (1 per regel)</label><textarea id="rc-steps" rows="4">${esc(stepsStr)}</textarea></div>
         <div class="field"><label>Link (optioneel)</label><input id="rc-link" value="${rc?esc(rc.link||""):""}" placeholder="https://..."></div>
+        <div class="field"><label for="rc-tags">Tags (gescheiden door komma's)</label>
+          <input id="rc-tags" list="tag-suggesties-form" value="${rc?esc(eigenTags(rc).join(", ")):""}" placeholder="flatbread, snel">
+          <datalist id="tag-suggesties-form">${alleTags().map(t=>`<option value="${esc(t)}"></option>`).join("")}</datalist></div>
         <div class="btn-row">
           <button class="btn btn-line" onclick="set({addOpen:false,editRc:null})">Annuleer</button>
           <button class="btn btn-ink" onclick="saveForm(${isEdit})">${isEdit?"Bijwerken":"Opslaan"}</button>
@@ -4298,6 +4429,7 @@ window.wizPickVasteRow=wizPickVasteRow; window.wizPickVasteRc=wizPickVasteRc;
 window.onWeekNote=onWeekNote; window.S=S; window.render=render;
 window.pickSlot=pickSlot; window.assignRecipe=assignRecipe; window.clearSlot=clearSlot;
 window.volgendeOpenen=volgendeOpenen; window.volgendeKoken=volgendeKoken;
+window.tagToggle=tagToggle; window.tagVoegToe=tagVoegToe; window.tagHaalWeg=tagHaalWeg;
 window.toggleEter=toggleEter; window.etersAlsVast=etersAlsVast; window.etersTerug=etersTerug;
 window.toggleCheck=toggleCheck;
 window.lijstOpmaken=lijstOpmaken; window.lijstBijwerken=lijstBijwerken; window.lijstLosmaken=lijstLosmaken;

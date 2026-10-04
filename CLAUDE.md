@@ -32,6 +32,7 @@ Everything lives in `index.html`. The structure within the `<script>` block:
 | `VOLGENDE MAALTIJD` | `weekAt`, `volgendeMaaltijd`, `wanneerTekst`, `renderVolgende`, `volgendeOpenen`/`volgendeKoken` |
 | `DAGINSTELLINGEN` | `dayCfgAt`/`dayCfg`/`setDayCfg`, `rowsFor`, `clearDay` — per-day plan / apart / maxTijd |
 | `INGREDIËNTEN` | `ingKey` (normaliseert een naam), `ingKeys` (per recept) — basis voor het hergebruik in de generator |
+| `TAGS` | `autoTags`/`eigenTags`/`tagsOf`, `alleTags`, `heeftTags`, `tagToggle`, `tagsZet`, `tagVoegToe`/`tagHaalWeg`, `renderTagFilter` |
 | `WAARDERINGEN` | `rateOf`, `setRating`, `rateScore`, `rateBadge` |
 | `RESTJES` | `makeLeftover`, `isLeftover`, `leftoverCounts`, `leftoverSources` |
 | `ACTIONS` | `pickSlot`, `assignRecipe`, `clearSlot`, `saveCustomRecipe`, `boodschappen`, `lijstOpmaken`, `runAutofill`, `exportWeekImg`/`exportBoodImg`, `doImport` (IG/Gemini), `saveForm` |
@@ -62,6 +63,7 @@ Because `render()` throws away the DOM, a focused field would lose its text mid-
 - `S.cfg.apartEten` — the household default for eating separately, toggled in the planner's week column. `dayCfgAt` falls back to it for any day that has no explicit `apart` value, so a per-day choice always wins. A one-time migration (`wm_apart_migrated_v1`) turns it on for anyone whose stored weeks contain a genuinely split breakfast or lunch, so upgrading does not silently hide Dirk's meal.
 - `S.dayCfg` — per-day settings for the week being viewed, persisted to `wm_daycfg_YYYY-MM-DD`: `{plan, apart, maxTijd}`. `plan` defaults to true, `apart` falls back to `S.cfg.apartEten`, `maxTijd` is `0|15|30|45` (0 = no limit). Read it through `dayCfgAt(wo,day)`, never directly — it resolves the defaults and reads other weeks from localStorage. There are no cooking modes any more.
 - `ROWS` — 8 rows; each has `id`, `cat`, `who`, `tijd`, and optionally `sub`, `free`, `apart`. `tijd` is a target time in minutes after midnight; it plans nothing and is never displayed — it only orders the day for the next-meal card. **Which rows a day actually has is `rowsFor(day, wo)`, not `ROWS`** — rows with `apart:true` (`ontbijt_dirk`, `lunch_dirk`) only exist on days where separate eating is on, and `free:true` (`snack_avond`) is a text field, not a slot. So a day has 5 fillable slots normally and 7 when eating separately. **A row's `who` is not `row.who` but `rowWho(row)`** — see Eters below. Everything that counts slots — stats, dots, shopping list, generator — must go through `rowsFor`.
+- `S.tags` — `{[rcId]: ["flatbread", …]}`, persisted to `wm_tags_v1`. Zie Tags.
 - `S.ratings` — `{[rcId]: {shelley:1|-1, dirk:…, maeve:…}}`, persisted to `wm_ratings_v1`. Two thumbs down and the generator skips the recipe.
 - **Leftovers** — a leftover slot is a reference, not a copy: `{id:"lo_<srcId>", leftoverOf:<srcId>, ingredients:[]}`. `boodschappen()` therefore skips it and instead multiplies the source recipe's amounts by `1 + aantal restjesdagen`.
 - `S.rcServings` — `{[rcId]: n}`, persisted to `wm_servings_v1`: what a recipe's written amounts are *for*. See below.
@@ -87,6 +89,20 @@ Twee dingen die makkelijk misgaan:
 Wanneer een leeg slot zich meldt: een leeg **tussendoortje** nooit (dat laat je vaker bewust open), een leeg ontbijt/lunch/diner alleen **vandaag of morgen** (`stap<=1`). Dat vrijdag nog niet gevuld is hoor je van de weekplanner, niet van deze kaart. Is er in acht dagen niets te melden, dan verdwijnt de kaart.
 
 `wanneerTekst()` plakt het dagdeel aan het moment: `vanavond`, `morgenochtend`, `vrijdagavond`. Het dagdeel komt uit `row.sub` als die er is, anders uit de categorie.
+
+### Tags
+
+Labels naast de categorie, bedoeld om de kast te versmallen ("flatbread", "vriezer", "snel").
+
+Ze staan **niet op het recept** maar in een eigen opslag op recept-id (`S.tags`, `wm_tags_v1`). Dat is het hele punt: zo kun je ook een ingebouwd recept uit een kookboek een tag geven zonder de `RECIPES`-array aan te raken, en overleven tags het bewerken van een recept.
+
+Eén tag is **afgeleid en niet te wissen**: alles met `ebook > 0` draagt `AUTO_TAG` (`"Broodje Dunner"`). Die wordt nergens opgeslagen — `autoTags()` rekent hem uit — dus hij klopt altijd en kost niets. `tagsZet()` weigert hem op te slaan, ook als je hem met de hand intypt.
+
+- Lees de tags van een recept met **`tagsOf(rc)`** (afgeleid + eigen, ontdubbeld op `tagKey` = lowercase). `eigenTags(rc)` is alleen het opgeslagen deel — dat is wat de formuliervelden tonen.
+- **`heeftTags(rc, sel)`** is de filtertoets, en die is **EN**: twee tags aanvinken betekent "allebei", want je gebruikt ze om te versmallen.
+- `renderTagFilter(sleutel, lijst)` tekent de chiprij en verdwijnt vanzelf als er niets te filteren valt. De geselecteerde tags staan per pagina in `S` — `recTags` voor de receptenkast, `losseTags` voor snacks en mealpreps.
+
+Beheren kan op drie plekken: het **receptdetail** (chips met een kruisje plus een invoerveld — werkt voor élk recept, ook die uit een kookboek), het **handmatige formulier** en de **importpreview** (allebei één veld met komma's). De laatste twee schrijven via `tagsZet(rc.id, …)` ná het samenstellen van het recept, want pas dan is het id bekend. Het veld in het detail heet `#tag-nieuw` — een stabiel id, anders wist een hertekening wat je aan het typen bent.
 
 ### Losse categorieën — snacks en mealpreps
 
@@ -143,7 +159,7 @@ Measured over 8 consecutive weeks (before the mealprep slot was dropped): ~93 un
 - `HH_DEFAULT = 3` — last-resort household size; read it through `basisPorties()`, which counts `eters()`
 - `DAYS = ["ma","di","wo","do","vr","za","zo"]`
 - `PEOPLE = { shelley, dirk, maeve }` each with `label`, `sub`, `color` (CSS var), `initial`
-- localStorage keys: `wm_week_YYYY-MM-DD`, `wm_notes_YYYY-MM-DD`, `wm_daycfg_YYYY-MM-DD` and `wm_eters_YYYY-MM-DD` (keyed by that week's Monday), `wm_custom_v2`, `wm_check_v2`, `wm_cfg_v2`, `wm_ratings_v1`, `wm_servings_v1`, `wm_snackavond_v1`, `wm_boodOver_v1`, `wm_tour_v1`, `wm_geminikey_v1` and `wm_theme_v1` (both device-local, never synced)
+- localStorage keys: `wm_week_YYYY-MM-DD`, `wm_notes_YYYY-MM-DD`, `wm_daycfg_YYYY-MM-DD` and `wm_eters_YYYY-MM-DD` (keyed by that week's Monday), `wm_custom_v2`, `wm_check_v2`, `wm_cfg_v2`, `wm_ratings_v1`, `wm_servings_v1`, `wm_snackavond_v1`, `wm_boodOver_v1`, `wm_tags_v1`, `wm_tour_v1`, `wm_geminikey_v1` and `wm_theme_v1` (both device-local, never synced)
 
 ### External dependencies (CDN, no npm)
 
