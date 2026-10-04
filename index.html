@@ -3168,6 +3168,55 @@ function renderEters(){
   </div>`;
 }
 
+// ---------- ÉÉN MAALTIJD LATEN KIEZEN ----------
+// Dezelfde generator als de weekplanner, maar voor één slot. Hij hergebruikt
+// genPool/genScore/genTake, dus hij houdt zich aan dezelfde regels: de juiste
+// categorie en persoon, de maximale kooktijd van die dag, de duimpjes, en geen
+// herhaling van wat er elders in de week al staat.
+function slotCtx(wo,negeer){
+  const ctx={used:{},usedIds:new Set(),recent:recentlyUsed(4)};
+  const week=weekAt(wo)||{};
+  DAYS.forEach(d=>{
+    if(!dayCfgAt(wo,d).plan)return;
+    rowsFor(d,wo).forEach(row=>{
+      if(negeer&&negeer.day===d&&negeer.rowId===row.id)return;
+      const rc=(week[d]||{})[row.id];
+      if(!rc||isLeftover(rc))return;
+      ctx.usedIds.add(rc.id);
+      ingKeys(rc).forEach(k=>{ctx.used[k]=(ctx.used[k]||0)+1;});
+    });
+  });
+  return ctx;
+}
+function kiesVoorSlot(day,rowId,wo,tags){
+  wo=wo===undefined?(S.weekOffset||0):wo;
+  const row=ROWS.find(r=>r.id===rowId);
+  if(!row)return null;
+  let pool=genPool(row.cat,rowWho(row));
+  const dc=dayCfgAt(wo,day);
+  if(dc.maxTijd){
+    const past=pool.filter(rc=>{const m=parseInt(rc.time);return !m||m<=dc.maxTijd;});
+    if(past.length)pool=past;
+  }
+  if(tags&&tags.length){
+    const metTag=pool.filter(rc=>heeftTags(rc,tags));
+    if(metTag.length)pool=metTag;
+  }
+  // Wat er nu staat niet opnieuw trekken: "iets anders" moet iets anders zijn.
+  const huidig=(weekAt(wo)[day]||{})[rowId];
+  if(huidig&&pool.length>1)pool=pool.filter(rc=>rc.id!==huidig.id);
+  return genTake(pool,slotCtx(wo,{day,rowId}));
+}
+// Kiezen én neerzetten. De week moet de actuele zijn, want S.week is wat telt.
+function verrasSlot(day,rowId,tags){
+  const rc=kiesVoorSlot(day,rowId,S.weekOffset||0,tags);
+  if(!rc){toast("Geen recept gevonden voor dit slot");return null;}
+  S.week={...S.week,[day]:{...(S.week[day]||{}),[rowId]:rc}};
+  set({picker:null});
+  toast(rc.name);
+  return rc;
+}
+
 // ---------- VOLGENDE MAALTIJD ----------
 function renderVolgende(){
   const v=volgendeMaaltijd();
@@ -3189,13 +3238,16 @@ function renderVolgende(){
           ${wie}<span class="volgende-naam ${rc?"":"leeg"}">${rc?esc(rc.name):"Nog niets gekozen"}</span>
         </button>
         <div class="volgende-voet">
-          <span class="volgende-meta">
-            ${rc?(lo?`${ic("restjes",13)} restjes`:`<span class="num">${esc(rc.time)}</span> · voor <span class="num">${slotPorties(v.dag,row.id)}</span>`)
-               :"Tik om te kiezen"}
+          ${rc?`<span class="volgende-meta">
+            ${lo?`${ic("restjes",13)} restjes`:`<span class="num">${esc(rc.time)}</span> · voor <span class="num">${slotPorties(v.dag,row.id)}</span>`}
           </span>
           <span style="flex:1"></span>
+          ${lo?"":`<button class="iconbtn bordered" title="Kies iets anders" aria-label="Kies iets anders"
+            onclick="volgendeVerras('${row.id}')">${ic("toveren",17)}</button>`}
           ${kan?`<button class="iconbtn bordered" title="Kookmodus" aria-label="Kookmodus"
-            onclick="volgendeKoken('${row.id}')">${ic("koken",17)}</button>`:""}
+            onclick="volgendeKoken('${row.id}')">${ic("koken",17)}</button>`:""}`
+          :`<button class="btn btn-primary" style="width:auto"
+            onclick="volgendeVerras('${row.id}')">${ic("toveren",16)} Kies iets voor me</button>`}
         </div>
       </div>`;
     }).join("")}
@@ -3213,6 +3265,10 @@ function volgendeGaNaar(){
 function volgendeOpenen(rowId){
   const v=volgendeGaNaar();
   if(v)pickSlot(v.dag,rowId);
+}
+function volgendeVerras(rowId){
+  const v=volgendeGaNaar();
+  if(v)verrasSlot(v.dag,rowId);
 }
 function volgendeKoken(rowId){
   const v=volgendeGaNaar();
@@ -3496,7 +3552,8 @@ function renderPicker(){
       <input id="zoek-slot" class="search" placeholder="Zoeken…" value="${esc(S.search)}"
         oninput="S.search=this.value;clearTimeout(window._pt);window._pt=setTimeout(render,200)">
       ${renderTagFilter("pickTags",basis)}
-      <div style="display:flex;gap:var(--s-2);margin-bottom:var(--s-4)">
+      <div style="display:flex;gap:var(--s-2);flex-wrap:wrap;margin-bottom:var(--s-4)">
+        <button class="btn btn-line" onclick="verrasSlot('${day}','${rowId}',S.pickTags)">${ic("toveren",17)} Kies voor me</button>
         ${rest.length?`<button class="btn btn-line" onclick="set({leftoverPick:{day:'${day}',rowId:'${rowId}'},picker:null})">${ic("restjes",17)} Restjes</button>`:""}
         ${S.week[day]&&S.week[day][rowId]?`<button class="btn btn-line" onclick="clearSlot('${day}','${rowId}');set({picker:null})">${ic("sluiten",17)} Leeg laten</button>`:""}
       </div>
@@ -4473,7 +4530,8 @@ window.wizToggleVasteDay=wizToggleVasteDay; window.wizRemoveVaste=wizRemoveVaste
 window.wizPickVasteRow=wizPickVasteRow; window.wizPickVasteRc=wizPickVasteRc;
 window.onWeekNote=onWeekNote; window.S=S; window.render=render;
 window.pickSlot=pickSlot; window.assignRecipe=assignRecipe; window.clearSlot=clearSlot;
-window.volgendeOpenen=volgendeOpenen; window.volgendeKoken=volgendeKoken;
+window.volgendeOpenen=volgendeOpenen; window.volgendeKoken=volgendeKoken; window.volgendeVerras=volgendeVerras;
+window.verrasSlot=verrasSlot; window.kiesVoorSlot=kiesVoorSlot;
 window.tagToggle=tagToggle; window.tagWis=tagWis; window.tagVoegToe=tagVoegToe; window.tagHaalWeg=tagHaalWeg;
 window.toggleEter=toggleEter; window.etersAlsVast=etersAlsVast; window.etersTerug=etersTerug;
 window.toggleCheck=toggleCheck;

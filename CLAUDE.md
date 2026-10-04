@@ -29,7 +29,7 @@ Everything lives in `index.html`. The structure within the `<script>` block:
 | `HELPERS` | `shuf`, `parseAmt`/`fmtAmt`/`fmtGetal`, `scaleAmt`, `esc`, `toast`, `avatarStack` |
 | `ICONEN` | `ICONS` map of drawn 24×24 SVG paths + `ic(name,size)`. No emoji anywhere in the UI — they are not an icon system |
 | `ETERS` | `ALLE_ETERS`, `etersAt`/`eters`/`eetMee`, `toggleEter`, `etersAlsVast`/`etersTerug`, `kanApart`, `rowWho` — wie er mee-eet |
-| `VOLGENDE MAALTIJD` | `weekAt`, `volgendeMaaltijd`, `wanneerTekst`, `renderVolgende`, `volgendeOpenen`/`volgendeKoken` |
+| `VOLGENDE MAALTIJD` | `weekAt`, `volgendeMaaltijd`, `wanneerTekst`, `renderVolgende`, `volgendeOpenen`/`volgendeKoken`/`volgendeVerras`, `slotCtx`/`kiesVoorSlot`/`verrasSlot` |
 | `DAGINSTELLINGEN` | `dayCfgAt`/`dayCfg`/`setDayCfg`, `rowsFor`, `clearDay` — per-day plan / apart / maxTijd |
 | `INGREDIËNTEN` | `ingKey` (normaliseert een naam), `ingKeys` (per recept) — basis voor het hergebruik in de generator |
 | `TAGS` | `autoTags`/`eigenTags`/`tagsOf`, `alleTags`, `heeftTags`, `tagSel`/`tagToggle`/`tagWis`, `tagsZet`, `tagVoegToe`/`tagHaalWeg`, `renderTagFilter`, `tagStand` |
@@ -109,6 +109,19 @@ In de **generator** werkt een tagkeuze als de maximale kooktijd: `wizGenPreview`
 `S.wiz` wordt **niet opgeslagen**. De tagkeuze geldt dus voor die planronde, net als "boodschappen beperken" en "duimpjes meewegen". De tags op de recepten zelf staan wél vast (`wm_tags_v1`).
 
 Beheren kan op drie plekken: het **receptdetail** (chips met een kruisje plus een invoerveld — werkt voor élk recept, ook die uit een kookboek), het **handmatige formulier** en de **importpreview** (allebei één veld met komma's). De laatste twee schrijven via `tagsZet(rc.id, …)` ná het samenstellen van het recept, want pas dan is het id bekend. Het veld in het detail heet `#tag-nieuw` — een stabiel id, anders wist een hertekening wat je aan het typen bent.
+
+### Eén maaltijd laten kiezen
+
+`verrasSlot(day, rowId, tags)` vult één slot, los van de wizard. Het zit op twee plekken: de kaart met de volgende maaltijd (grote knop "Kies iets voor me" als het slot leeg is, een toverknopje als er al iets staat) en de slotkiezer ("Kies voor me", die het actieve tagfilter van die kiezer meeneemt).
+
+Het is **dezelfde generator**, niet een tweede: `kiesVoorSlot` hergebruikt `genPool`, `genScore` en `genTake`, en past dezelfde narrowing toe als `wizGenPreview` — de maximale kooktijd van die dag, eventuele tags, en allebei met terugval op de hele pool. Verandert er iets aan de scoring, dan verandert dit mee.
+
+Twee verschillen met de wizard:
+
+- `slotCtx(wo, negeer)` bouwt de context uit **wat er nu al in de week staat** (en slaat het slot zelf over), waar de wizard hem tijdens het genereren opbouwt. Daardoor telt alles wat je al gepland hebt mee als "niet nog eens".
+- Wat er op dat moment in het slot staat valt uit de pool: "iets anders" moet iets anders zijn.
+
+`verrasSlot` schrijft in `S.week`, dus de aanroeper moet in de goede week staan — `volgendeVerras` gaat daarom via `volgendeGaNaar()`. Is de pool leeg, dan verandert er niets en volgt een melding.
 
 ### Losse categorieën — snacks en mealpreps
 
