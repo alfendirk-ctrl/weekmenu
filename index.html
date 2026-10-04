@@ -1049,6 +1049,7 @@ let S={
     locks:{},        // "wo_day_rowId" -> true; blijft staan bij opnieuw genereren
     reuse:true,      // hergebruik ingrediënten waar het kan
     useRatings:true, // hou rekening met duimpjes
+    tags:[],         // alleen recepten met deze tags, als er genoeg zijn
   },
   wizSlotPicker:null,  // {day,rowId} slot being swapped in preview
   wizSlotIg:null,      // {day,rowId} slot doing IG import
@@ -1057,7 +1058,7 @@ let S={
   photos:[], photoSt:null,
   recFilter:"all", recVoor:"all", search:"",
   tags: lsGet(TGK,{}),      // rcId -> ["flatbread", ...]
-  recTags:[], losseTags:[], // welke tags er nu gefilterd zijn
+  recTags:[], losseTags:[], pickTags:[], // welke tags er nu gefilterd zijn
   formVoor:"beiden",
   boodDetail: null,
   boodOverride: lsGet(BOK,{}),
@@ -1379,11 +1380,19 @@ function heeftTags(rc,sel){
   const mijn=new Set(tagsOf(rc).map(tagKey));
   return sel.every(t=>mijn.has(tagKey(t)));
 }
-function tagToggle(sleutel,tag){
-  const nu=S[sleutel]||[];
-  const k=tagKey(tag);
-  set({[sleutel]: nu.some(t=>tagKey(t)===k) ? nu.filter(t=>tagKey(t)!==k) : [...nu,tag]});
+// "waar" is een sleutel in S (recTags, losseTags, pickTags) of de string "wiz",
+// want de generator bewaart zijn keuze in S.wiz zodat die bij de rest van de
+// wizard-instellingen blijft staan.
+function tagSel(waar){ return (waar==="wiz" ? S.wiz.tags : S[waar]) || []; }
+function tagZetSel(waar,lijst){
+  if(waar==="wiz"){ S.wiz={...S.wiz,tags:lijst}; set({}); }
+  else set({[waar]:lijst});
 }
+function tagToggle(waar,tag){
+  const nu=tagSel(waar), k=tagKey(tag);
+  tagZetSel(waar, nu.some(t=>tagKey(t)===k) ? nu.filter(t=>tagKey(t)!==k) : [...nu,tag]);
+}
+function tagWis(waar){ tagZetSel(waar,[]); }
 function tagsZet(rcId,lijst){
   const schoon=[];
   const gezien=new Set();
@@ -1413,18 +1422,27 @@ function tagHaalWeg(rcId,tag){
   set({});
 }
 // De filterrij: alleen tonen als er iets te filteren valt.
-function renderTagFilter(sleutel,lijst){
+function renderTagFilter(waar,lijst){
   const tags=alleTags(lijst);
   if(!tags.length)return "";
-  const sel=S[sleutel]||[];
+  const sel=tagSel(waar);
   return `<div class="chips tagrij">
     ${tags.map(t=>{
       const aan=sel.some(x=>tagKey(x)===tagKey(t));
       return `<button class="chip tagchip ${aan?"active":""}"
-        onclick="tagToggle('${sleutel}',${JSON.stringify(t).replace(/"/g,"&quot;")})">${esc(t)}</button>`;
+        onclick="tagToggle('${waar}',${JSON.stringify(t).replace(/"/g,"&quot;")})">${esc(t)}</button>`;
     }).join("")}
-    ${sel.length?`<button class="chip tagchip wis" onclick="set({${sleutel}:[]})">${ic("sluiten",13)} wis</button>`:""}
+    ${sel.length?`<button class="chip tagchip wis" onclick="tagWis('${waar}')">${ic("sluiten",13)} wis</button>`:""}
   </div>`;
+}
+// Hoeveel plan-bare recepten dragen de gekozen tags, en per maaltijdsoort?
+// Dat bepaalt of een tagkeuze realistisch is voordat je op genereren drukt.
+function tagStand(sel){
+  if(!sel||!sel.length)return null;
+  const cats=CATS.filter(c=>!losseCat(c));
+  const per={};
+  cats.forEach(c=>{ per[c]=ALL().filter(rc=>rc.category===c&&heeftTags(rc,sel)).length; });
+  return {per, totaal:cats.reduce((n,c)=>n+per[c],0), leeg:cats.filter(c=>!per[c])};
 }
 
 // ===================== WAARDERINGEN =====================
@@ -1881,7 +1899,7 @@ function recipesForRow(rowId){
 function pickSlot(day,rowId){
   const rc=S.week[day]&&S.week[day][rowId];
   if(rc){set({detail:{rc,day,rowId},detailTab:"ing"});}
-  else{set({picker:{day,rowId},search:""});}
+  else{set({picker:{day,rowId},search:"",pickTags:[]});}
 }
 function assignRecipe(rc){
   if(!S.picker)return;
@@ -3462,7 +3480,8 @@ function renderPicker(){
   const vw=rowWho(row);
   const voor=row.apart?"voor Dirk":(apart&&vw==="shelley")?"voor Shelley"
     :(vw==="dirk"&&!eetMee("shelley"))?"voor Dirk":"voor iedereen";
-  const list=recipesForRow(rowId);
+  const basis=recipesForRow(rowId);
+  const list=basis.filter(rc=>heeftTags(rc,S.pickTags));
   const rest=rowId==="diner"?leftoverSources(day):[];
   return `
   <div class="overlay" onclick="set({picker:null})">
@@ -3476,11 +3495,12 @@ function renderPicker(){
       </div>
       <input id="zoek-slot" class="search" placeholder="Zoeken…" value="${esc(S.search)}"
         oninput="S.search=this.value;clearTimeout(window._pt);window._pt=setTimeout(render,200)">
+      ${renderTagFilter("pickTags",basis)}
       <div style="display:flex;gap:var(--s-2);margin-bottom:var(--s-4)">
         ${rest.length?`<button class="btn btn-line" onclick="set({leftoverPick:{day:'${day}',rowId:'${rowId}'},picker:null})">${ic("restjes",17)} Restjes</button>`:""}
         ${S.week[day]&&S.week[day][rowId]?`<button class="btn btn-line" onclick="clearSlot('${day}','${rowId}');set({picker:null})">${ic("sluiten",17)} Leeg laten</button>`:""}
       </div>
-      ${list.length===0?`<div class="empty"><div class="empty-title">Niets gevonden</div><p>Probeer een andere zoekterm.</p></div>`:`
+      ${list.length===0?`<div class="empty"><div class="empty-title">Niets gevonden</div><p>${S.pickTags.length?"Geen recept met deze tags voor dit slot.":"Probeer een andere zoekterm."}</p></div>`:`
       <div class="picker-grid">
         ${list.map(rc=>`
           <button class="picker-card" onclick="assignRcById(${rc.id})">
@@ -3922,6 +3942,12 @@ function wizGenPreview(force){
           const past=pool.filter(rc=>{const m=parseInt(rc.time);return !m||m<=dc.maxTijd;});
           if(past.length)pool=past;
         }
+        // Zelfde afspraak voor de gekozen tags: is er voor dit slot niets met
+        // die tags, dan vult hij aan uit de rest in plaats van leeg te laten.
+        if((S.wiz.tags||[]).length){
+          const metTag=pool.filter(rc=>heeftTags(rc,S.wiz.tags));
+          if(metTag.length)pool=metTag;
+        }
         prev[wo][day][row.id]=genTake(pool,ctx);
       });
     });
@@ -4136,6 +4162,23 @@ function renderWizStep1(){
   }).join("")}
   </div>
 
+  ${(()=>{
+    const planbaar=ALL().filter(rc=>!losseCat(rc.category));
+    if(!alleTags(planbaar).length)return "";
+    const sel=S.wiz.tags||[];
+    const st=tagStand(sel);
+    return `
+    <p style="font-size:var(--t-xs);font-weight:600;color:var(--ink-2);margin-bottom:var(--s-2)">Alleen recepten met deze tags</p>
+    ${renderTagFilter("wiz",planbaar)}
+    <p style="font-size:var(--t-sm);color:var(--ink-3);line-height:1.5;margin:var(--s-2) 0 var(--s-4)">
+      ${!st ? "Geen keuze: hij put uit de hele kast."
+        : `<span class="num">${st.totaal}</span> ${st.totaal===1?"recept draagt":"recepten dragen"} ${sel.length>1?"alle gekozen tags":"deze tag"}.
+           ${st.leeg.length
+             ? `Voor ${st.leeg.map(c=>CL[c].toLowerCase()).join(", ")} is er niets — die vult hij aan uit de rest.`
+             : "Genoeg voor elke maaltijd."}`}
+    </p>`;
+  })()}
+
   <div class="btn-row">
     <button class="btn btn-line" onclick="set({wizStep:4})">${ic("terug",17)} Voorstel</button>
     <button class="btn btn-ink" onclick="set({wizStep:2})">Volgende ${ic("verder",17)}</button>
@@ -4303,6 +4346,8 @@ function renderWizStep4(){
   <div style="display:flex;gap:var(--s-2);flex-wrap:wrap;margin:var(--s-3) 0 var(--s-4)">
     <span class="chip">${ic("mandje",14)}&nbsp;<span class="num">${ingSet.size}</span>&nbsp;ingrediënten</span>
     ${lockCount?`<span class="chip" style="border-color:var(--accent-line);background:var(--accent-soft);color:var(--ink)">${ic("slot",14)}&nbsp;<span class="num">${lockCount}</span>&nbsp;vast</span>`:""}
+    ${(S.wiz.tags||[]).length?`<button class="chip" style="border-color:var(--accent-line);background:var(--accent-soft);color:var(--ink)"
+      onclick="set({wizStep:1})" title="Tagkeuze aanpassen">${esc((S.wiz.tags||[]).join(" + "))}</button>`:""}
     <button class="chip" onclick="set({wizStep:1})">${ic("instellingen",14)}&nbsp;Dagen &amp; tijd</button>
   </div>
   <div style="max-height:48vh;overflow-y:auto;margin:0 calc(var(--s-2) * -1);padding:0 var(--s-2)">
@@ -4429,7 +4474,7 @@ window.wizPickVasteRow=wizPickVasteRow; window.wizPickVasteRc=wizPickVasteRc;
 window.onWeekNote=onWeekNote; window.S=S; window.render=render;
 window.pickSlot=pickSlot; window.assignRecipe=assignRecipe; window.clearSlot=clearSlot;
 window.volgendeOpenen=volgendeOpenen; window.volgendeKoken=volgendeKoken;
-window.tagToggle=tagToggle; window.tagVoegToe=tagVoegToe; window.tagHaalWeg=tagHaalWeg;
+window.tagToggle=tagToggle; window.tagWis=tagWis; window.tagVoegToe=tagVoegToe; window.tagHaalWeg=tagHaalWeg;
 window.toggleEter=toggleEter; window.etersAlsVast=etersAlsVast; window.etersTerug=etersTerug;
 window.toggleCheck=toggleCheck;
 window.lijstOpmaken=lijstOpmaken; window.lijstBijwerken=lijstBijwerken; window.lijstLosmaken=lijstLosmaken;

@@ -32,7 +32,7 @@ Everything lives in `index.html`. The structure within the `<script>` block:
 | `VOLGENDE MAALTIJD` | `weekAt`, `volgendeMaaltijd`, `wanneerTekst`, `renderVolgende`, `volgendeOpenen`/`volgendeKoken` |
 | `DAGINSTELLINGEN` | `dayCfgAt`/`dayCfg`/`setDayCfg`, `rowsFor`, `clearDay` — per-day plan / apart / maxTijd |
 | `INGREDIËNTEN` | `ingKey` (normaliseert een naam), `ingKeys` (per recept) — basis voor het hergebruik in de generator |
-| `TAGS` | `autoTags`/`eigenTags`/`tagsOf`, `alleTags`, `heeftTags`, `tagToggle`, `tagsZet`, `tagVoegToe`/`tagHaalWeg`, `renderTagFilter` |
+| `TAGS` | `autoTags`/`eigenTags`/`tagsOf`, `alleTags`, `heeftTags`, `tagSel`/`tagToggle`/`tagWis`, `tagsZet`, `tagVoegToe`/`tagHaalWeg`, `renderTagFilter`, `tagStand` |
 | `WAARDERINGEN` | `rateOf`, `setRating`, `rateScore`, `rateBadge` |
 | `RESTJES` | `makeLeftover`, `isLeftover`, `leftoverCounts`, `leftoverSources` |
 | `ACTIONS` | `pickSlot`, `assignRecipe`, `clearSlot`, `saveCustomRecipe`, `boodschappen`, `lijstOpmaken`, `runAutofill`, `exportWeekImg`/`exportBoodImg`, `doImport` (IG/Gemini), `saveForm` |
@@ -100,7 +100,13 @@ Eén tag is **afgeleid en niet te wissen**: alles met `ebook > 0` draagt `AUTO_T
 
 - Lees de tags van een recept met **`tagsOf(rc)`** (afgeleid + eigen, ontdubbeld op `tagKey` = lowercase). `eigenTags(rc)` is alleen het opgeslagen deel — dat is wat de formuliervelden tonen.
 - **`heeftTags(rc, sel)`** is de filtertoets, en die is **EN**: twee tags aanvinken betekent "allebei", want je gebruikt ze om te versmallen.
-- `renderTagFilter(sleutel, lijst)` tekent de chiprij en verdwijnt vanzelf als er niets te filteren valt. De geselecteerde tags staan per pagina in `S` — `recTags` voor de receptenkast, `losseTags` voor snacks en mealpreps.
+- `renderTagFilter(waar, lijst)` tekent de chiprij en verdwijnt vanzelf als er niets te filteren valt. `waar` is een sleutel in `S` — `recTags` (receptenkast), `losseTags` (snacks en mealpreps), `pickTags` (de slotkiezer) — of de string **`"wiz"`**, want de generator bewaart zijn keuze in `S.wiz.tags` zodat die bij de rest van de wizard-instellingen hoort. `tagSel`/`tagZetSel` vangen dat ene verschil af; de rest van de code kent het onderscheid niet.
+
+De **slotkiezer** filtert binnen de kandidaten voor dát slot, dus de chiprij toont alleen tags die daar voorkomen. `pickSlot` zet `pickTags` leeg bij het openen — een filter uit de vorige maaltijd hoort niet door te werken.
+
+In de **generator** werkt een tagkeuze als de maximale kooktijd: `wizGenPreview` versmalt de pool, maar **valt terug op de hele pool als er voor dat slot niets met die tags is** — liever een ander recept dan een leeg bord. Stap 1 van de wizard laat daarom vooraf zien wat je vraagt, via `tagStand(sel)`: hoeveel recepten de tags dragen en voor welke maaltijdsoorten er niets is. Op het voorstel staat een chip met de actieve tags.
+
+`S.wiz` wordt **niet opgeslagen**. De tagkeuze geldt dus voor die planronde, net als "boodschappen beperken" en "duimpjes meewegen". De tags op de recepten zelf staan wél vast (`wm_tags_v1`).
 
 Beheren kan op drie plekken: het **receptdetail** (chips met een kruisje plus een invoerveld — werkt voor élk recept, ook die uit een kookboek), het **handmatige formulier** en de **importpreview** (allebei één veld met komma's). De laatste twee schrijven via `tagsZet(rc.id, …)` ná het samenstellen van het recept, want pas dan is het id bekend. Het veld in het detail heet `#tag-nieuw` — een stabiel id, anders wist een hertekening wat je aan het typen bent.
 
