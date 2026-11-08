@@ -159,17 +159,17 @@ The tour deliberately does **not** go through `modalOpen()`: the page must stay 
 
 `wizGenPreview(force)` scores candidates instead of drawing blindly from a shuffled pile (`genScore` / `genTake` / `genPool`):
 
-- ingredient overlap with what's already planned `+1.3` per shared ingredient, `−0.35` per new one (toggle: `S.wiz.reuse`)
-- recipes eaten in the last 4 weeks `−1.6` each (`recentlyUsed`) — without this the reuse scoring returns the same week every week
+- ingredient overlap with what's already planned `+0.9` per shared ingredient (max 3), `−0.15` per new one (max 6) (toggle: `S.wiz.reuse`). Capped on purpose: uncapped, the recipe with the shortest list always won and the same dishes cycled
+- recipes eaten in the last 8 weeks (`recentlyUsed`, weighted 1 → 0.15 by age) `−2.6` each; a repeated first word of the name (`naamStam`, "Kip …") within the week `−1.2` — without this the reuse scoring returns the same week every week
 - ratings `±2.5` per thumb, `−50` at two thumbs down (toggle: `S.wiz.useRatings`)
 - `−100` for anything already used this week, so a week never repeats itself
-- the winner is drawn at random from the top 3, otherwise every week would be identical
+- noise `0–2.2`; the winner is drawn at random from the top 6, otherwise every week would be identical
 
 Days that are off (`plan:false`) are skipped entirely; `maxTijd` filters the candidate pool by `parseInt(rc.time)` but falls back to the full pool rather than leaving a slot empty.
 
 Slots can be pinned (`S.wiz.locks`, keyed `"<wo>_<day>_<rowId>"`); pinned slots survive regeneration and count as context for the rest of the week. The wizard opens **on the generated proposal** (`wizStart()` → step 4); steps 1–2 are refinements you reach from there (days & generator options, then fixed meals), step 5 is the in-huis check. Step 3 no longer exists.
 
-Measured over 8 consecutive weeks (before the mealprep slot was dropped): ~93 unique ingredients per week with reuse on vs ~111 off, 36 unique dinners across those weeks, 4/49 dinners repeated from the week before, 0 repeats within a week.
+Diversity, measured over 12 simulated weeks: 55 unique dinners (was 40), 0 dinners repeated from the previous week (was 7/84). Earlier measure over 8 weeks (before the mealprep slot was dropped): ~93 unique ingredients per week with reuse on vs ~111 off, 36 unique dinners across those weeks, 4/49 dinners repeated from the week before, 0 repeats within a week.
 
 ### Key constants
 

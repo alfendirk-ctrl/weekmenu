@@ -3949,21 +3949,28 @@ function renderAddSheet(){
 // de duimpjes van het huishouden, en variatie (niets twee keer per week).
 // Wat de afgelopen weken op tafel stond. Zonder deze rem levert het
 // hergebruik-mechanisme wel een korte lijst op, maar week na week dezelfde.
+// Het telt verder terug dan vier weken en weegt de laatste weken zwaarder:
+// vorige week = 1, twee weken terug = 0,85 ... acht weken terug = 0,15.
 function recentlyUsed(weeksBack){
-  const out={};
-  for(let w=-(weeksBack||4); w<0; w++){
+  const out={}, n=weeksBack||8;
+  for(let w=-n; w<0; w++){
     const wk=lsGet(weekStoreKey(w),null); if(!wk)continue;
+    const gewicht=1-(Math.abs(w)-1)*(0.85/Math.max(1,n-1));
     DAYS.forEach(d=>ROWS.forEach(row=>{
       const rc=wk[d]&&wk[d][row.id];
-      if(rc&&rc.id&&!isLeftover(rc)) out[rc.id]=(out[rc.id]||0)+1;
+      if(rc&&rc.id&&!isLeftover(rc)) out[rc.id]=(out[rc.id]||0)+gewicht;
     }));
   }
   return out;
 }
+// Eerste woord van de naam ("Kip", "Pasta", "Wraps"): twee gerechten met
+// hetzelfde beginwoord in één week voelen als hetzelfde eten.
+const naamStam=rc=>String(rc&&rc.name||"").trim().toLowerCase().split(/\s+/)[0]||"";
 function genScore(rc, ctx){
-  let s = Math.random() * 0.9;                    // houdt het levendig
+  let s = Math.random() * 2.2;                    // genoeg ruis om echt te wisselen
   if(ctx.usedIds.has(rc.id)) s -= 100;            // niet twee keer dezelfde week
-  s -= (ctx.recent&&ctx.recent[rc.id]||0) * 1.6;  // pas gegeten? even iets anders
+  s -= (ctx.recent&&ctx.recent[rc.id]||0) * 2.6;  // pas gegeten? even iets anders
+  if(ctx.stammen&&ctx.stammen[naamStam(rc)]) s -= 1.2 * ctx.stammen[naamStam(rc)];
   if(S.wiz.useRatings){
     const r = rateScore(rc.id);
     if(r <= -2) s -= 50;                          // door iedereen afgeschoten
@@ -3973,8 +3980,10 @@ function genScore(rc, ctx){
     const keys = ingKeys(rc);
     let overlap = 0;
     keys.forEach(k=>{ if(ctx.used[k]) overlap++; });
-    s += overlap * 1.3;                           // beloon wat al op de lijst staat
-    s -= (keys.length - overlap) * 0.35;          // straf elke nieuwe regel licht
+    // Begrensd: anders wint altijd het recept met de kortste lijst en
+    // draait de generator steeds dezelfde gerechten rond.
+    s += Math.min(overlap, 3) * 0.9;              // beloon wat al op de lijst staat
+    s -= Math.min(keys.length - overlap, 6) * 0.15; // straf nieuwe regels licht
   }
   return s;
 }
@@ -3982,9 +3991,11 @@ function genTake(pool, ctx){
   if(!pool.length) return null;
   const ranked = pool.map(rc=>({rc, s:genScore(rc, ctx)})).sort((a,b)=>b.s-a.s);
   // Niet altijd de absolute winnaar: dat zou elke week hetzelfde menu geven.
-  const top = ranked.slice(0, Math.min(3, ranked.length));
+  const top = ranked.slice(0, Math.min(6, ranked.length));
   const rc = top[Math.floor(Math.random()*top.length)].rc;
   ctx.usedIds.add(rc.id);
+  ctx.stammen=ctx.stammen||{};
+  ctx.stammen[naamStam(rc)]=(ctx.stammen[naamStam(rc)]||0)+1;
   ingKeys(rc).forEach(k=>{ ctx.used[k]=(ctx.used[k]||0)+1; });
   return rc;
 }
@@ -4010,7 +4021,7 @@ function wizToggleLock(wo,day,rowId){
 // nieuwe recept nog steeds bij de boodschappen past.
 function wizRerollSlot(wo,day,rowId){
   const row=ROWS.find(r=>r.id===rowId);if(!row)return;
-  const ctx={used:{},usedIds:new Set(),recent:recentlyUsed(4)};
+  const ctx={used:{},usedIds:new Set(),recent:recentlyUsed(8)};
   Object.values(S.wiz.preview||{}).forEach(w=>Object.values(w||{}).forEach(d=>{
     Object.entries(d||{}).forEach(([rid,rc])=>{
       if(!rc||isLeftover(rc))return;
@@ -4054,7 +4065,7 @@ function wizToggleWeek(wo){
 function wizGenPreview(force){
   const prev = {}; // {wo: {day: {rowId: rc}}}
   const old = S.wiz.preview || {};
-  const ctx = {used:{}, usedIds:new Set(), recent:recentlyUsed(4)};
+  const ctx = {used:{}, usedIds:new Set(), recent:recentlyUsed(8)};
 
   // Vastgezette slots eerst inlezen: ze staan vast én ze tellen mee als
   // context, zodat de rest van de week erop aansluit.
