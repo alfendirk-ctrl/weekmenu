@@ -1805,7 +1805,7 @@ function rowWho(row){
 // met die tag), "kant" of "werk" (geen recept, een vast moment), of "t:<tag>"
 // (de generator kiest voor dat vakje alleen uit recepten met die tag).
 const AANPAK_MAAL=[["ontbijt","Ontbijt"],["lunch","Lunch"],["diner","Diner"]];
-const AANPAK_VAST=[["prep","Mealprep"],["kant","Kant-en-klaar"],["werk","Op werk halen"]];
+const AANPAK_VAST=[["prep","Mealprep"],["kant","Kant-en-klaar"],["werk","Op werk halen"],["leeg","Leeg laten"]];
 const GEEN_NAAM={kant:"Kant-en-klaar meenemen",werk:"Op werk halen"};
 const isGeen=rc=>!!(rc&&rc.geen);
 function geenSlot(soort,cat){
@@ -4199,6 +4199,7 @@ function wizToggleLock(wo,day,rowId){
 // nieuwe recept nog steeds bij de boodschappen past.
 function wizRerollSlot(wo,day,rowId){
   const row=ROWS.find(r=>r.id===rowId);if(!row)return;
+  if(aanpakWaarde(wo,day,row)==="leeg"){toast("Dit vakje staat op leeg laten");return;}
   const ctx={used:{},usedIds:new Set(),recent:recentlyUsed(8,wo)};
   Object.values(S.wiz.preview||{}).forEach(w=>Object.values(w||{}).forEach(d=>{
     Object.entries(d||{}).forEach(([rid,rc])=>{
@@ -4278,6 +4279,9 @@ function wizGenPreview(force){
           prev[wo][day][row.id]=old[wo][day][row.id];return;
         }
         // De weekaanpak gaat voor wat er al stond: dáárvoor ben je hier.
+        // Bewust leeg (uit eten, geen zin): het voorstel laat het open, ook als er
+        // eerder iets stond. Zonder dit zou "Maak voorstel" het gewoon vullen.
+        if(aanpakWaarde(wo,day,row)==="leeg"){prev[wo][day][row.id]=null;return;}
         const slotTag=aanpakTag(wo,day,row);
         const vastRc=aanpakSlot(wo,day,row);
         if(vastRc){
