@@ -1052,7 +1052,7 @@ let S={
   addOpen:false, addTab:"manual", editRc:null,
   igCap:"", igUrl:"", igSt:null, igFetchSt:null, igErr:"", igPrev:null, geminiKey:lsGet(GK,""),
   syncOpen:false, syncSt:"idle",
-  wizOpen:false, wizStep:1,
+  wizOpen:false, wizStep:0,
   // wizard config
   wiz:{
     weeks:[0],
@@ -1559,7 +1559,7 @@ const TOUR=[
   },
   {
     titel:"Laat de week zichzelf vullen",
-    tekst:"“Plan de week” maakt meteen een compleet voorstel. Wat goed is zet je vast met het slotje, de rest trek je opnieuw — in één keer of per maaltijd. Pas daarna kom je bij de instellingen, niet ervoor.",
+    tekst:"“Plan de week” begint met hoe je ontbijt en werklunch oplost: een mealprep, kant-en-klaar, of uit de kast. Daarna maakt hij een compleet voorstel. Wat goed is zet je vast met het slotje, de rest trek je opnieuw.",
     icoon:"toveren",
     markeer:".weekbox .btn-primary",
   },
@@ -1775,6 +1775,113 @@ function rowWho(row){
   return row.who;
 }
 
+// ===================== WEEKAANPAK =====================
+// Hoe je ontbijt en werklunch deze week oplost, vóór de generator iets kiest:
+// één mealprep voor meerdere dagen, een recept uit de kast, kant-en-klaar
+// meenemen, of op werk halen. Vaste stand in S.cfg.aanpak, per week te
+// overrulen in wm_aanpak_YYYY-MM-DD — hetzelfde patroon als de eters.
+// De laatste twee zijn geen recept maar een vast moment: een slot met
+// `geen:"kant"|"werk"`, zonder ingrediënten, dus ook zonder boodschappen.
+const WERKDAGEN=["ma","di","wo","do","vr"];
+const AANPAK_MODI={
+  ontbijt:[["kast","Uit de kast"],["prep","Mealprep"]],
+  lunch:[["kast","Uit de kast"],["prep","Mealprep"],["kant","Kant-en-klaar"],["werk","Op werk halen"]],
+};
+const GEEN_NAAM={kant:"Kant-en-klaar meenemen",werk:"Op werk halen"};
+const isGeen=rc=>!!(rc&&rc.geen);
+function geenSlot(soort,cat){
+  return {id:"geen_"+soort,geen:soort,name:GEEN_NAAM[soort],category:cat,time:"",
+    ingredients:[],steps:[],servings:1,voor:"beiden",ebook:0};
+}
+const AANPAK_LEEG=()=>({
+  ontbijt:{modus:"kast",rcId:null,dagen:[...WERKDAGEN]},
+  lunch:{modus:"kast",rcId:null,dagen:[...WERKDAGEN]},
+});
+function aanpakKey(wo){ return `wm_aanpak_${mondayStr(wo)}`; }
+function aanpakAt(wo){
+  const k=wo===undefined?(S.weekOffset||0):wo;
+  const eigen=lsGet(aanpakKey(k),null);
+  const bron=(eigen&&typeof eigen==="object")?eigen:(S.cfg&&S.cfg.aanpak)||{};
+  const leeg=AANPAK_LEEG(), uit={};
+  ["ontbijt","lunch"].forEach(m=>{
+    const b=bron[m]||{};
+    uit[m]={...leeg[m],...b,dagen:Array.isArray(b.dagen)?b.dagen.filter(d=>DAYS.includes(d)):leeg[m].dagen};
+    if(!AANPAK_MODI[m].some(([x])=>x===uit[m].modus))uit[m].modus="kast";
+  });
+  return uit;
+}
+function aanpakEigen(wo){ return !!lsGet(aanpakKey(wo===undefined?(S.weekOffset||0):wo),null); }
+// De wizard kan twee weken raken; een keuze in de eerste stap geldt voor allemaal.
+function setAanpak(maaltijd,patch){
+  wizWeeks().forEach(wo=>{
+    const nu=aanpakAt(wo);
+    nu[maaltijd]={...nu[maaltijd],...patch};
+    lsSet(aanpakKey(wo),nu);
+  });
+  set({});
+}
+function aanpakDag(maaltijd,dag){
+  const huidig=aanpakAt(wizWeeks()[0])[maaltijd].dagen;
+  setAanpak(maaltijd,{dagen:DAYS.filter(d=>d===dag?!huidig.includes(d):huidig.includes(d))});
+}
+function aanpakAlsVast(){
+  S.cfg={...S.cfg,aanpak:aanpakAt(wizWeeks()[0])};
+  wizWeeks().forEach(wo=>{try{localStorage.removeItem(aanpakKey(wo));}catch(e){}});
+  set({});toast("Vaste stand bijgewerkt");
+}
+function aanpakTerug(){
+  wizWeeks().forEach(wo=>{try{localStorage.removeItem(aanpakKey(wo));}catch(e){}});
+  set({});
+}
+// Welke rij op een dag is die van jou: Dirks eigen rij bij apart eten, anders de
+// gedeelde. Shelleys eigen bord laat de aanpak met rust.
+function aanpakRij(dag,wo,cat){
+  const rijen=rowsFor(dag,wo).filter(r=>r.cat===cat);
+  const mijn=rijen.find(r=>rowWho(r)==="dirk")||rijen[0];
+  return mijn?mijn.id:null;
+}
+// Wat de aanpak in dit slot zet, of null als de generator het mag invullen.
+function aanpakSlot(wo,dag,row){
+  const m=row.cat==="ontbijt"?"ontbijt":row.cat==="lunch"?"lunch":null;
+  if(!m)return null;
+  const a=aanpakAt(wo)[m];
+  if(a.modus==="kast"||!a.dagen.includes(dag))return null;
+  if(aanpakRij(dag,wo,row.cat)!==row.id)return null;
+  if(a.modus==="prep")return a.rcId!=null?(getRc(a.rcId)||null):null;
+  return geenSlot(a.modus,row.cat);
+}
+function aanpakKies(maaltijd){ set({aanpakKies:maaltijd,search:""}); }
+function aanpakKiesRc(rcId){
+  const m=S.aanpakKies; if(!m)return;
+  S.aanpakKies=null;
+  setAanpak(m,{rcId});
+}
+function aanpakPool(maaltijd){
+  return ALL().filter(rc=>rc.category===maaltijd||rc.category==="mealprep")
+    .filter(rc=>!S.search||rc.name.toLowerCase().includes(S.search.toLowerCase()))
+    .sort((a,b)=>(b.category==="mealprep")-(a.category==="mealprep"));
+}
+function assignGeen(soort){
+  if(!S.picker)return;
+  const {day,rowId}=S.picker;
+  const row=ROWS.find(r=>r.id===rowId);
+  S.week[day]={...S.week[day],[rowId]:geenSlot(soort,row.cat)};
+  set({picker:null});
+}
+function wizAssignGeen(soort){
+  if(!S.wizSlotPicker)return;
+  const {wo,day,rowId}=S.wizSlotPicker;
+  const row=ROWS.find(r=>r.id===rowId);
+  S.wiz.preview[wo][day][rowId]=geenSlot(soort,row.cat);
+  set({wizSlotPicker:null});
+}
+// Knoppen voor de slotkiezers: alleen bij lunch, want daar bestaat het.
+function geenKnoppen(rowId,handler){
+  const row=ROWS.find(r=>r.id===rowId);
+  if(!row||row.cat!=="lunch")return "";
+  return ["kant","werk"].map(k=>`<button class="btn btn-line" onclick="${handler}('${k}')">${ic(k==="kant"?"mandje":"kalender",17)} ${GEEN_NAAM[k]}</button>`).join("");
+}
+
 // ===================== DAGINSTELLINGEN =====================
 // Per dag: plannen ja/nee, apart eten ja/nee, en hoeveel tijd je hebt.
 // De planner en de wizard schrijven allebei hierin — één bron.
@@ -1912,7 +2019,7 @@ function recipesForRow(rowId){
 // ===================== ACTIONS =====================
 function pickSlot(day,rowId){
   const rc=S.week[day]&&S.week[day][rowId];
-  if(rc){set({detail:{rc,day,rowId},detailTab:"ing"});}
+  if(rc&&!isGeen(rc)){set({detail:{rc,day,rowId},detailTab:"ing"});}
   else{set({picker:{day,rowId},search:"",pickTags:[]});}
 }
 function assignRecipe(rc){
@@ -3127,8 +3234,8 @@ function renderMealRow(day,rowId,label,whoList,isSub){
     <button class="meal-body" onclick="pickSlot('${day}','${rowId}')" style="text-align:left;background:none">
       <div class="meal-name">${rc?esc(rc.name):"Nog niets gekozen"}</div>
       ${rc?`<div class="meal-meta">
-        ${lo?`${ic("restjes",13)} restjes`:`<span class="num">${esc(rc.time)}</span>`}
-        ${rateBadge(rc.id)}
+        ${lo?`${ic("restjes",13)} restjes`:isGeen(rc)?`zonder recept`:`<span class="num">${esc(rc.time)}</span>`}
+        ${isGeen(rc)?"":rateBadge(rc.id)}
       </div>`:""}
     </button>
     <span class="meal-side">
@@ -3345,7 +3452,7 @@ function renderVolgende(){
         </button>
         <div class="volgende-voet">
           <span class="volgende-meta">
-            ${rc?(lo?`${ic("restjes",13)} restjes`:`<span class="num">${esc(rc.time)}</span> · voor <span class="num">${slotPorties(v.dag,row.id)}</span>`)
+            ${rc?(lo?`${ic("restjes",13)} restjes`:isGeen(rc)?`zonder recept`:`<span class="num">${esc(rc.time)}</span> · voor <span class="num">${slotPorties(v.dag,row.id)}</span>`)
                :"Tik om te kiezen"}
           </span>
           <span style="flex:1"></span>
@@ -3653,6 +3760,7 @@ function renderPicker(){
       ${renderTagFilter("pickTags",basis)}
       <div style="display:flex;gap:var(--s-2);flex-wrap:wrap;margin-bottom:var(--s-4)">
         ${rest.length?`<button class="btn btn-line" onclick="set({leftoverPick:{day:'${day}',rowId:'${rowId}'},picker:null})">${ic("restjes",17)} Restjes</button>`:""}
+        ${geenKnoppen(rowId,"assignGeen")}
         ${S.week[day]&&S.week[day][rowId]?`<button class="btn btn-line" onclick="clearSlot('${day}','${rowId}');set({picker:null})">${ic("sluiten",17)} Leeg laten</button>`:""}
       </div>
       ${list.length===0?`<div class="empty"><div class="empty-title">Niets gevonden</div><p>${S.pickTags.length?"Geen recept met deze tags voor dit slot.":"Probeer een andere zoekterm."}</p></div>`:`
@@ -4046,7 +4154,8 @@ function wizStart(){
   S.wizOpen=true;
   S.wiz.locks={};
   S.wiz.weeks=[0];   // volgende week zet je er zelf bij
-  wizGenPreview(false);
+  S.wiz.preview={};
+  set({wizStep:0});  // eerst de aanpak, dan pas het voorstel
 }
 // Welke weken de wizard aanraakt. Los van de daginstellingen, zodat het
 // aanvinken van "volgende week" niets in de opslag achterlaat.
@@ -4094,6 +4203,13 @@ function wizGenPreview(force){
         // Op slot gezet? Dan blijft het staan, ook bij opnieuw genereren.
         if(wizIsLocked(wo,day,row.id)&&old[wo]&&old[wo][day]&&old[wo][day][row.id]!==undefined){
           prev[wo][day][row.id]=old[wo][day][row.id];return;
+        }
+        // De weekaanpak gaat voor wat er al stond: dáárvoor ben je hier.
+        const vastRc=aanpakSlot(wo,day,row);
+        if(vastRc){
+          prev[wo][day][row.id]=vastRc;
+          if(!isGeen(vastRc)){ctx.usedIds.add(vastRc.id);ingKeys(vastRc).forEach(k=>{ctx.used[k]=(ctx.used[k]||0)+1;});}
+          return;
         }
         if(!force&&existingWeek[day]&&existingWeek[day][row.id]){
           const ex=existingWeek[day][row.id];
@@ -4206,6 +4322,7 @@ function renderWizard(){
           <button class="btn btn-line" style="flex:1" onclick="set({wizSlotPicker:null,wizSlotIg:{wo:${wo},day:'${day}',rowId:'${rowId}'},wizIgCap:'',wizIgSt:null,wizIgPrev:null})">${ic("camera",17)} Instagram importeren</button>
           <button class="btn btn-line" style="flex:1" onclick="wizClearSlot(${wo},'${day}','${rowId}');set({wizSlotPicker:null})">${ic("sluiten",17)} Leeg laten</button>
         </div>
+        ${geenKnoppen(rowId,"wizAssignGeen")?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">${geenKnoppen(rowId,"wizAssignGeen")}</div>`:""}
         ${list.length===0 ? `
         <div style="text-align:center;padding:28px 16px">
           <div style="font-size:14px;color:var(--ink-3);margin-bottom:12px">Geen recepten gevonden voor "${esc(S.search)}"</div>
@@ -4248,7 +4365,7 @@ function renderWizard(){
   const isHub = step===4;
   const refineNo = {1:1,2:2}[step];
   return `
-  <div class="overlay" onclick="set({wizOpen:false,wizStep:4,wizSlotPicker:null,wizSlotIg:null,wizVastePicker:null})">
+  <div class="overlay" onclick="set({wizOpen:false,wizStep:4,wizSlotPicker:null,wizSlotIg:null,wizVastePicker:null,aanpakKies:null})">
     <div class="sheet" onclick="event.stopPropagation()" style="max-height:92vh">
 
       <div style="display:flex;justify-content:flex-end;margin-bottom:var(--s-2)">
@@ -4259,11 +4376,79 @@ function renderWizard(){
         ${[1,2].map(n=>`<div style="flex:1;height:3px;border-radius:99px;background:${n<=refineNo?"var(--accent)":"var(--line)"}"></div>`).join("")}
       </div>`:""}
 
+      ${step===0?renderWizStep0():""}
       ${step===1?renderWizStep1():""}
       ${step===2?renderWizStep2():""}
       ${step===4?renderWizStep4():""}
       ${step===5?renderWizStep5():""}
     </div>
+  </div>`;
+}
+
+// STAP 0 — Weekaanpak: hoe los je ontbijt en werklunch op, vóór het voorstel.
+function renderWizStep0(){
+  if(S.aanpakKies){
+    const m=S.aanpakKies, lijst=aanpakPool(m);
+    const gekozen=aanpakAt(wizWeeks()[0])[m].rcId;
+    return `
+    <h2 class="sheet-title">Welk recept voor je ${m}?</h2>
+    <p class="sheet-sub">Je mealpreps staan bovenaan, daarna de rest van de ${m}s.</p>
+    <input id="zoek-aanpak" class="search" placeholder="Zoeken…" value="${esc(S.search)}"
+      oninput="S.search=this.value;clearTimeout(window._at);window._at=setTimeout(render,200)">
+    ${lijst.length?`<div class="picker-grid">
+      ${lijst.map(rc=>`<button class="picker-card" onclick="aanpakKiesRc(${rc.id})" ${rc.id===gekozen?`style="border-color:var(--accent)"`:""}>
+        <div class="pc-name">${esc(rc.name)}</div>
+        <div class="pc-meta">${rc.category==="mealprep"?"Mealprep":esc(rc.time)} · ${rc.servings||2}p</div>
+      </button>`).join("")}
+    </div>`:`<div class="empty"><div class="empty-title">Niets gevonden</div><p>Probeer een andere zoekterm.</p></div>`}
+    <button class="btn btn-line" style="margin-top:var(--s-3)" onclick="set({aanpakKies:null,search:''})">${ic("terug",17)} Terug</button>`;
+  }
+  const A=aanpakAt(wizWeeks()[0]);
+  const blok=(m,titel)=>{
+    const a=A[m], rc=a.rcId!=null?getRc(a.rcId):null;
+    const uitleg={
+      kast:"De generator kiest elke dag iets uit de kast.",
+      prep:"Eén recept dat je in één keer maakt en over meerdere dagen eet. De boodschappen rekenen er vanzelf mee.",
+      kant:"Een vast moment in je week, zonder recept. Je koopt het zelf; het staat niet op de lijst.",
+      werk:"Een vast moment in je week, zonder recept. Je haalt het onderweg; het staat niet op de lijst.",
+    }[a.modus];
+    return `
+    <div style="margin-bottom:var(--s-6)">
+      <p style="font-size:var(--t-md);font-weight:600;margin-bottom:var(--s-2)">${titel}</p>
+      <div class="chips" style="flex-wrap:wrap;overflow:visible;padding-bottom:0">
+        ${AANPAK_MODI[m].map(([k,l])=>`<button class="chip ${a.modus===k?"active":""}" onclick="setAanpak('${m}',{modus:'${k}'})">${l}</button>`).join("")}
+      </div>
+      <p style="font-size:var(--t-sm);color:var(--ink-3);line-height:1.5;margin:var(--s-2) 0 var(--s-3)">${uitleg}</p>
+      ${a.modus==="prep"?`
+      <button class="meal" style="width:100%;margin-bottom:var(--s-3)" onclick="aanpakKies('${m}')">
+        <span class="meal-slot">Recept</span>
+        <span class="meal-body"><span class="meal-name" style="${rc?"":"color:var(--ink-3)"}">${rc?esc(rc.name):"Kies een recept…"}</span></span>
+        <span class="meal-side">${ic("verder",17)}</span>
+      </button>`:""}
+      ${a.modus!=="kast"?`
+      <div style="display:flex;gap:var(--s-1)">
+        ${DAYS.map(d=>{const aan=a.dagen.includes(d);return `<button onclick="aanpakDag('${m}','${d}')" aria-pressed="${aan}"
+          style="flex:1;padding:var(--s-2) 0;border-radius:var(--r-md);font-size:var(--t-2xs);font-weight:600;text-transform:uppercase;
+            border:1px solid ${aan?"var(--accent)":"var(--line)"};background:${aan?"var(--accent-soft)":"var(--surface)"};
+            color:${aan?"var(--ink)":"var(--ink-3)"}">${d}</button>`;}).join("")}
+      </div>
+      ${a.modus==="prep"&&!rc?`<p style="font-size:var(--t-xs);color:var(--warn);margin-top:var(--s-2)">Kies een recept, anders vult de generator deze dagen gewoon in.</p>`:""}`:""}
+    </div>`;
+  };
+  const eigen=aanpakEigen(wizWeeks()[0]);
+  return `
+  <h2 class="sheet-title">Hoe pak je de week aan?</h2>
+  <p class="sheet-sub" style="margin-bottom:var(--s-5)">Wat vastligt zet de generator er eerst in. Daarna vult hij de rest.</p>
+  ${blok("ontbijt","Ontbijt")}
+  ${blok("lunch","Lunch op werkdagen")}
+  <p style="font-size:var(--t-xs);color:var(--ink-3);margin-bottom:var(--s-4)">
+    ${eigen?"Alleen deze week · ":"Vaste stand · "}
+    ${eigen?`<button class="btn-quiet" style="font-size:var(--t-xs)" onclick="aanpakAlsVast()">Als vaste stand</button> · <button class="btn-quiet" style="font-size:var(--t-xs)" onclick="aanpakTerug()">Terug</button>`
+           :`een wijziging geldt eerst alleen voor deze week`}
+  </p>
+  <div class="btn-row">
+    <button class="btn btn-line" onclick="set({wizStep:1})">${ic("instellingen",17)} Dagen &amp; tijd</button>
+    <button class="btn btn-primary" onclick="wizGenPreview(false)">${ic("toveren",17)} Maak voorstel</button>
   </div>`;
 }
 
@@ -4346,9 +4531,14 @@ function renderWizStep1(){
   })()}
 
   <div class="btn-row">
-    <button class="btn btn-line" onclick="set({wizStep:4})">${ic("terug",17)} Voorstel</button>
+    <button class="btn btn-line" onclick="wizVoorstel()">${ic("terug",17)} Voorstel</button>
     <button class="btn btn-ink" onclick="set({wizStep:2})">Volgende ${ic("verder",17)}</button>
   </div>`;
+}
+// Terug naar het voorstel; bestaat het nog niet (je kwam via de aanpak), maak het dan.
+function wizVoorstel(){
+  if(S.wiz.preview&&Object.keys(S.wiz.preview).length)set({wizStep:4});
+  else wizGenPreview(false);
 }
 function wizAllDays(wo,on){
   DAYS.forEach(d=>{
@@ -4495,7 +4685,7 @@ function renderWizStep4(){
       <span class="meal-slot">${row.label}${row.apart?" · D":""}</span>
       <button class="meal-body" style="text-align:left;background:none" onclick="wizSwapSlot(${wo},'${day}','${row.id}')">
         <span class="meal-name">${rc?esc(rc.name):"leeg"}</span>
-        ${rc?`<span class="meal-meta"><span class="num">${esc(rc.time)}</span>${rateBadge(rc.id)}</span>`:""}
+        ${rc?`<span class="meal-meta">${isGeen(rc)?"zonder recept":`<span class="num">${esc(rc.time)}</span>${rateBadge(rc.id)}`}</span>`:""}
       </button>
       <span class="meal-side">
         <button class="iconbtn" onclick="wizToggleLock(${wo},'${day}','${row.id}')" aria-pressed="${locked}"
@@ -4514,6 +4704,7 @@ function renderWizStep4(){
     ${lockCount?`<span class="chip" style="border-color:var(--accent-line);background:var(--accent-soft);color:var(--ink)">${ic("slot",14)}&nbsp;<span class="num">${lockCount}</span>&nbsp;vast</span>`:""}
     ${(S.wiz.tags||[]).length?`<button class="chip" style="border-color:var(--accent-line);background:var(--accent-soft);color:var(--ink)"
       onclick="set({wizStep:1})" title="Tagkeuze aanpassen">${esc((S.wiz.tags||[]).join(" + "))}</button>`:""}
+    <button class="chip" onclick="set({wizStep:0})">${ic("mandje",14)}&nbsp;Weekaanpak</button>
     <button class="chip" onclick="set({wizStep:1})">${ic("instellingen",14)}&nbsp;Dagen &amp; tijd</button>
   </div>
   <div style="max-height:48vh;overflow-y:auto;margin:0 calc(var(--s-2) * -1);padding:0 var(--s-2)">

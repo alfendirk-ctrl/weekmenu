@@ -31,6 +31,7 @@ Everything lives in `index.html`. The structure within the `<script>` block:
 | `ETERS` | `ALLE_ETERS`, `etersAt`/`eters`/`eetMee`, `toggleEter`, `etersAlsVast`/`etersTerug`, `kanApart`, `rowWho` — wie er mee-eet |
 | `VOLGENDE MAALTIJD` | `weekAt`, `volgendeMaaltijd`, `wanneerTekst`, `renderVolgende`, `volgendeOpenen`/`volgendeKoken` |
 | `LOSSE KIEZER` | `kiesUitAlles`, `verrasOpen`/`verrasTrek`/`verrasCat`/`verrasTagToggle`, `verrasInWeek`/`verrasBekijk`, `renderVerras` |
+| `WEEKAANPAK` | `aanpakAt`/`setAanpak`, `aanpakSlot`/`aanpakRij`, `geenSlot`/`isGeen`, `aanpakAlsVast`/`aanpakTerug` — ontbijt en werklunch vóór de generator |
 | `DAGINSTELLINGEN` | `dayCfgAt`/`dayCfg`/`setDayCfg`, `rowsFor`, `clearDay` — per-day plan / apart / maxTijd |
 | `INGREDIËNTEN` | `ingKey` (normaliseert een naam), `ingKeys` (per recept) — basis voor het hergebruik in de generator |
 | `TAGS` | `autoTags`/`eigenTags`/`tagsOf`, `alleTags`, `heeftTags`, `tagSel`/`tagToggle`/`tagWis`, `tagsZet`, `tagVoegToe`/`tagHaalWeg`, `renderTagFilter`, `tagStand` |
@@ -55,7 +56,7 @@ function set(patch) { Object.assign(S, patch); save(); render(); }
 function render() { document.getElementById("app").innerHTML = `...`; }
 ```
 
-Because `render()` throws away the DOM, a focused field would lose its text mid-typing. `render()` therefore snapshots the focused `INPUT`/`TEXTAREA` (`veldSelector` → `#id` or first class, plus value and selection range) and restores value, focus and caret afterwards. **Any field the user types in needs a stable `id`** — `#snack-weekend`, `#weeknotitie`, `#zoek-recepten`, `#zoek-weekendsnack`, `#zoek-mealprep`, `#zoek-slot`, `#zoek-vaste`, `#zoek-wissel` — otherwise the selector matches the wrong element after a rerender. For the same reason `syncPush` never calls `render()`; it repaints the one sync button through `syncStatus()`.
+Because `render()` throws away the DOM, a focused field would lose its text mid-typing. `render()` therefore snapshots the focused `INPUT`/`TEXTAREA` (`veldSelector` → `#id` or first class, plus value and selection range) and restores value, focus and caret afterwards. **Any field the user types in needs a stable `id`** — `#snack-weekend`, `#weeknotitie`, `#zoek-recepten`, `#zoek-weekendsnack`, `#zoek-mealprep`, `#zoek-slot`, `#zoek-vaste`, `#zoek-wissel`, `#zoek-aanpak` — otherwise the selector matches the wrong element after a rerender. For the same reason `syncPush` never calls `render()`; it repaints the one sync button through `syncStatus()`.
 
 ### Data model
 
@@ -154,6 +155,17 @@ One note per week, not per day: `S.notes.week`, in the same `wm_notes_YYYY-MM-DD
 `TOUR` is a flat array of 13 steps, each `{titel, tekst, icoon, markeer?, doe?}` — `markeer` is a CSS selector to ring, `doe` runs before the step renders (switch view, open a sheet). `S.tour` holds the index, `null` when closed; `wm_tour_v1` remembers that it has been seen and the tour auto-starts 600 ms after the first render only when that key is absent. It can be restarted from the sync sheet.
 
 The tour deliberately does **not** go through `modalOpen()`: the page must stay scrollable so `tourMarkeer()` can bring the ringed element into the free space above the card. Layering is scrim (z 150, `pointer-events:none`) → `.tour-uitgelicht` (151) → `.tour` card (153), and `body.tour-actief .app{padding-bottom:70vh}` so even the last element on the page can scroll clear of the card. When touching any of this, verify on iPhone-size: the ring must never sit behind the card.
+
+### Weekaanpak — ontbijt en werklunch
+
+De wizard (“Plan de week”) opent op **stap 0**, niet meer op het voorstel: hoe los je ontbijt en lunch deze week op. Per maaltijd één keuze plus de dagen waarop (standaard ma–vr): ontbijt is `kast` (generator) of `prep`; lunch is `kast`, `prep`, `kant` (kant-en-klaar meenemen) of `werk` (op werk halen).
+
+- Opslag: vaste stand in `S.cfg.aanpak`, per week te overrulen in `wm_aanpak_YYYY-MM-DD` — hetzelfde patroon als eters. Lees via `aanpakAt(wo)`, nooit rechtstreeks. `setAanpak` schrijft naar alle weken die de wizard raakt.
+- **`prep`** zet één recept op alle gekozen dagen. De pool is de maaltijdcategorie plus alle `mealprep`-recepten (die de generator zelf nooit kiest, zie `genPool`). Een mealprep is dus gewoon een recept in een ontbijt- of lunchslot; de boodschappenlijst telt per dag op, dus 5 dagen = 5 × de hoeveelheid.
+- **`kant`/`werk`** zijn geen recept maar een slot met `geen:"kant"|"werk"` (`geenSlot`, `isGeen`): zonder ingrediënten, dus vanzelf niet op de boodschappenlijst, wel een gevuld slot in de planner en de volgende-maaltijdkaart. `pickSlot` opent bij zo'n slot de kiezer in plaats van het detail. De slotkiezers (planner en wizard) bieden ze aan bij lunch.
+- **Welke rij**: `aanpakRij` kiest Dirks rij bij apart eten, anders de gedeelde rij; Shelleys eigen bord blijft aan de generator.
+- In `wizGenPreview` gaat de aanpak **vóór** wat er al stond maar na een vastgezet slot (`S.wiz.locks`); `S.wiz.vasteRc` gaat erboven. Bij `kast` verandert er niets: bestaande slots blijven zoals ze waren tot je “Opnieuw” drukt.
+- Geen recept gekozen bij `prep`: dan vult de generator die dagen gewoon in, met een waarschuwing in stap 0.
 
 ### The week generator
 
