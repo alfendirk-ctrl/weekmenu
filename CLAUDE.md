@@ -31,7 +31,7 @@ Everything lives in `index.html`. The structure within the `<script>` block:
 | `ETERS` | `ALLE_ETERS`, `etersAt`/`eters`/`eetMee`, `toggleEter`, `etersAlsVast`/`etersTerug`, `kanApart`, `rowWho` — wie er mee-eet |
 | `VOLGENDE MAALTIJD` | `weekAt`, `volgendeMaaltijd`, `wanneerTekst`, `renderVolgende`, `volgendeOpenen`/`volgendeKoken` |
 | `LOSSE KIEZER` | `kiesUitAlles`, `verrasOpen`/`verrasTrek`/`verrasCat`/`verrasTagToggle`, `verrasInWeek`/`verrasBekijk`, `renderVerras` |
-| `WEEKAANPAK` | `aanpakAt`/`setAanpak`, `aanpakSlot`/`aanpakRij`, `geenSlot`/`isGeen`, `aanpakAlsVast`/`aanpakTerug` — ontbijt en werklunch vóór de generator |
+| `WEEKAANPAK` | `aanpakAt`/`aanpakZet`/`aanpakCel`, `aanpakSlot`/`aanpakTag`/`aanpakRij`, `geenSlot`/`isGeen`, `aanpakAlsVast`/`aanpakWis` — tags op de week vóór de generator |
 | `DAGINSTELLINGEN` | `dayCfgAt`/`dayCfg`/`setDayCfg`, `rowsFor`, `clearDay` — per-day plan / apart / maxTijd |
 | `INGREDIËNTEN` | `ingKey` (normaliseert een naam), `ingKeys` (per recept) — basis voor het hergebruik in de generator |
 | `TAGS` | `autoTags`/`eigenTags`/`tagsOf`, `alleTags`, `heeftTags`, `tagSel`/`tagToggle`/`tagWis`, `tagsZet`, `tagVoegToe`/`tagHaalWeg`, `renderTagFilter`, `tagStand` |
@@ -156,16 +156,15 @@ One note per week, not per day: `S.notes.week`, in the same `wm_notes_YYYY-MM-DD
 
 The tour deliberately does **not** go through `modalOpen()`: the page must stay scrollable so `tourMarkeer()` can bring the ringed element into the free space above the card. Layering is scrim (z 150, `pointer-events:none`) → `.tour-uitgelicht` (151) → `.tour` card (153), and `body.tour-actief .app{padding-bottom:70vh}` so even the last element on the page can scroll clear of the card. When touching any of this, verify on iPhone-size: the ring must never sit behind the card.
 
-### Weekaanpak — ontbijt en werklunch
+### Weekaanpak — de week met tags
 
-De wizard (“Plan de week”) opent op **stap 0**, niet meer op het voorstel: hoe los je ontbijt en lunch deze week op. Per maaltijd één keuze plus de dagen waarop (standaard ma–vr): ontbijt is `kast` (generator) of `prep`; lunch is `kast`, `prep`, `kant` (kant-en-klaar meenemen) of `werk` (op werk halen).
+De wizard (“Plan de week”) opent op **stap 0**: alle dagen onder elkaar, drie vakjes per dag (ontbijt, lunch, diner) en een bak met tags. Je tikt een tag aan en daarna de vakjes (op een computer kun je ook slepen); een vakje met diezelfde tag nogmaals aantikken wist hem. Wat leeg blijft vult de generator. Een dag aan/uit zet je met een tik op de dagnaam. Stap 1 heet nu “Tijd & opties”, het voorstel is stap 4.
 
-- Opslag: vaste stand in `S.cfg.aanpak`, per week te overrulen in `wm_aanpak_YYYY-MM-DD` — hetzelfde patroon als eters. Lees via `aanpakAt(wo)`, nooit rechtstreeks. `setAanpak` schrijft naar alle weken die de wizard raakt.
-- **`prep`** zet één recept op alle gekozen dagen. De pool is de maaltijdcategorie plus alle `mealprep`-recepten (die de generator zelf nooit kiest, zie `genPool`). Een mealprep is dus gewoon een recept in een ontbijt- of lunchslot; de boodschappenlijst telt per dag op, dus 5 dagen = 5 × de hoeveelheid.
-- **`kant`/`werk`** zijn geen recept maar een slot met `geen:"kant"|"werk"` (`geenSlot`, `isGeen`): zonder ingrediënten, dus vanzelf niet op de boodschappenlijst, wel een gevuld slot in de planner en de volgende-maaltijdkaart. `pickSlot` opent bij zo'n slot de kiezer in plaats van het detail. De slotkiezers (planner en wizard) bieden ze aan bij lunch.
-- **Welke rij**: `aanpakRij` kiest Dirks rij bij apart eten, anders de gedeelde rij; Shelleys eigen bord blijft aan de generator.
-- In `wizGenPreview` gaat de aanpak **vóór** wat er al stond maar na een vastgezet slot (`S.wiz.locks`); `S.wiz.vasteRc` gaat erboven. Bij `kast` verandert er niets: bestaande slots blijven zoals ze waren tot je “Opnieuw” drukt.
-- Geen recept gekozen bij `prep`: dan vult de generator die dagen gewoon in, met een waarschuwing in stap 0.
+- Opslag: `{slots:{"ma_ontbijt":"prep","do_lunch":"kant","za_diner":"t:flatbread"}, prep:{ontbijt:<rcId>}}`. Vaste stand in `S.cfg.aanpak`, per week te overrulen in `wm_aanpak_YYYY-MM-DD` — hetzelfde patroon als eters. Lees via `aanpakAt(wo)`, nooit rechtstreeks; die is tolerant voor een leeg of ouder formaat. Schrijven gaat per week (`aanpakZet(wo,…)`), want de wizard kan twee weken tonen.
+- **Vier soorten tag.** `prep` zet één recept (per maaltijdsoort, één keer gekozen bij de eerste mealprep-tik) op alle vakjes met die tag; de pool is de maaltijdcategorie plus alle `mealprep`-recepten (die de generator zelf nooit kiest). `kant`/`werk` zijn geen recept maar een slot met `geen:"kant"|"werk"` (`geenSlot`, `isGeen`): zonder ingrediënten, dus vanzelf niet op de boodschappenlijst, wel een gevuld slot in planner en volgende-maaltijdkaart; `pickSlot` opent daar de kiezer, en de slotkiezers bieden ze bij lunch ook los aan. `t:<tag>` laat de generator voor dat vakje uit recepten met die tag kiezen (`heeftTags`, valt terug op de hele pool als er niets is) — ook bij het opnieuw trekken van één slot, en een bestaand recept zonder die tag wordt vervangen.
+- **Welke rij**: `aanpakRij` kiest Dirks rij bij apart eten, anders de gedeelde; Shelleys eigen bord blijft aan de generator.
+- In `wizGenPreview` gaat de aanpak vóór wat er al stond maar na een vastgezet slot (`S.wiz.locks`); `S.wiz.vasteRc` gaat erboven. Vakjes zonder tag veranderen niet tot je “Opnieuw” drukt.
+- De bak toont de vaste tags plus `alleTags()` — de tags die je ook in de receptenkast en de generator gebruikt. De geselecteerde tag staat in `S.aanpakTag` en wordt niet bewaard.
 
 ### The week generator
 

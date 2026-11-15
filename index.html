@@ -334,6 +334,21 @@ svg{display:block;flex:0 0 auto}
   .meal-side{grid-column:2;grid-row:2}
 }
 
+.aanp-bak{padding-bottom:var(--s-3)}
+.aanp-grid{display:grid;grid-template-columns:3rem repeat(3,minmax(0,1fr));gap:var(--s-1);align-items:stretch}
+.aanp-kop{font-size:var(--t-2xs);font-weight:600;color:var(--ink-3);text-align:center;padding-bottom:var(--s-1)}
+.aanp-dag{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;border-radius:var(--r-md);
+  font-size:var(--t-2xs);font-weight:600;text-transform:uppercase;color:var(--ink);background:var(--surface-2)}
+.aanp-dag .num{font-size:var(--t-sm);font-weight:700}
+.aanp-dag.uit{color:var(--ink-3);opacity:.6}
+.aanp-dag:hover{background:var(--surface-3)}
+.aanp-cel{min-height:2.75rem;padding:var(--s-1);border-radius:var(--r-md);border:1px dashed var(--line-2);background:var(--surface);
+  font-size:var(--t-2xs);font-weight:600;line-height:1.2;color:var(--ink);display:flex;align-items:center;justify-content:center;
+  text-align:center;overflow-wrap:anywhere}
+.aanp-cel:hover:not(:disabled){border-color:var(--accent-line)}
+.aanp-cel.vol{border-style:solid;border-color:var(--accent-line);background:var(--accent-soft)}
+.aanp-cel:disabled{opacity:.35;cursor:default}
+.aanp-prep{display:block;width:100%;text-align:left;margin-top:var(--s-2);font-size:var(--t-xs)}
 .zweef{position:fixed;z-index:60;right:var(--s-5);
   bottom:calc(72px + var(--s-4) + env(safe-area-inset-bottom));
   width:3.5rem;height:3.5rem;border-radius:99px;display:grid;place-items:center;
@@ -1559,7 +1574,7 @@ const TOUR=[
   },
   {
     titel:"Laat de week zichzelf vullen",
-    tekst:"“Plan de week” begint met hoe je ontbijt en werklunch oplost: een mealprep, kant-en-klaar, of uit de kast. Daarna maakt hij een compleet voorstel. Wat goed is zet je vast met het slotje, de rest trek je opnieuw.",
+    tekst:"“Plan de week” begint met de hele week in beeld. Zet tags op de vakjes die je al weet — mealprep, kant-en-klaar, flatbread — en laat de rest leeg. Dan maakt hij een compleet voorstel; wat goed is zet je vast met het slotje, de rest trek je opnieuw.",
     icoon:"toveren",
     markeer:".weekbox .btn-primary",
   },
@@ -1776,62 +1791,86 @@ function rowWho(row){
 }
 
 // ===================== WEEKAANPAK =====================
-// Hoe je ontbijt en werklunch deze week oplost, vóór de generator iets kiest:
-// één mealprep voor meerdere dagen, een recept uit de kast, kant-en-klaar
-// meenemen, of op werk halen. Vaste stand in S.cfg.aanpak, per week te
+// Het startscherm van "Plan de week": alle dagen, drie vakjes per dag (ontbijt,
+// lunch, diner), en een bak met tags die je erop zet. Wat je tagt ligt vast;
+// wat leeg blijft vult de generator. Vaste stand in S.cfg.aanpak, per week te
 // overrulen in wm_aanpak_YYYY-MM-DD — hetzelfde patroon als de eters.
-// De laatste twee zijn geen recept maar een vast moment: een slot met
-// `geen:"kant"|"werk"`, zonder ingrediënten, dus ook zonder boodschappen.
-const WERKDAGEN=["ma","di","wo","do","vr"];
-const AANPAK_MODI={
-  ontbijt:[["kast","Uit de kast"],["prep","Mealprep"]],
-  lunch:[["kast","Uit de kast"],["prep","Mealprep"],["kant","Kant-en-klaar"],["werk","Op werk halen"]],
-};
+//
+// Opslag: {slots:{"ma_ontbijt":"prep", "do_lunch":"kant", "za_diner":"t:flatbread"},
+//          prep:{ontbijt:<rcId>, lunch:<rcId>}}
+// De waarde is "prep" (mealprep: één recept per maaltijdsoort voor alle vakjes
+// met die tag), "kant" of "werk" (geen recept, een vast moment), of "t:<tag>"
+// (de generator kiest voor dat vakje alleen uit recepten met die tag).
+const AANPAK_MAAL=[["ontbijt","Ontbijt"],["lunch","Lunch"],["diner","Diner"]];
+const AANPAK_VAST=[["prep","Mealprep"],["kant","Kant-en-klaar"],["werk","Op werk halen"]];
 const GEEN_NAAM={kant:"Kant-en-klaar meenemen",werk:"Op werk halen"};
 const isGeen=rc=>!!(rc&&rc.geen);
 function geenSlot(soort,cat){
   return {id:"geen_"+soort,geen:soort,name:GEEN_NAAM[soort],category:cat,time:"",
     ingredients:[],steps:[],servings:1,voor:"beiden",ebook:0};
 }
-const AANPAK_LEEG=()=>({
-  ontbijt:{modus:"kast",rcId:null,dagen:[...WERKDAGEN]},
-  lunch:{modus:"kast",rcId:null,dagen:[...WERKDAGEN]},
-});
+function aanpakLabel(w){
+  if(!w)return "";
+  if(w.startsWith("t:"))return w.slice(2);
+  return (AANPAK_VAST.find(([k])=>k===w)||[,""])[1];
+}
 function aanpakKey(wo){ return `wm_aanpak_${mondayStr(wo)}`; }
 function aanpakAt(wo){
   const k=wo===undefined?(S.weekOffset||0):wo;
   const eigen=lsGet(aanpakKey(k),null);
   const bron=(eigen&&typeof eigen==="object")?eigen:(S.cfg&&S.cfg.aanpak)||{};
-  const leeg=AANPAK_LEEG(), uit={};
-  ["ontbijt","lunch"].forEach(m=>{
-    const b=bron[m]||{};
-    uit[m]={...leeg[m],...b,dagen:Array.isArray(b.dagen)?b.dagen.filter(d=>DAYS.includes(d)):leeg[m].dagen};
-    if(!AANPAK_MODI[m].some(([x])=>x===uit[m].modus))uit[m].modus="kast";
-  });
-  return uit;
+  const ok=o=>(o&&typeof o==="object"&&!Array.isArray(o))?{...o}:{};
+  return {slots:ok(bron.slots),prep:ok(bron.prep)};
 }
-function aanpakEigen(wo){ return !!lsGet(aanpakKey(wo===undefined?(S.weekOffset||0):wo),null); }
-// De wizard kan twee weken raken; een keuze in de eerste stap geldt voor allemaal.
-function setAanpak(maaltijd,patch){
-  wizWeeks().forEach(wo=>{
-    const nu=aanpakAt(wo);
-    nu[maaltijd]={...nu[maaltijd],...patch};
-    lsSet(aanpakKey(wo),nu);
-  });
+function aanpakLeeg(wo){
+  const a=aanpakAt(wo);
+  return !Object.keys(a.slots).length;
+}
+// Eén vakje zetten of wissen. De mealprep-keuze van een maaltijdsoort hoeft maar
+// één keer: de eerste keer dat je "Mealprep" ergens neerzet vraagt hij om het recept.
+function aanpakZet(wo,dag,cat,waarde){
+  const nu=aanpakAt(wo), k=dag+"_"+cat;
+  if(waarde)nu.slots[k]=waarde; else delete nu.slots[k];
+  lsSet(aanpakKey(wo),nu);
+  if(waarde==="prep"&&nu.prep[cat]==null)S.aanpakKies={wo,cat};
   set({});
 }
-function aanpakDag(maaltijd,dag){
-  const huidig=aanpakAt(wizWeeks()[0])[maaltijd].dagen;
-  setAanpak(maaltijd,{dagen:DAYS.filter(d=>d===dag?!huidig.includes(d):huidig.includes(d))});
+// Tik een tag aan, tik daarna vakjes aan. Een vakje met al diezelfde tag wist hij weer.
+function aanpakKiesTag(w){ set({aanpakTag:S.aanpakTag===w?null:w}); }
+function aanpakCel(wo,dag,cat){
+  if(!dayCfgAt(wo,dag).plan)return;
+  const huidig=aanpakAt(wo).slots[dag+"_"+cat], sel=S.aanpakTag;
+  if(sel&&huidig!==sel)aanpakZet(wo,dag,cat,sel);
+  else if(huidig)aanpakZet(wo,dag,cat,null);
+  else toast("Kies eerst een tag hierboven");
+}
+function aanpakDragStart(ev,w){
+  try{ev.dataTransfer.setData("text/plain",w);ev.dataTransfer.effectAllowed="copy";}catch(e){}
+}
+function aanpakDrop(ev,wo,dag,cat){
+  ev.preventDefault();
+  let w=""; try{w=ev.dataTransfer.getData("text/plain");}catch(e){}
+  if(w&&dayCfgAt(wo,dag).plan)aanpakZet(wo,dag,cat,w);
 }
 function aanpakAlsVast(){
   S.cfg={...S.cfg,aanpak:aanpakAt(wizWeeks()[0])};
-  wizWeeks().forEach(wo=>{try{localStorage.removeItem(aanpakKey(wo));}catch(e){}});
   set({});toast("Vaste stand bijgewerkt");
 }
-function aanpakTerug(){
-  wizWeeks().forEach(wo=>{try{localStorage.removeItem(aanpakKey(wo));}catch(e){}});
+function aanpakWis(){
+  wizWeeks().forEach(wo=>lsSet(aanpakKey(wo),{slots:{},prep:{}}));
   set({});
+}
+function aanpakKiesRc(rcId){
+  const k=S.aanpakKies; if(!k)return;
+  const nu=aanpakAt(k.wo);
+  nu.prep[k.cat]=rcId;
+  lsSet(aanpakKey(k.wo),nu);
+  set({aanpakKies:null,search:""});
+}
+function aanpakPool(cat){
+  return ALL().filter(rc=>rc.category===cat||rc.category==="mealprep")
+    .filter(rc=>!S.search||rc.name.toLowerCase().includes(S.search.toLowerCase()))
+    .sort((a,b)=>(b.category==="mealprep")-(a.category==="mealprep"));
 }
 // Welke rij op een dag is die van jou: Dirks eigen rij bij apart eten, anders de
 // gedeelde. Shelleys eigen bord laat de aanpak met rust.
@@ -1840,26 +1879,23 @@ function aanpakRij(dag,wo,cat){
   const mijn=rijen.find(r=>rowWho(r)==="dirk")||rijen[0];
   return mijn?mijn.id:null;
 }
+function aanpakWaarde(wo,dag,row){
+  if(!AANPAK_MAAL.some(([c])=>c===row.cat))return null;
+  const w=aanpakAt(wo).slots[dag+"_"+row.cat];
+  if(!w||aanpakRij(dag,wo,row.cat)!==row.id)return null;
+  return w;
+}
 // Wat de aanpak in dit slot zet, of null als de generator het mag invullen.
 function aanpakSlot(wo,dag,row){
-  const m=row.cat==="ontbijt"?"ontbijt":row.cat==="lunch"?"lunch":null;
-  if(!m)return null;
-  const a=aanpakAt(wo)[m];
-  if(a.modus==="kast"||!a.dagen.includes(dag))return null;
-  if(aanpakRij(dag,wo,row.cat)!==row.id)return null;
-  if(a.modus==="prep")return a.rcId!=null?(getRc(a.rcId)||null):null;
-  return geenSlot(a.modus,row.cat);
+  const w=aanpakWaarde(wo,dag,row);
+  if(w==="prep"){const id=aanpakAt(wo).prep[row.cat];return id!=null?(getRc(id)||null):null;}
+  if(w==="kant"||w==="werk")return geenSlot(w,row.cat);
+  return null;
 }
-function aanpakKies(maaltijd){ set({aanpakKies:maaltijd,search:""}); }
-function aanpakKiesRc(rcId){
-  const m=S.aanpakKies; if(!m)return;
-  S.aanpakKies=null;
-  setAanpak(m,{rcId});
-}
-function aanpakPool(maaltijd){
-  return ALL().filter(rc=>rc.category===maaltijd||rc.category==="mealprep")
-    .filter(rc=>!S.search||rc.name.toLowerCase().includes(S.search.toLowerCase()))
-    .sort((a,b)=>(b.category==="mealprep")-(a.category==="mealprep"));
+// De tag die de generator voor dit slot moet aanhouden, of null.
+function aanpakTag(wo,dag,row){
+  const w=aanpakWaarde(wo,dag,row);
+  return (w&&w.startsWith("t:"))?w.slice(2):null;
 }
 function assignGeen(soort){
   if(!S.picker)return;
@@ -4142,7 +4178,10 @@ function wizRerollSlot(wo,day,rowId){
   // trekken hetzelfde gerecht opleveren en lijkt de knop stuk.
   const huidig=(((S.wiz.preview[wo]||{})[day])||{})[rowId];
   if(huidig&&huidig.id!=null)ctx.usedIds.add(huidig.id);
-  const rc=genTake(genPool(row.cat,rowWho(row)),ctx);
+  let pool=genPool(row.cat,rowWho(row));
+  const slotTag=aanpakTag(wo,day,row);
+  if(slotTag){const m=pool.filter(r=>heeftTags(r,[slotTag]));if(m.length)pool=m;}
+  const rc=genTake(pool,ctx);
   if(!rc){toast("Geen ander recept beschikbaar");return;}
   S.wiz.preview[wo][day][rowId]=rc;
   set({});
@@ -4205,13 +4244,15 @@ function wizGenPreview(force){
           prev[wo][day][row.id]=old[wo][day][row.id];return;
         }
         // De weekaanpak gaat voor wat er al stond: dáárvoor ben je hier.
+        const slotTag=aanpakTag(wo,day,row);
         const vastRc=aanpakSlot(wo,day,row);
         if(vastRc){
           prev[wo][day][row.id]=vastRc;
           if(!isGeen(vastRc)){ctx.usedIds.add(vastRc.id);ingKeys(vastRc).forEach(k=>{ctx.used[k]=(ctx.used[k]||0)+1;});}
           return;
         }
-        if(!force&&existingWeek[day]&&existingWeek[day][row.id]){
+        if(!force&&existingWeek[day]&&existingWeek[day][row.id]
+           &&(!slotTag||heeftTags(existingWeek[day][row.id],[slotTag]))){
           const ex=existingWeek[day][row.id];
           prev[wo][day][row.id]=ex;
           if(ex&&!isLeftover(ex)){ctx.usedIds.add(ex.id);ingKeys(ex).forEach(k=>{ctx.used[k]=(ctx.used[k]||0)+1;});}
@@ -4229,6 +4270,10 @@ function wizGenPreview(force){
         if((S.wiz.tags||[]).length){
           const metTag=pool.filter(rc=>heeftTags(rc,S.wiz.tags));
           if(metTag.length)pool=metTag;
+        }
+        if(slotTag){
+          const m=pool.filter(rc=>heeftTags(rc,[slotTag]));
+          if(m.length)pool=m;
         }
         prev[wo][day][row.id]=genTake(pool,ctx);
       });
@@ -4385,14 +4430,15 @@ function renderWizard(){
   </div>`;
 }
 
-// STAP 0 — Weekaanpak: hoe los je ontbijt en werklunch op, vóór het voorstel.
+// STAP 0 — De week met tags: alle dagen, drie vakjes, en een bak met tags.
 function renderWizStep0(){
   if(S.aanpakKies){
-    const m=S.aanpakKies, lijst=aanpakPool(m);
-    const gekozen=aanpakAt(wizWeeks()[0])[m].rcId;
+    const {wo,cat}=S.aanpakKies, lijst=aanpakPool(cat);
+    const gekozen=aanpakAt(wo).prep[cat];
+    const naam=(AANPAK_MAAL.find(([c])=>c===cat)||[,cat])[1].toLowerCase();
     return `
-    <h2 class="sheet-title">Welk recept voor je ${m}?</h2>
-    <p class="sheet-sub">Je mealpreps staan bovenaan, daarna de rest van de ${m}s.</p>
+    <h2 class="sheet-title">Welk recept voor je mealprep-${naam}?</h2>
+    <p class="sheet-sub">Je mealpreps staan bovenaan, daarna de rest van de ${naam}s.</p>
     <input id="zoek-aanpak" class="search" placeholder="Zoeken…" value="${esc(S.search)}"
       oninput="S.search=this.value;clearTimeout(window._at);window._at=setTimeout(render,200)">
     ${lijst.length?`<div class="picker-grid">
@@ -4403,51 +4449,52 @@ function renderWizStep0(){
     </div>`:`<div class="empty"><div class="empty-title">Niets gevonden</div><p>Probeer een andere zoekterm.</p></div>`}
     <button class="btn btn-line" style="margin-top:var(--s-3)" onclick="set({aanpakKies:null,search:''})">${ic("terug",17)} Terug</button>`;
   }
-  const A=aanpakAt(wizWeeks()[0]);
-  const blok=(m,titel)=>{
-    const a=A[m], rc=a.rcId!=null?getRc(a.rcId):null;
-    const uitleg={
-      kast:"De generator kiest elke dag iets uit de kast.",
-      prep:"Eén recept dat je in één keer maakt en over meerdere dagen eet. De boodschappen rekenen er vanzelf mee.",
-      kant:"Een vast moment in je week, zonder recept. Je koopt het zelf; het staat niet op de lijst.",
-      werk:"Een vast moment in je week, zonder recept. Je haalt het onderweg; het staat niet op de lijst.",
-    }[a.modus];
-    return `
-    <div style="margin-bottom:var(--s-6)">
-      <p style="font-size:var(--t-md);font-weight:600;margin-bottom:var(--s-2)">${titel}</p>
-      <div class="chips" style="flex-wrap:wrap;overflow:visible;padding-bottom:0">
-        ${AANPAK_MODI[m].map(([k,l])=>`<button class="chip ${a.modus===k?"active":""}" onclick="setAanpak('${m}',{modus:'${k}'})">${l}</button>`).join("")}
-      </div>
-      <p style="font-size:var(--t-sm);color:var(--ink-3);line-height:1.5;margin:var(--s-2) 0 var(--s-3)">${uitleg}</p>
-      ${a.modus==="prep"?`
-      <button class="meal" style="width:100%;margin-bottom:var(--s-3)" onclick="aanpakKies('${m}')">
-        <span class="meal-slot">Recept</span>
-        <span class="meal-body"><span class="meal-name" style="${rc?"":"color:var(--ink-3)"}">${rc?esc(rc.name):"Kies een recept…"}</span></span>
-        <span class="meal-side">${ic("verder",17)}</span>
-      </button>`:""}
-      ${a.modus!=="kast"?`
-      <div style="display:flex;gap:var(--s-1)">
-        ${DAYS.map(d=>{const aan=a.dagen.includes(d);return `<button onclick="aanpakDag('${m}','${d}')" aria-pressed="${aan}"
-          style="flex:1;padding:var(--s-2) 0;border-radius:var(--r-md);font-size:var(--t-2xs);font-weight:600;text-transform:uppercase;
-            border:1px solid ${aan?"var(--accent)":"var(--line)"};background:${aan?"var(--accent-soft)":"var(--surface)"};
-            color:${aan?"var(--ink)":"var(--ink-3)"}">${d}</button>`;}).join("")}
-      </div>
-      ${a.modus==="prep"&&!rc?`<p style="font-size:var(--t-xs);color:var(--warn);margin-top:var(--s-2)">Kies een recept, anders vult de generator deze dagen gewoon in.</p>`:""}`:""}
-    </div>`;
-  };
-  const eigen=aanpakEigen(wizWeeks()[0]);
+  const sel=S.aanpakTag||null;
+  const planbaar=ALL().filter(rc=>!losseCat(rc.category));
+  const bak=[...AANPAK_VAST.map(([k])=>k),...alleTags(planbaar).map(t=>"t:"+t)];
+  const arg=w=>JSON.stringify(w).replace(/"/g,"&quot;");
+  const weken=wizWeeks();
   return `
-  <h2 class="sheet-title">Hoe pak je de week aan?</h2>
-  <p class="sheet-sub" style="margin-bottom:var(--s-5)">Wat vastligt zet de generator er eerst in. Daarna vult hij de rest.</p>
-  ${blok("ontbijt","Ontbijt")}
-  ${blok("lunch","Lunch op werkdagen")}
-  <p style="font-size:var(--t-xs);color:var(--ink-3);margin-bottom:var(--s-4)">
-    ${eigen?"Alleen deze week · ":"Vaste stand · "}
-    ${eigen?`<button class="btn-quiet" style="font-size:var(--t-xs)" onclick="aanpakAlsVast()">Als vaste stand</button> · <button class="btn-quiet" style="font-size:var(--t-xs)" onclick="aanpakTerug()">Terug</button>`
-           :`een wijziging geldt eerst alleen voor deze week`}
+  <h2 class="sheet-title">Wat weet je al van de week?</h2>
+  <p class="sheet-sub" style="margin-bottom:var(--s-4)">Tik een tag aan en daarna de vakjes waar hij heen moet. Wat leeg blijft, vult de generator.</p>
+  <div class="chips aanp-bak" role="group" aria-label="Tags">
+    ${bak.map(w=>`<button class="chip tagchip ${sel===w?"active":""}" draggable="true"
+      ondragstart="aanpakDragStart(event,${arg(w)})" onclick="aanpakKiesTag(${arg(w)})" aria-pressed="${sel===w}">${esc(aanpakLabel(w))}</button>`).join("")}
+  </div>
+  ${weken.map(wo=>{
+    const W=weekDates(wo), A=aanpakAt(wo);
+    return `
+    <div class="aanp-week">
+      ${weken.length>1?`<p style="font-size:var(--t-xs);font-weight:600;color:var(--ink-2);margin:var(--s-3) 0 var(--s-2)">${wo===0?"Deze week":"Volgende week"}<span class="num" style="color:var(--ink-3);font-weight:400"> · ${W.range}</span></p>`:""}
+      <div class="aanp-grid">
+        <span></span>${AANPAK_MAAL.map(([,l])=>`<span class="aanp-kop">${l}</span>`).join("")}
+        ${DAYS.map(d=>{
+          const aan=dayCfgAt(wo,d).plan;
+          return `<button class="aanp-dag ${aan?"":"uit"}" onclick="setDayCfgAt(${wo},'${d}',{plan:${!aan}})"
+            title="${aan?"Deze dag uitzetten":"Deze dag aanzetten"}" aria-pressed="${aan}">${d}<span class="num">${W.nums[d]}</span></button>`
+          +AANPAK_MAAL.map(([c])=>{
+            const w=A.slots[d+"_"+c];
+            return `<button class="aanp-cel ${w?"vol":""}" ${aan?"":"disabled"}
+              onclick="aanpakCel(${wo},'${d}','${c}')"
+              ondragover="event.preventDefault()" ondrop="aanpakDrop(event,${wo},'${d}','${c}')"
+              aria-label="${d} ${c}${w?": "+esc(aanpakLabel(w)):""}">${w?esc(aanpakLabel(w)):""}</button>`;
+          }).join("");
+        }).join("")}
+      </div>
+      ${AANPAK_MAAL.filter(([c])=>Object.entries(A.slots).some(([k,v])=>v==="prep"&&k.endsWith("_"+c))).map(([c,l])=>{
+        const rc=A.prep[c]!=null?getRc(A.prep[c]):null;
+        return `<button class="btn-quiet aanp-prep" onclick="set({aanpakKies:{wo:${wo},cat:'${c}'},search:''})">
+          Mealprep ${l.toLowerCase()}: <b>${rc?esc(rc.name):"kies een recept"}</b> ${ic("verder",14)}</button>`;
+      }).join("")}
+    </div>`;
+  }).join("")}
+  <p style="font-size:var(--t-xs);color:var(--ink-3);margin:var(--s-3) 0 var(--s-4);display:flex;flex-wrap:wrap;gap:var(--s-1) var(--s-3);align-items:center">
+    <button class="btn-quiet" style="font-size:var(--t-xs);padding:var(--s-1) var(--s-2)" onclick="wizToggleWeek(1)">${weken.includes(1)?"Volgende week eraf":"Volgende week erbij"}</button>
+    <button class="btn-quiet" style="font-size:var(--t-xs);padding:var(--s-1) var(--s-2)" onclick="aanpakAlsVast()">Als vaste stand</button>
+    <button class="btn-quiet" style="font-size:var(--t-xs);padding:var(--s-1) var(--s-2)" onclick="aanpakWis()">Alles leeg</button>
   </p>
   <div class="btn-row">
-    <button class="btn btn-line" onclick="set({wizStep:1})">${ic("instellingen",17)} Dagen &amp; tijd</button>
+    <button class="btn btn-line" onclick="set({wizStep:1})">${ic("instellingen",17)} Tijd &amp; opties</button>
     <button class="btn btn-primary" onclick="wizGenPreview(false)">${ic("toveren",17)} Maak voorstel</button>
   </div>`;
 }
@@ -4704,8 +4751,8 @@ function renderWizStep4(){
     ${lockCount?`<span class="chip" style="border-color:var(--accent-line);background:var(--accent-soft);color:var(--ink)">${ic("slot",14)}&nbsp;<span class="num">${lockCount}</span>&nbsp;vast</span>`:""}
     ${(S.wiz.tags||[]).length?`<button class="chip" style="border-color:var(--accent-line);background:var(--accent-soft);color:var(--ink)"
       onclick="set({wizStep:1})" title="Tagkeuze aanpassen">${esc((S.wiz.tags||[]).join(" + "))}</button>`:""}
-    <button class="chip" onclick="set({wizStep:0})">${ic("mandje",14)}&nbsp;Weekaanpak</button>
-    <button class="chip" onclick="set({wizStep:1})">${ic("instellingen",14)}&nbsp;Dagen &amp; tijd</button>
+    <button class="chip" onclick="set({wizStep:0})">${ic("kalender",14)}&nbsp;Week &amp; tags</button>
+    <button class="chip" onclick="set({wizStep:1})">${ic("instellingen",14)}&nbsp;Tijd &amp; opties</button>
   </div>
   <div style="max-height:48vh;overflow-y:auto;margin:0 calc(var(--s-2) * -1);padding:0 var(--s-2)">
   ${wizWeeks().map(wo=>{
