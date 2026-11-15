@@ -1704,12 +1704,14 @@ function setRcPorties(rcId,n){
 }
 
 // Hoeveel monden een slot standaard voedt: precies de mensen die daar eten.
-function slotEters(day,rowId){
-  const es=eters();
+// `wo` is optioneel: de wizard rekent ook voor een andere week dan je bekijkt.
+function slotEters(day,rowId,wo){
+  const w=wo===undefined?(S.weekOffset||0):wo;
+  const es=etersAt(w);
   if(rowId==="diner")return es.length;
   const row=ROWS.find(r=>r.id===rowId);
   if(row&&row.apart)return 1;                      // alleen Dirk
-  if(row&&dayCfg(day).apart&&row.who==="shelley")return 1;  // alleen Shelley
+  if(row&&dayCfgAt(w,day).apart&&row.who==="shelley")return 1;  // alleen Shelley
   return Math.max(1,es.filter(p=>p!=="maeve").length); // Maeve eet alleen mee met het diner
 }
 // Wat er voor dit slot gekookt wordt: jouw keuze, anders het aantal eters.
@@ -4095,11 +4097,13 @@ function renderAddSheet(){
 // hergebruik-mechanisme wel een korte lijst op, maar week na week dezelfde.
 // Het telt verder terug dan vier weken en weegt de laatste weken zwaarder:
 // vorige week = 1, twee weken terug = 0,85 ... acht weken terug = 0,15.
-function recentlyUsed(weeksBack){
-  const out={}, n=weeksBack||8;
-  for(let w=-n; w<0; w++){
+// `basis` is de week waarvoor je plant: wie volgende week plant (basis 1) telt
+// deze week mee als "vorige week".
+function recentlyUsed(weeksBack,basis){
+  const out={}, n=weeksBack||8, b=basis||0;
+  for(let w=b-n; w<b; w++){
     const wk=lsGet(weekStoreKey(w),null); if(!wk)continue;
-    const gewicht=1-(Math.abs(w)-1)*(0.85/Math.max(1,n-1));
+    const gewicht=1-(b-w-1)*(0.85/Math.max(1,n-1));
     DAYS.forEach(d=>ROWS.forEach(row=>{
       const rc=wk[d]&&wk[d][row.id];
       if(rc&&rc.id&&!isLeftover(rc)) out[rc.id]=(out[rc.id]||0)+gewicht;
@@ -4165,7 +4169,7 @@ function wizToggleLock(wo,day,rowId){
 // nieuwe recept nog steeds bij de boodschappen past.
 function wizRerollSlot(wo,day,rowId){
   const row=ROWS.find(r=>r.id===rowId);if(!row)return;
-  const ctx={used:{},usedIds:new Set(),recent:recentlyUsed(8)};
+  const ctx={used:{},usedIds:new Set(),recent:recentlyUsed(8,wo)};
   Object.values(S.wiz.preview||{}).forEach(w=>Object.values(w||{}).forEach(d=>{
     Object.entries(d||{}).forEach(([rid,rc])=>{
       if(!rc||isLeftover(rc))return;
@@ -4192,7 +4196,7 @@ function wizRerollSlot(wo,day,rowId){
 function wizStart(){
   S.wizOpen=true;
   S.wiz.locks={};
-  S.wiz.weeks=[0];   // volgende week zet je er zelf bij
+  S.wiz.weeks=[1];   // je plant voor de week erop; deze week zet je er zelf bij
   S.wiz.preview={};
   set({wizStep:0});  // eerst de aanpak, dan pas het voorstel
 }
@@ -4213,7 +4217,7 @@ function wizToggleWeek(wo){
 function wizGenPreview(force){
   const prev = {}; // {wo: {day: {rowId: rc}}}
   const old = S.wiz.preview || {};
-  const ctx = {used:{}, usedIds:new Set(), recent:recentlyUsed(8)};
+  const ctx = {used:{}, usedIds:new Set(), recent:recentlyUsed(8,Math.min(...wizWeeks()))};
 
   // Vastgezette slots eerst inlezen: ze staan vast én ze tellen mee als
   // context, zodat de rest van de week erop aansluit.
@@ -4489,7 +4493,7 @@ function renderWizStep0(){
     </div>`;
   }).join("")}
   <p style="font-size:var(--t-xs);color:var(--ink-3);margin:var(--s-3) 0 var(--s-4);display:flex;flex-wrap:wrap;gap:var(--s-1) var(--s-3);align-items:center">
-    <button class="btn-quiet" style="font-size:var(--t-xs);padding:var(--s-1) var(--s-2)" onclick="wizToggleWeek(1)">${weken.includes(1)?"Volgende week eraf":"Volgende week erbij"}</button>
+    <button class="btn-quiet" style="font-size:var(--t-xs);padding:var(--s-1) var(--s-2)" onclick="wizToggleWeek(${weken.includes(1)?0:1})">${weken.includes(1)?(weken.includes(0)?"Deze week eraf":"Deze week erbij"):"Volgende week erbij"}</button>
     <button class="btn-quiet" style="font-size:var(--t-xs);padding:var(--s-1) var(--s-2)" onclick="aanpakAlsVast()">Als vaste stand</button>
     <button class="btn-quiet" style="font-size:var(--t-xs);padding:var(--s-1) var(--s-2)" onclick="aanpakWis()">Alles leeg</button>
   </p>
@@ -4793,7 +4797,7 @@ function renderWizStep5(){
           const it = allIng[k];
           const p = parseAmt(g.a);
           if(p.n!==null){
-            const n = p.n*slotEters(dag,row.id)/(rcPorties(rc)||2);
+            const n = p.n*slotEters(dag,row.id,Number(wo))/(rcPorties(rc)||2);
             it.delen[p.eh]=(it.delen[p.eh]||0)+n;
           }else if(!p.smaak&&p.ruw&&!it.los.includes(p.ruw)) it.los.push(p.ruw);
         });
@@ -4851,6 +4855,9 @@ function wizFinish(){
   lsSet(CHK, S.checked);
   lsSet(CFG, S.cfg);
   set({wizOpen:false, wizStep:4});
+  // Je ziet meteen de week die je net hebt ingepland.
+  const eerste=wizWeeks()[0];
+  if(eerste!==(S.weekOffset||0)){switchWeek(eerste);set({activeDay:"ma"});}
   toast("Week ingepland");
 }
 
