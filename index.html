@@ -1078,7 +1078,6 @@ let S={
     locks:{},        // "wo_day_rowId" -> true; blijft staan bij opnieuw genereren
     reuse:true,      // hergebruik ingrediënten waar het kan
     useRatings:true, // hou rekening met duimpjes
-    tags:[],         // alleen recepten met deze tags, als er genoeg zijn
   },
   wizSlotPicker:null,  // {day,rowId} slot being swapped in preview
   wizSlotIg:null,      // {day,rowId} slot doing IG import
@@ -1410,14 +1409,9 @@ function heeftTags(rc,sel){
   const mijn=new Set(tagsOf(rc).map(tagKey));
   return sel.every(t=>mijn.has(tagKey(t)));
 }
-// "waar" is een sleutel in S (recTags, losseTags, pickTags) of de string "wiz",
-// want de generator bewaart zijn keuze in S.wiz zodat die bij de rest van de
-// wizard-instellingen blijft staan.
-function tagSel(waar){ return (waar==="wiz" ? S.wiz.tags : S[waar]) || []; }
-function tagZetSel(waar,lijst){
-  if(waar==="wiz"){ S.wiz={...S.wiz,tags:lijst}; set({}); }
-  else set({[waar]:lijst});
-}
+// "waar" is een sleutel in S: recTags, losseTags of pickTags.
+function tagSel(waar){ return S[waar]||[]; }
+function tagZetSel(waar,lijst){ set({[waar]:lijst}); }
 function tagToggle(waar,tag){
   const nu=tagSel(waar), k=tagKey(tag);
   tagZetSel(waar, nu.some(t=>tagKey(t)===k) ? nu.filter(t=>tagKey(t)!==k) : [...nu,tag]);
@@ -1465,16 +1459,6 @@ function renderTagFilter(waar,lijst){
     ${sel.length?`<button class="chip tagchip wis" onclick="tagWis('${waar}')">${ic("sluiten",13)} wis</button>`:""}
   </div>`;
 }
-// Hoeveel plan-bare recepten dragen de gekozen tags, en per maaltijdsoort?
-// Dat bepaalt of een tagkeuze realistisch is voordat je op genereren drukt.
-function tagStand(sel){
-  if(!sel||!sel.length)return null;
-  const cats=CATS.filter(c=>!losseCat(c));
-  const per={};
-  cats.forEach(c=>{ per[c]=ALL().filter(rc=>rc.category===c&&heeftTags(rc,sel)).length; });
-  return {per, totaal:cats.reduce((n,c)=>n+per[c],0), leeg:cats.filter(c=>!per[c])};
-}
-
 // ===================== WAARDERINGEN =====================
 function rateOf(rcId){return S.ratings[rcId]||{};}
 function setRating(rcId,who,val){
@@ -4303,12 +4287,8 @@ function wizGenPreview(force){
           const past=pool.filter(rc=>{const m=parseInt(rc.time);return !m||m<=dc.maxTijd;});
           if(past.length)pool=past;
         }
-        // Zelfde afspraak voor de gekozen tags: is er voor dit slot niets met
-        // die tags, dan vult hij aan uit de rest in plaats van leeg te laten.
-        if((S.wiz.tags||[]).length){
-          const metTag=pool.filter(rc=>heeftTags(rc,S.wiz.tags));
-          if(metTag.length)pool=metTag;
-        }
+        // De tag op dit vakje: is er niets met die tag, dan vult hij aan uit de
+        // rest in plaats van leeg te laten.
         if(slotTag){
           const m=pool.filter(rc=>heeftTags(rc,[slotTag]));
           if(m.length)pool=m;
@@ -4377,14 +4357,6 @@ async function wizDoImport(){
   }catch(e){ set({wizIgSt:"err",wizIgErr:e.message||"Mislukt"}); }
 }
 
-function wizToggleInHuis(k){
-  S.wiz.inHuis[k] = !S.wiz.inHuis[k];
-  set({});
-}
-function wizToggleGenOpt(k){
-  S.wiz[k] = S.wiz[k]===false;
-  set({});
-}
 
 // ---------- WIZARD ----------
 function renderWizard(){
@@ -4446,7 +4418,7 @@ function renderWizard(){
   // Stap 4 is de voorstel-week: dat is het startpunt en het middelpunt.
   // 1–3 zijn verfijningen die je erbij pakt als je ze nodig hebt, 5 is de afronding.
   const isHub = step===4;
-  const refineNo = {1:1,2:2}[step];
+  const refineNo = {0:1,2:2,4:3}[step];
   return `
   <div class="overlay" onclick="set({wizOpen:false,wizStep:4,wizSlotPicker:null,wizSlotIg:null,wizVastePicker:null,aanpakKies:null})">
     <div class="sheet" onclick="event.stopPropagation()" style="max-height:92vh">
@@ -4456,14 +4428,12 @@ function renderWizard(){
       </div>
       ${refineNo?`
       <div style="display:flex;gap:4px;margin-bottom:var(--s-4)">
-        ${[1,2].map(n=>`<div style="flex:1;height:3px;border-radius:99px;background:${n<=refineNo?"var(--accent)":"var(--line)"}"></div>`).join("")}
+        ${[1,2,3].map(n=>`<div style="flex:1;height:3px;border-radius:99px;background:${n<=refineNo?"var(--accent)":"var(--line)"}"></div>`).join("")}
       </div>`:""}
 
       ${step===0?renderWizStep0():""}
-      ${step===1?renderWizStep1():""}
       ${step===2?renderWizStep2():""}
       ${step===4?renderWizStep4():""}
-      ${step===5?renderWizStep5():""}
     </div>
   </div>`;
 }
@@ -4531,90 +4501,7 @@ function renderWizStep0(){
     <button class="btn-quiet" style="font-size:var(--t-xs);padding:var(--s-1) var(--s-2)" onclick="aanpakAlsVast()">Als vaste stand</button>
     <button class="btn-quiet" style="font-size:var(--t-xs);padding:var(--s-1) var(--s-2)" onclick="aanpakWis()">Alles leeg</button>
   </p>
-  <button class="btn btn-primary" style="width:100%" onclick="wizGenPreview(false)">${ic("toveren",17)} Maak voorstel</button>`;
-}
-
-// STAP 1 — Weekkarakter
-function renderWizStep1(){
-  return `
-  <h2 class="sheet-title">Hoeveel tijd per dag?</h2>
-  <p class="sheet-sub">Het maximum dat een gerecht die dag mag kosten. Tik om te wisselen: geen limiet, 15, 30 of 45 minuten.</p>
-
-  ${wizWeeks().map(wo=>{
-    const W=weekDates(wo);
-    return `
-    <div style="margin-bottom:var(--s-5)">
-      ${wizWeeks().length>1?`<p style="font-size:var(--t-xs);font-weight:600;color:var(--ink-2);margin-bottom:var(--s-2)">${wo===0?"Deze week":"Volgende week"}<span class="num" style="color:var(--ink-3);font-weight:400"> · ${W.range}</span></p>`:""}
-      <div style="display:flex;gap:var(--s-1)">
-        ${DAYS.map(day=>{
-          const c=dayCfgAt(wo,day);
-          return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:var(--s-1);${c.plan?"":"opacity:.4"}">
-            <span style="font-size:var(--t-2xs);font-weight:600;text-transform:uppercase">${day}</span>
-            <button class="btn-quiet" style="width:100%;padding:var(--s-2) 0;font-size:var(--t-xs);border:1px solid var(--line);border-radius:var(--r-md)"
-              ${c.plan?"":"disabled"} onclick="wizCycleTijd(${wo},'${day}')">${c.maxTijd?c.maxTijd+"m":"—"}</button>
-          </div>`;
-        }).join("")}
-      </div>
-    </div>`;
-  }).join("")}
-
-  <p style="font-size:var(--t-xs);font-weight:600;color:var(--ink-2);margin-bottom:var(--s-2)">Hoe kiest de generator?</p>
-  <div style="display:flex;flex-direction:column;gap:var(--s-2);margin-bottom:var(--s-4)">
-  ${[
-    {k:"reuse",title:"Boodschappen beperken",sub:"Kiest recepten die ingrediënten delen — kortere lijst, minder dat wegrot."},
-    {k:"useRatings",title:"Duimpjes meewegen",sub:"Wat is afgekeurd komt niet terug; favorieten juist vaker."},
-  ].map(o=>{
-    const on=S.wiz[o.k]!==false;
-    return `
-    <div style="display:flex;align-items:flex-start;gap:var(--s-3)">
-      ${switchBtn(on,`wizToggleGenOpt('${o.k}')`,"")}
-      <div style="flex:1;padding-top:2px">
-        <div style="font-weight:600;font-size:var(--t-md)">${o.title}</div>
-        <div style="font-size:var(--t-sm);color:var(--ink-3);line-height:1.5">${o.sub}</div>
-      </div>
-    </div>`;
-  }).join("")}
-  </div>
-
-  ${(()=>{
-    const planbaar=ALL().filter(rc=>!losseCat(rc.category));
-    if(!alleTags(planbaar).length)return "";
-    const sel=S.wiz.tags||[];
-    const st=tagStand(sel);
-    return `
-    <p style="font-size:var(--t-xs);font-weight:600;color:var(--ink-2);margin-bottom:var(--s-2)">Alleen recepten met deze tags</p>
-    ${renderTagFilter("wiz",planbaar)}
-    <p style="font-size:var(--t-sm);color:var(--ink-3);line-height:1.5;margin:var(--s-2) 0 var(--s-4)">
-      ${!st ? "Geen keuze: hij put uit de hele kast."
-        : `<span class="num">${st.totaal}</span> ${st.totaal===1?"recept draagt":"recepten dragen"} ${sel.length>1?"alle gekozen tags":"deze tag"}.
-           ${st.leeg.length
-             ? `Voor ${st.leeg.map(c=>CL[c].toLowerCase()).join(", ")} is er niets — die vult hij aan uit de rest.`
-             : "Genoeg voor elke maaltijd."}`}
-    </p>`;
-  })()}
-
-  <div class="btn-row">
-    <button class="btn btn-line" onclick="wizVoorstel()">${ic("terug",17)} Voorstel</button>
-    <button class="btn btn-ink" onclick="set({wizStep:2})">Volgende ${ic("verder",17)}</button>
-  </div>`;
-}
-// Terug naar het voorstel; bestaat het nog niet (je kwam via de aanpak), maak het dan.
-function wizVoorstel(){
-  if(S.wiz.preview&&Object.keys(S.wiz.preview).length)set({wizStep:4});
-  else wizGenPreview(false);
-}
-function wizAllDays(wo,on){
-  DAYS.forEach(d=>{
-    const all=(wo===(S.weekOffset||0))?{...S.dayCfg}:lsGet(dayCfgStoreKey(wo),{});
-    all[d]={...dayCfgAt(wo,d),plan:on};
-    if(wo===(S.weekOffset||0))S.dayCfg=all; else lsSet(dayCfgStoreKey(wo),all);
-  });
-  set({});
-}
-function wizCycleTijd(wo,day){
-  const cur=dayCfgAt(wo,day).maxTijd;
-  const i=TIJD_OPTIES.indexOf(cur);
-  setDayCfgAt(wo,day,{maxTijd:TIJD_OPTIES[(i+1)%TIJD_OPTIES.length]});
+  <button class="btn btn-primary" style="width:100%" onclick="set({wizStep:2})">Verder ${ic("verder",17)}</button>`;
 }
 
 // STAP 2 — Vaste maaltijden
@@ -4663,8 +4550,8 @@ function renderWizStep2(){
   wizWeeks().forEach(wo=>DAYS.forEach(day=>{ if(dayCfgAt(wo,day).plan)planned.push({wo,day}); }));
 
   return `
-  <h2 class="sheet-title">Vaste maaltijden</h2>
-  <p class="sheet-sub">Wat elke week hetzelfde is hoeft de generator niet te verzinnen. Kies het recept en de dagen; die slots blijven daarna met rust.</p>
+  <h2 class="sheet-title">Wil je iets vastzetten?</h2>
+  <p class="sheet-sub">Een vast recept op bepaalde dagen, bijvoorbeeld elke vrijdag pizza. Hoeft niet: sla het gerust over.</p>
 
   ${vasteRc.length===0?`
   <div class="empty" style="padding:var(--s-6) var(--s-4)">
@@ -4701,8 +4588,8 @@ function renderWizStep2(){
   <button class="btn btn-line" onclick="set({wizVastePicker:{step:'row'}})">${ic("plus",17)} Vaste maaltijd toevoegen</button>
 
   <div class="btn-row">
-    <button class="btn btn-line" onclick="set({wizStep:1})">${ic("terug",17)} Terug</button>
-    <button class="btn btn-primary" onclick="wizGenPreview(true)">${ic("toveren",17)} Nieuw voorstel</button>
+    <button class="btn btn-line" onclick="set({wizStep:0})">${ic("terug",17)} Terug</button>
+    <button class="btn btn-primary" onclick="wizGenPreview(Object.keys(S.wiz.preview||{}).length>0)">${ic("toveren",17)} Maak voorstel</button>
   </div>`;
 }
 
@@ -4765,10 +4652,8 @@ function renderWizStep4(){
   <div style="display:flex;gap:var(--s-2);flex-wrap:wrap;margin:var(--s-3) 0 var(--s-4)">
     <span class="chip">${ic("mandje",14)}&nbsp;<span class="num">${ingSet.size}</span>&nbsp;ingrediënten</span>
     ${lockCount?`<span class="chip" style="border-color:var(--accent-line);background:var(--accent-soft);color:var(--ink)">${ic("slot",14)}&nbsp;<span class="num">${lockCount}</span>&nbsp;vast</span>`:""}
-    ${(S.wiz.tags||[]).length?`<button class="chip" style="border-color:var(--accent-line);background:var(--accent-soft);color:var(--ink)"
-      onclick="set({wizStep:1})" title="Tagkeuze aanpassen">${esc((S.wiz.tags||[]).join(" + "))}</button>`:""}
     <button class="chip" onclick="set({wizStep:0})">${ic("kalender",14)}&nbsp;Week &amp; tags</button>
-    <button class="chip" onclick="set({wizStep:1})">${ic("instellingen",14)}&nbsp;Tijd &amp; opties</button>
+    <button class="chip" onclick="set({wizStep:2})">${ic("slot",14)}&nbsp;Vaste maaltijden</button>
   </div>
   <div style="max-height:48vh;overflow-y:auto;margin:0 calc(var(--s-2) * -1);padding:0 var(--s-2)">
   ${wizWeeks().map(wo=>{
@@ -4789,58 +4674,7 @@ function renderWizStep4(){
   </div>
   <div class="btn-row">
     <button class="btn btn-line" onclick="wizGenPreview(true)">${ic("opnieuw",17)} Opnieuw</button>
-    <button class="btn btn-primary" onclick="set({wizStep:5})">Akkoord ${ic("verder",17)}</button>
-  </div>`;
-}
-
-// STAP 5 — Wat heb je al in huis?
-function renderWizStep5(){
-  // Collect all ingredients from preview
-  const allIng = {};
-  Object.entries(S.wiz.preview).forEach(([wo,weekData])=>{
-    Object.entries(weekData||{}).forEach(([dag,slots])=>{
-      if(!dayCfgAt(Number(wo),dag).plan)return;
-      rowsFor(dag,Number(wo)).forEach(row=>{
-        const rc = slots && slots[row.id];
-        if(!rc || isLeftover(rc))return;
-        (rc.ingredients||[]).forEach(g=>{
-          const k = (g.n||"").toLowerCase();
-          if(!allIng[k]) allIng[k] = {name:g.n, delen:{}, los:[]};
-          const it = allIng[k];
-          const p = parseAmt(g.a);
-          if(p.n!==null){
-            const n = p.n*slotEters(dag,row.id,Number(wo))/(rcPorties(rc)||2);
-            it.delen[p.eh]=(it.delen[p.eh]||0)+n;
-          }else if(!p.smaak&&p.ruw&&!it.los.includes(p.ruw)) it.los.push(p.ruw);
-        });
-      });
-    });
-  });
-  Object.values(allIng).forEach(it=>{
-    it.amounts=[...Object.entries(it.delen).map(([eh,n])=>fmtAmt(n,eh)),...it.los];
-  });
-  const items = Object.entries(allIng);
-  const inHuis = items.filter(([k])=>S.wiz.inHuis[k]).length;
-
-  return `
-  <div class="sheet-title">Wat heb je al in huis?</div>
-  <div class="sheet-sub" style="margin-bottom:14px">Vink aan wat je al hebt — die halen we van de boodschappenlijst.</div>
-  <div style="max-height:48vh;overflow-y:auto;background:var(--surface);border-radius:16px;border:1px solid var(--line);margin-bottom:14px">
-    ${items.map(([k,it])=>{
-      const chk = !!S.wiz.inHuis[k];
-      return `
-      <div onclick="wizToggleInHuis('${esc(k).replace(/'/g,"")}')"
-        style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-bottom:1px solid var(--line);cursor:pointer;${chk?"opacity:0.5":""}">
-        <div class="check ${chk?"on":""}">${chk?ic("vink",13):""}</div>
-        <span style="flex:1;font-size:14px;color:var(--ink)">${esc(it.name)}</span>
-        ${it.amounts.length?`<span style="font-family:var(--num);font-size:11px;color:var(--ink-3)">${esc(it.amounts.join(", "))}</span>`:""}
-      </div>`;
-    }).join("")}
-  </div>
-  ${inHuis>0?`<div style="font-size:13px;color:var(--ok);margin-bottom:10px;font-weight:600">${inHuis} ingrediënten al in huis — worden niet besteld</div>`:""}
-  <div class="btn-row">
-    <button class="btn btn-line" onclick="set({wizStep:4})">${ic("terug",17)} Terug</button>
-    <button class="btn btn-primary" onclick="wizFinish()">${ic("vink",17)} Week inplannen</button>
+    <button class="btn btn-primary" style="white-space:nowrap" onclick="wizFinish()">${ic("vink",17)} Week inplannen</button>
   </div>`;
 }
 
@@ -4885,8 +4719,7 @@ window.wizFinish=wizFinish;
 window.wizSwapSlot=wizSwapSlot; window.wizAssignSlot=wizAssignSlot;
 window.wizClearSlot=wizClearSlot; 
 window.wizDoImport=wizDoImport; window.wizFetchAndImport=wizFetchAndImport;
-window.wizToggleInHuis=wizToggleInHuis;
-window.wizStart=wizStart; window.wizToggleWeek=wizToggleWeek; window.wizAllDays=wizAllDays; window.wizCycleTijd=wizCycleTijd; window.wizToggleLock=wizToggleLock; window.wizRerollSlot=wizRerollSlot; window.wizToggleGenOpt=wizToggleGenOpt;
+window.wizStart=wizStart; window.wizToggleWeek=wizToggleWeek; window.wizToggleLock=wizToggleLock; window.wizRerollSlot=wizRerollSlot;
 window.openCook=openCook; window.closeCook=closeCook; window.cookGo=cookGo;
 window.cookStartTimer=cookStartTimer; window.cookStopTimer=cookStopTimer;
 window.setRating=setRating; window.setRcPorties=setRcPorties; window.setSlotPorties=setSlotPorties; window.assignLeftover=assignLeftover;
